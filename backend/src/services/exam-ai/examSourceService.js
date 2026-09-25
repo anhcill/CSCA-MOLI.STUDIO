@@ -31,6 +31,7 @@ function normalizeSourceFileRow(row, options = {}) {
     pages: row.pages ?? null,
     isExamPaper: row.is_exam_paper === true,
     isSolutionFile: row.is_solution_file === true,
+    languageMode: row.language_mode || 'zh',
     uploadedBy: row.uploaded_by ?? null,
     createdAt: row.created_at,
   };
@@ -67,7 +68,7 @@ async function extractExamSourceFile(file) {
 
 async function listExamSourceFiles(client, examId) {
   const result = await client.query(
-    `SELECT id, exam_id, file_name, file_type, file_size, pages, is_exam_paper, is_solution_file, uploaded_by, created_at,
+    `SELECT id, exam_id, file_name, file_type, file_size, pages, is_exam_paper, is_solution_file, language_mode, uploaded_by, created_at,
             LENGTH(text_content)::int AS text_length
      FROM admin_exam_source_files
      WHERE exam_id = $1
@@ -101,7 +102,14 @@ async function saveExamSourceFile(client, examId, file, userId) {
   };
 }
 
-async function saveExamPaper(client, examId, file, userId) {
+function normalizePdfLanguageMode(value) {
+  const mode = String(value || '').trim().toLowerCase().replace(/-/g, '_');
+  if (mode === 'vi' || mode.startsWith('vi_')) return 'vi';
+  if (mode === 'en' || mode.startsWith('en_')) return 'en';
+  return 'zh';
+}
+
+async function saveExamPaper(client, examId, file, userId, languageMode) {
   const imported = await extractImportFileText(file);
   if (imported.fileType !== "pdf" || !Buffer.isBuffer(file.buffer)) {
     const error = new Error("EXAM_PAPER_MUST_BE_PDF");
@@ -114,23 +122,27 @@ async function saveExamPaper(client, examId, file, userId) {
   // bytes out of the query parameter path while the decoded value remains BYTEA.
   const fileDataBase64 = file.buffer.toString("base64");
 
-  // A room exam has exactly one display PDF. Keeping demoted copies makes an
-  // old paper look like an AI reference file and can accidentally restore it.
+  const normalizedLanguage = normalizePdfLanguageMode(languageMode);
+  // Each language keeps exactly one display PDF. Replacing Vietnamese never
+  // removes English/Chinese versions of the same exam.
   await client.query(
     `DELETE FROM admin_exam_source_files
-     WHERE exam_id = $1 AND is_exam_paper = TRUE`,
-    [examId],
+     WHERE exam_id = $1
+       AND is_exam_paper = TRUE
+       AND COALESCE(language_mode, 'zh') = $2`,
+    [examId, normalizedLanguage],
   );
   const result = await client.query(
     `INSERT INTO admin_exam_source_files
-       (exam_id, file_name, file_type, file_size, file_data, is_exam_paper, text_content, pages, uploaded_by, created_at)
-     VALUES ($1, $2, 'pdf', $3, decode($4, 'base64'), TRUE, $5, $6, $7, NOW())
-     RETURNING id, exam_id, file_name, file_type, file_size, text_content, pages, is_exam_paper, is_solution_file, uploaded_by, created_at`,
+       (exam_id, file_name, file_type, file_size, file_data, is_exam_paper, language_mode, text_content, pages, uploaded_by, created_at)
+     VALUES ($1, $2, 'pdf', $3, decode($4, 'base64'), TRUE, $5, $6, $7, $8, NOW())
+     RETURNING id, exam_id, file_name, file_type, file_size, text_content, pages, is_exam_paper, is_solution_file, language_mode, uploaded_by, created_at`,
     [
       examId,
       normalizeSourceFileName(file.originalname),
       Number(file.size) || Number(file.buffer.length) || 0,
       fileDataBase64,
+      normalizedLanguage,
       textContent,
       imported.pages || null,
       userId || null,
@@ -143,7 +155,7 @@ async function saveExamPaper(client, examId, file, userId) {
   };
 }
 
-async function saveExamSolutionFile(client, examId, file, userId) {
+async function saveExamSolutionFile(client, examId, file, userId, languageMode) {
   const imported = await extractImportFileText(file);
   if (imported.fileType !== "pdf" || !Buffer.isBuffer(file.buffer)) {
     const error = new Error("EXAM_SOLUTION_MUST_BE_PDF");
@@ -154,23 +166,26 @@ async function saveExamSolutionFile(client, examId, file, userId) {
   const textContent = fullText.slice(0, SOURCE_FILE_TEXT_LIMIT);
   const fileDataBase64 = file.buffer.toString("base64");
 
-  // A topic-practice file may have one optional solution PDF. Keep it
-  // separate from the exam paper so replacing either file never removes the other.
+  const normalizedLanguage = normalizePdfLanguageMode(languageMode);
+  // Keep one optional solution for each language, separate from its question PDF.
   await client.query(
     `DELETE FROM admin_exam_source_files
-     WHERE exam_id = $1 AND is_solution_file = TRUE`,
-    [examId],
+     WHERE exam_id = $1
+       AND is_solution_file = TRUE
+       AND COALESCE(language_mode, 'zh') = $2`,
+    [examId, normalizedLanguage],
   );
   const result = await client.query(
     `INSERT INTO admin_exam_source_files
-       (exam_id, file_name, file_type, file_size, file_data, is_solution_file, text_content, pages, uploaded_by, created_at)
-     VALUES ($1, $2, 'pdf', $3, decode($4, 'base64'), TRUE, $5, $6, $7, NOW())
-     RETURNING id, exam_id, file_name, file_type, file_size, text_content, pages, is_exam_paper, is_solution_file, uploaded_by, created_at`,
+       (exam_id, file_name, file_type, file_size, file_data, is_solution_file, language_mode, text_content, pages, uploaded_by, created_at)
+     VALUES ($1, $2, 'pdf', $3, decode($4, 'base64'), TRUE, $5, $6, $7, $8, NOW())
+     RETURNING id, exam_id, file_name, file_type, file_size, text_content, pages, is_exam_paper, is_solution_file, language_mode, uploaded_by, created_at`,
     [
       examId,
       normalizeSourceFileName(file.originalname),
       Number(file.size) || Number(file.buffer.length) || 0,
       fileDataBase64,
+      normalizedLanguage,
       textContent,
       imported.pages || null,
       userId || null,
@@ -187,7 +202,7 @@ async function deleteExamSourceFile(client, examId, sourceFileId) {
   const result = await client.query(
     `DELETE FROM admin_exam_source_files
      WHERE id = $1 AND exam_id = $2
-     RETURNING id, file_name, is_exam_paper, is_solution_file`,
+     RETURNING id, file_name, is_exam_paper, is_solution_file, language_mode`,
     [sourceFileId, examId],
   );
   const deleted = result.rows[0] || null;

@@ -6,6 +6,19 @@ import { examAdminApi, RoomPaperConfig } from '@/lib/api/examAdmin';
 
 const OPTION_KEYS = ['A', 'B', 'C', 'D'];
 
+function normalizePdfLanguage(value?: string) {
+  const mode = String(value || '').toLowerCase();
+  if (mode === 'vi' || mode.startsWith('vi_')) return 'vi';
+  if (mode === 'en' || mode.startsWith('en_')) return 'en';
+  return 'zh';
+}
+
+function languageLabel(value: string) {
+  if (value === 'vi') return 'tiếng Việt';
+  if (value === 'en') return 'English';
+  return '中文';
+}
+
 function formatBytes(value?: number) {
   const bytes = Number(value) || 0;
   if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
@@ -19,14 +32,12 @@ export default function RoomExamPaperPanel({
   showSolutionFile = false,
   workspace = 'room',
   languageMode = 'zh',
-  onLanguageChange,
 }: {
   examId: number;
   onConfigChange?: (config: RoomPaperConfig) => void;
   showSolutionFile?: boolean;
   workspace?: 'room' | 'topic';
   languageMode?: string;
-  onLanguageChange?: (languageMode: string) => Promise<void> | void;
 }) {
   const paperInputRef = useRef<HTMLInputElement>(null);
   const solutionInputRef = useRef<HTMLInputElement>(null);
@@ -41,7 +52,7 @@ export default function RoomExamPaperPanel({
   const [deletingSolution, setDeletingSolution] = useState(false);
   const [bulkAnswerText, setBulkAnswerText] = useState('');
   const [bulkAnswerMessage, setBulkAnswerMessage] = useState('');
-  const [changingLanguage, setChangingLanguage] = useState(false);
+  const [selectedPaperLanguage, setSelectedPaperLanguage] = useState(normalizePdfLanguage(languageMode));
 
   const isTopicPractice = workspace === 'topic';
   const workspaceCopy = isTopicPractice
@@ -64,10 +75,10 @@ export default function RoomExamPaperPanel({
       solutionHint: 'Chỉ mở sau khi kỳ thi đã kết thúc.',
     };
 
-  const loadConfig = async () => {
+  const loadConfig = async (paperLanguage = selectedPaperLanguage) => {
     try {
       setLoading(true);
-      const next = await examAdminApi.getRoomPaperConfig(examId);
+      const next = await examAdminApi.getRoomPaperConfig(examId, paperLanguage);
       setConfig(next);
       onConfigChange?.(next);
       setQuestionCount(next.questionCount || 40);
@@ -80,8 +91,11 @@ export default function RoomExamPaperPanel({
   };
 
   useEffect(() => {
-    if (examId) loadConfig();
-  }, [examId]);
+    if (!examId) return;
+    const initialLanguage = normalizePdfLanguage(languageMode);
+    setSelectedPaperLanguage(initialLanguage);
+    loadConfig(initialLanguage);
+  }, [examId, languageMode]);
 
   const answeredCount = useMemo(
     () => Array.from({ length: questionCount }, (_, index) => answers[index + 1])
@@ -89,6 +103,9 @@ export default function RoomExamPaperPanel({
     [answers, questionCount],
   );
   const locked = Number(config?.attemptCount) > 0;
+  const selectedPaperLocked = Boolean(
+    config?.paper && config.usedPaperLanguages?.includes(selectedPaperLanguage),
+  );
 
   const uploadPaper = async (file: File) => {
     if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
@@ -97,8 +114,8 @@ export default function RoomExamPaperPanel({
     }
     try {
       setUploadingPaper(true);
-      await examAdminApi.uploadExamPaper(examId, file);
-      await loadConfig();
+      await examAdminApi.uploadExamPaper(examId, file, selectedPaperLanguage);
+      await loadConfig(selectedPaperLanguage);
     } catch (error: any) {
       alert(error?.response?.data?.message || 'Tải đề PDF thất bại.');
     } finally {
@@ -111,7 +128,7 @@ export default function RoomExamPaperPanel({
     try {
       setDeletingPaper(true);
       await examAdminApi.deleteExamSourceFile(examId, config.paper.id);
-      await loadConfig();
+      await loadConfig(selectedPaperLanguage);
     } catch (error: any) {
       alert(error?.response?.data?.message || 'Xóa đề PDF thất bại.');
     } finally {
@@ -126,8 +143,8 @@ export default function RoomExamPaperPanel({
     }
     try {
       setUploadingSolution(true);
-      await examAdminApi.uploadExamSolutionFile(examId, file);
-      await loadConfig();
+      await examAdminApi.uploadExamSolutionFile(examId, file, selectedPaperLanguage);
+      await loadConfig(selectedPaperLanguage);
     } catch (error: any) {
       alert(error?.response?.data?.message || 'Tải file PDF lời giải thất bại.');
     } finally {
@@ -140,7 +157,7 @@ export default function RoomExamPaperPanel({
     try {
       setDeletingSolution(true);
       await examAdminApi.deleteExamSourceFile(examId, config.solution.id);
-      await loadConfig();
+      await loadConfig(selectedPaperLanguage);
     } catch (error: any) {
       alert(error?.response?.data?.message || 'Xóa file PDF lời giải thất bại.');
     } finally {
@@ -197,7 +214,7 @@ export default function RoomExamPaperPanel({
         })),
       });
       alert(result.message || 'Đã lưu đáp án.');
-      await loadConfig();
+      await loadConfig(selectedPaperLanguage);
     } catch (error: any) {
       alert(error?.response?.data?.message || 'Lưu đáp án thất bại.');
     } finally {
@@ -205,16 +222,10 @@ export default function RoomExamPaperPanel({
     }
   };
 
-  const updateLanguage = async (nextLanguage: string) => {
-    if (!onLanguageChange || nextLanguage === languageMode) return;
-    try {
-      setChangingLanguage(true);
-      await onLanguageChange(nextLanguage);
-    } catch (error: any) {
-      alert(error?.response?.data?.message || 'Không thể đổi ngôn ngữ của file.');
-    } finally {
-      setChangingLanguage(false);
-    }
+  const selectPaperLanguage = (nextLanguage: string) => {
+    setSelectedPaperLanguage(nextLanguage);
+    setBulkAnswerMessage('');
+    void loadConfig(nextLanguage);
   };
 
   if (loading && !config) {
@@ -234,6 +245,7 @@ export default function RoomExamPaperPanel({
             <p className="mt-1 max-w-3xl text-sm text-blue-800 dark:text-blue-200">
               {workspaceCopy.paperDescription}
             </p>
+            <p className="mt-2 text-xs font-black text-blue-700 dark:text-blue-200">Mỗi ngôn ngữ là một phiên bản PDF riêng, dùng chung một bảng đáp án.</p>
           </div>
           <input
             ref={paperInputRef}
@@ -249,11 +261,11 @@ export default function RoomExamPaperPanel({
           <button
             type="button"
             onClick={() => paperInputRef.current?.click()}
-            disabled={uploadingPaper || locked}
+            disabled={uploadingPaper || selectedPaperLocked}
             className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {uploadingPaper ? <FiRefreshCw className="animate-spin" /> : <FiUpload />}
-            {config?.paper ? workspaceCopy.replacePaper : workspaceCopy.uploadPaper}
+            {config?.paper ? workspaceCopy.replacePaper : workspaceCopy.uploadPaper} · {languageLabel(selectedPaperLanguage)}
           </button>
         </div>
 
@@ -268,7 +280,7 @@ export default function RoomExamPaperPanel({
             <button
               type="button"
               onClick={deletePaper}
-              disabled={deletingPaper || locked}
+              disabled={deletingPaper || selectedPaperLocked}
               className="inline-flex items-center justify-center gap-2 rounded-lg border border-rose-200 px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-50 disabled:opacity-50"
             >
               <FiTrash2 /> {deletingPaper ? 'Đang xóa...' : 'Xóa PDF'}
@@ -284,8 +296,8 @@ export default function RoomExamPaperPanel({
       {locked && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold text-amber-800">
           {showSolutionFile
-            ? `Đề đã có ${config?.attemptCount} lượt làm. File PDF và đáp án đã được khóa để bảo toàn kết quả; bạn vẫn có thể cập nhật file lời giải.`
-            : `Đề đã có ${config?.attemptCount} lượt làm. File PDF và đáp án đã được khóa để bảo toàn kết quả.`}
+            ? `Đề đã có ${config?.attemptCount} lượt làm. Bảng đáp án và PDF của ngôn ngữ đã được làm sẽ khóa; bạn vẫn có thể thêm PDF cho ngôn ngữ chưa có người làm hoặc cập nhật lời giải.`
+            : `Đề đã có ${config?.attemptCount} lượt làm. Bảng đáp án và PDF của ngôn ngữ đã được làm sẽ khóa; bạn vẫn có thể thêm PDF cho ngôn ngữ chưa có người làm.`}
         </div>
       )}
 
@@ -297,22 +309,15 @@ export default function RoomExamPaperPanel({
           </div>
           <div className="grid w-full gap-3 sm:grid-cols-2 md:w-auto">
             <label className="text-sm font-bold text-gray-700 dark:text-slate-200">
-              Ngôn ngữ file PDF
+              Phiên bản PDF đang cấu hình
               <select
-                value={languageMode}
-                disabled={changingLanguage || locked || !onLanguageChange}
-                onChange={(event) => updateLanguage(event.target.value)}
+                value={selectedPaperLanguage}
+                onChange={(event) => selectPaperLanguage(event.target.value)}
                 className="mt-1 h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-gray-900 outline-none focus:ring-2 focus:ring-violet-500 disabled:bg-gray-100 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:disabled:bg-slate-800"
               >
-                <option value="vi">Tiếng Việt</option>
-                <option value="en">English</option>
-                <option value="zh">中文</option>
-                <option value="vi_zh">Việt + 中文</option>
-                <option value="vi_en">Việt + English</option>
-                <option value="zh_vi">中文 + Việt</option>
-                <option value="zh_en">中文 + English</option>
-                <option value="en_vi">English + Việt</option>
-                <option value="en_zh">English + 中文</option>
+                <option value="vi">Tiếng Việt{config?.paperLanguages?.includes('vi') ? ' · đã có PDF' : ' · chưa có PDF'}</option>
+                <option value="en">English{config?.paperLanguages?.includes('en') ? ' · has PDF' : ' · no PDF yet'}</option>
+                <option value="zh">中文{config?.paperLanguages?.includes('zh') ? ' · 已有 PDF' : ' · 尚未上传 PDF'}</option>
               </select>
             </label>
             <label className="text-sm font-bold text-gray-700 dark:text-slate-200">
@@ -328,6 +333,23 @@ export default function RoomExamPaperPanel({
               />
             </label>
           </div>
+        </div>
+
+        <div className="mt-4 grid gap-2 sm:grid-cols-3">
+          {[
+            ['vi', 'Tiếng Việt'],
+            ['en', 'English'],
+            ['zh', '中文'],
+          ].map(([mode, label]) => {
+            const hasPaper = config?.paperLanguages?.includes(mode);
+            const hasSolution = config?.solutionLanguages?.includes(mode);
+            const languageLocked = config?.usedPaperLanguages?.includes(mode);
+            return <button key={mode} type="button" onClick={() => selectPaperLanguage(mode)} className={`rounded-xl border p-3 text-left transition ${selectedPaperLanguage === mode ? 'border-violet-500 bg-violet-50 ring-2 ring-violet-100 dark:border-violet-400 dark:bg-violet-950/35 dark:ring-violet-900/60' : 'border-gray-200 bg-gray-50 hover:border-violet-300 dark:border-slate-700 dark:bg-slate-950/40'}`}>
+              <p className="font-black text-gray-900 dark:text-white">{label}</p>
+              <p className={`mt-1 text-xs font-bold ${hasPaper ? 'text-emerald-600 dark:text-emerald-300' : 'text-amber-600 dark:text-amber-300'}`}>{hasPaper ? languageLocked ? 'PDF đã có lượt làm · đã khóa' : 'Đề PDF đã sẵn sàng' : 'Chưa có đề PDF'}</p>
+              <p className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">{hasSolution ? 'Có file lời giải' : 'Chưa có lời giải'}</p>
+            </button>;
+          })}
         </div>
 
         {showSolutionFile && <div className="mt-4 flex flex-col gap-3 rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 dark:border-emerald-900 dark:bg-emerald-950/25 md:flex-row md:items-center md:justify-between">
@@ -360,7 +382,7 @@ export default function RoomExamPaperPanel({
               className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {uploadingSolution ? <FiRefreshCw className="animate-spin" /> : <FiUpload />}
-              {config?.solution ? 'Thay file lời giải' : 'Tải file lời giải'}
+            {config?.solution ? 'Thay file lời giải' : 'Tải file lời giải'} · {languageLabel(selectedPaperLanguage)}
             </button>
             {config?.solution && <button
               type="button"

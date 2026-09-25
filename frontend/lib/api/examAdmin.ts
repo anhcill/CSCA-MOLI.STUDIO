@@ -280,6 +280,7 @@ export interface AdminExamSourceFile {
     pages?: number | null;
     isExamPaper?: boolean;
     isSolutionFile?: boolean;
+    languageMode?: string;
     uploadedBy?: number | null;
     createdAt?: string;
 }
@@ -305,6 +306,10 @@ export interface RoomPaperAnswer {
 export interface RoomPaperConfig {
     paper: AdminExamSourceFile | null;
     solution: AdminExamSourceFile | null;
+    paperLanguages: string[];
+    solutionLanguages: string[];
+    usedPaperLanguages: string[];
+    selectedLanguageMode: string;
     questionCount: number;
     totalPoints: number;
     optionKeys: string[];
@@ -579,8 +584,10 @@ export const examAdminApi = {
         return response.data;
     },
 
-    getRoomPaperConfig: async (examId: number): Promise<RoomPaperConfig> => {
-        const response = await axios.get(`/admin/exams/${examId}/room-paper-config`);
+    getRoomPaperConfig: async (examId: number, languageMode?: string): Promise<RoomPaperConfig> => {
+        const response = await axios.get(`/admin/exams/${examId}/room-paper-config`, {
+            params: languageMode ? { languageMode } : undefined,
+        });
         return response.data;
     },
 
@@ -602,9 +609,10 @@ export const examAdminApi = {
         return response.data;
     },
 
-    uploadExamPaper: async (examId: number, file: File): Promise<ExamSourceFileUploadResult> => {
+    uploadExamPaper: async (examId: number, file: File, languageMode?: string): Promise<ExamSourceFileUploadResult> => {
         const formData = new FormData();
         formData.append('pdf', file);
+        if (languageMode) formData.append('languageMode', languageMode);
         const response = await axios.post(`/admin/exams/${examId}/exam-paper`, formData, {
             headers: { 'Content-Type': 'multipart/form-data' },
             timeout: 180000,
@@ -612,9 +620,10 @@ export const examAdminApi = {
         return response.data;
     },
 
-    uploadExamSolutionFile: async (examId: number, file: File): Promise<ExamSourceFileUploadResult> => {
+    uploadExamSolutionFile: async (examId: number, file: File, languageMode?: string): Promise<ExamSourceFileUploadResult> => {
         const formData = new FormData();
         formData.append('pdf', file);
+        if (languageMode) formData.append('languageMode', languageMode);
         const response = await axios.post(`/admin/exams/${examId}/exam-solution`, formData, {
             headers: { 'Content-Type': 'multipart/form-data' },
             timeout: 180000,

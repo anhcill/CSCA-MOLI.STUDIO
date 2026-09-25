@@ -16,6 +16,7 @@ interface PdfRoomExamWorkspaceProps {
   submitting: boolean;
   tabConflict: boolean;
   workspaceMode?: 'exam-room' | 'topic-practice';
+  attemptId?: number | null;
   onSelectAnswer: (question: Question, answerId: number, answerKey: string) => void;
   onToggleFlag: (questionId: number) => void;
   onSubmit: () => void;
@@ -43,6 +44,7 @@ export default function PdfRoomExamWorkspace({
   submitting,
   tabConflict,
   workspaceMode = 'exam-room',
+  attemptId,
   onSelectAnswer,
   onToggleFlag,
   onSubmit,
@@ -62,7 +64,9 @@ export default function PdfRoomExamWorkspace({
     let objectUrl = '';
     let cancelled = false;
     setPaperError('');
-    examApi.getExamPaper(exam.id, isTopicPractice)
+    // Pin the request to this attempt so a user who has several topic-practice
+    // attempts always sees the same language PDF they picked for this attempt.
+    examApi.getExamPaper(exam.id, isTopicPractice, attemptId || undefined)
       .then((blob) => {
         if (cancelled) return;
         objectUrl = URL.createObjectURL(blob);
@@ -77,7 +81,7 @@ export default function PdfRoomExamWorkspace({
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [exam.id, isTopicPractice]);
+  }, [attemptId, exam.id, isTopicPractice]);
 
   useEffect(() => {
     const sync = () => setIsFullscreen(Boolean(document.fullscreenElement));

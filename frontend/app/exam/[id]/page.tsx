@@ -36,6 +36,12 @@ const ESSAY_SAVE_DEBOUNCE_MS = 650;
 const DEFAULT_EXAM_MAX_VIOLATIONS = 4;
 const PDF_ROOM_MAX_VIOLATIONS = 3;
 
+const PDF_FILE_LANGUAGE_OPTIONS = [
+  { mode: 'vi', label: 'Tiếng Việt', flag: '🇻🇳' },
+  { mode: 'en', label: 'English', flag: '🇬🇧' },
+  { mode: 'zh', label: '中文', flag: '🇨🇳' },
+] as const;
+
 const EXAM_LANGUAGE_OPTIONS = [
   {
     mode: 'zh',
@@ -152,6 +158,7 @@ export default function ExamPage() {
   const [showVietnameseTranslations, setShowVietnameseTranslations] = useState(false);
   const [examLanguage, setExamLanguage] = useState<string>('');
   const [explanationLanguage, setExplanationLanguage] = useState<string>('');
+  const [paperLanguageMode, setPaperLanguageMode] = useState<string>('');
   const [openDropdown, setOpenDropdown] = useState<'exam' | 'explanation' | null>(null);
   const languageSelectorRef = useRef<HTMLDivElement>(null);
 
@@ -479,6 +486,13 @@ export default function ExamPage() {
 
       const response = await examApi.getExamPreflight(examId);
       setPreflight(response);
+      const availablePaperLanguages = Array.isArray(response.paper_languages) ? response.paper_languages : [];
+      const preferredPaperLanguage = response.in_progress_attempt?.paper_language_mode || response.language_mode || '';
+      setPaperLanguageMode(
+        availablePaperLanguages.includes(preferredPaperLanguage)
+          ? preferredPaperLanguage
+          : availablePaperLanguages[0] || preferredPaperLanguage,
+      );
       const scheduledExamEnded = Boolean(
         response.start_time
         && response.end_time
@@ -546,6 +560,7 @@ export default function ExamPage() {
         practiceMode: shouldUseTopicPractice,
         mode: shouldUseTopicPractice ? 'practice' : options.restart ? 'restart' : 'resume',
         pdfWorkspace: isTopicPracticeRoute,
+        paperLanguageMode: (isTopicPracticeRoute || Boolean(preflight?.start_time)) ? paperLanguageMode : undefined,
       });
 
       const nextPracticeMode = Boolean(shouldUseTopicPractice || response.practiceMode);
@@ -861,7 +876,16 @@ export default function ExamPage() {
       preflight.end_time && scheduleNow > new Date(preflight.end_time).getTime()
     );
     const canStartOfficialExam = !isOfficialExam || (officialHasStarted && !officialHasEnded);
-    const languageReady = Boolean(isTopicPracticeRoute || (isOfficialExam && preflight.has_exam_pdf) || (examLanguage && explanationLanguage));
+    const usesPdfLanguageFiles = isTopicPracticeRoute || isOfficialExam;
+    const availablePaperLanguages = Array.isArray(preflight.paper_languages) ? preflight.paper_languages : [];
+    const inProgressPaperLanguage = inProgress?.paper_language_mode || '';
+    const isResumingPdfAttempt = Boolean(usesPdfLanguageFiles && inProgress && inProgressPaperLanguage);
+    const selectedPaperLanguageAvailable = !usesPdfLanguageFiles || availablePaperLanguages.includes(paperLanguageMode);
+    const languageReady = Boolean(
+      usesPdfLanguageFiles
+        ? preflight.has_exam_pdf && selectedPaperLanguageAvailable
+        : examLanguage && explanationLanguage,
+    );
     const leaderboardAvailable = !isOfficialExam || Boolean(
       preflight.end_time && scheduleNow > new Date(preflight.end_time).getTime()
     );
@@ -908,6 +932,42 @@ export default function ExamPage() {
             </div>
 
             <div className="border-t border-[#ead9bd]/75 p-4 sm:p-5">
+              {usesPdfLanguageFiles && (
+                <div className={`relative z-30 mb-4 rounded-3xl p-4 sm:p-5 ${inkResultSoftPanel}`}>
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className={`flex items-center gap-2 text-sm font-black ${inkResultTitle}`}><span>📄</span> Chọn ngôn ngữ file làm bài</p>
+                      <p className={`mt-1 text-xs font-semibold ${inkResultMuted}`}>{isResumingPdfAttempt ? 'Bạn đang làm dở; tiếp tục đúng phiên bản PDF đã chọn ban đầu.' : 'Chỉ phiên bản PDF đã được quản trị viên đăng mới mở được.'}</p>
+                    </div>
+                    {selectedPaperLanguageAvailable && <span className="inline-flex w-fit items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-xs font-black text-emerald-600 dark:text-emerald-300"><FiCheck size={12} /> Sẵn sàng</span>}
+                  </div>
+                  <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                    {PDF_FILE_LANGUAGE_OPTIONS.map((option) => {
+                      const available = availablePaperLanguages.includes(option.mode);
+                      const selected = paperLanguageMode === option.mode;
+                      return (
+                        <button
+                          key={option.mode}
+                          type="button"
+                          onClick={() => {
+                            if (!isResumingPdfAttempt) setPaperLanguageMode(option.mode);
+                          }}
+                          disabled={isResumingPdfAttempt && !selected}
+                          className={`rounded-2xl border p-3 text-left transition disabled:cursor-not-allowed ${selected ? 'border-[#d52a1e] bg-[#fff1e8] ring-2 ring-[#d52a1e]/15 dark:border-rose-400 dark:bg-rose-500/10' : 'border-[#ead9bd] bg-[#fffaf2] hover:border-[#d52a1e] dark:border-slate-700 dark:bg-slate-800 dark:hover:border-rose-400'} ${!available || (isResumingPdfAttempt && !selected) ? 'opacity-75' : ''}`}
+                        >
+                          <span className="text-lg">{option.flag}</span>
+                          <p className={`mt-1 font-black ${inkResultTitle}`}>{option.label}</p>
+                          <p className={`mt-1 text-xs font-bold ${available ? 'text-emerald-600 dark:text-emerald-300' : 'text-rose-600 dark:text-rose-300'}`}>{available ? 'Có file để làm' : 'Chưa có file'}</p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {!selectedPaperLanguageAvailable && (
+                    <p className="mt-3 flex items-center gap-1.5 text-sm font-black text-rose-600 dark:text-rose-300"><FiAlertCircle size={16} /> Ngôn ngữ này chưa có file PDF. Hãy chọn phiên bản có trạng thái “Có file để làm”.</p>
+                  )}
+                </div>
+              )}
+
               {!isOfficialExam && !isTopicPracticeRoute && (
                 <div
                   ref={languageSelectorRef}
@@ -1182,7 +1242,7 @@ export default function ExamPage() {
                 {isTopicPracticeRoute ? (
                   <button
                     onClick={() => startExam()}
-                    disabled={loading}
+                    disabled={loading || !languageReady}
                     className="disabled:cursor-not-allowed inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-[#d52a1e] px-5 py-2.5 text-sm font-black text-white shadow-lg shadow-[rgba(213,42,30,0.18)] hover:bg-[#b9231a] disabled:opacity-60"
                   >
                     <FiPlay size={18} /> Mở file luyện tập
@@ -1216,7 +1276,7 @@ export default function ExamPage() {
               </div>
               {!languageReady && (
                 <p className="mt-4 text-center text-sm font-bold text-rose-500 flex items-center justify-center gap-1.5 animate-pulse">
-                  <FiAlertCircle size={16} /> Vui lòng chọn ngôn ngữ đề thi và lời giải để bắt đầu nha!
+                  <FiAlertCircle size={16} /> {usesPdfLanguageFiles ? 'Hãy chọn ngôn ngữ có file PDF trước khi bắt đầu.' : 'Vui lòng chọn ngôn ngữ đề thi và lời giải để bắt đầu nha!'}
                 </p>
               )}
             </div>
@@ -1318,6 +1378,7 @@ export default function ExamPage() {
         <AiAnalyzingOverlay open={submitting} mode="submit" />
         <PdfRoomExamWorkspace
           exam={exam}
+          attemptId={attemptId}
           questions={questions}
           selectedAnswers={selectedAnswers}
           flaggedQuestions={flaggedQuestions}

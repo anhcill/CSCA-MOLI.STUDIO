@@ -319,6 +319,14 @@ const Exam = {
                   AND sf.file_type = 'pdf'
                   AND sf.file_data IS NOT NULL
               ) AS has_exam_pdf,
+              COALESCE((
+                SELECT json_agg(DISTINCT COALESCE(sf.language_mode, e.language_mode, 'zh'))
+                FROM admin_exam_source_files sf
+                WHERE sf.exam_id = e.id
+                  AND sf.is_exam_paper = TRUE
+                  AND sf.file_type = 'pdf'
+                  AND sf.file_data IS NOT NULL
+              ), '[]'::json) AS paper_languages,
               COUNT(DISTINCT CASE WHEN q.question_number > 0 AND q.deleted_at IS NULL THEN q.id END)::int AS question_count,
               COALESCE(
                 (SELECT COUNT(*) FROM exam_attempts
@@ -341,6 +349,7 @@ const Exam = {
                   'id', ea.id,
                   'attempt_number', ea.attempt_number,
                   'start_time', ea.start_time,
+                  'paper_language_mode', ea.paper_language_mode,
                   'answered_count', COALESCE((
                     SELECT COUNT(*) FROM user_answers ua WHERE ua.attempt_id = ea.id
                   ), 0)

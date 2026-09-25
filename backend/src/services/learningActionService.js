@@ -426,6 +426,14 @@ async function getTopicPracticeFiles(userId, topicId, subjectCode) {
         e.difficulty_level,
         e.language_mode,
         e.publish_date,
+        COALESCE((
+          SELECT json_agg(DISTINCT COALESCE(sf.language_mode, e.language_mode, 'zh'))
+          FROM admin_exam_source_files sf
+          WHERE sf.exam_id = e.id
+            AND sf.is_exam_paper = TRUE
+            AND sf.file_type = 'pdf'
+            AND sf.file_data IS NOT NULL
+        ), '[]'::json) AS paper_languages,
         qt.name AS topic_name,
         paper.file_name,
         paper.pages,

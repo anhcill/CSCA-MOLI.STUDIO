@@ -47,6 +47,11 @@ function buildVipAccessError(requiredTier) {
   };
 }
 
+function normalizePdfLanguageMode(value, fallback = 'zh') {
+  const mode = String(value || '').trim().toLowerCase().replace(/-/g, '_');
+  return ['vi', 'en', 'zh'].includes(mode) ? mode : fallback;
+}
+
 const examController = {
   // Lấy dữ liệu sảnh thi (Lobby)
   async getExamLobby(req, res) {
@@ -203,6 +208,7 @@ const examController = {
     try {
       const examId = parseInt(req.params.examId, 10);
       const topicPractice = req.query.workspace === "topic";
+      const attemptId = Number.parseInt(req.query.attemptId, 10) || null;
       if (!Number.isFinite(examId) || examId <= 0) {
         return res.status(400).json({ success: false, message: "ID de thi khong hop le" });
       }
@@ -211,33 +217,38 @@ const examController = {
         `SELECT sf.file_name, sf.file_data
          FROM admin_exam_source_files sf
          JOIN exams e ON e.id = sf.exam_id
+         JOIN LATERAL (
+           SELECT ea.paper_language_mode
+           FROM exam_attempts ea
+           WHERE ea.exam_id = sf.exam_id
+             AND ea.user_id = $2
+             AND ($5::int IS NULL OR ea.id = $5)
+             AND (
+               ea.status = 'in_progress'
+               OR (
+                 $3::boolean = TRUE
+                 AND e.start_time IS NULL
+                 AND ea.status = ANY($4::varchar[])
+               )
+               OR (
+                 e.start_time IS NOT NULL
+                 AND e.end_time IS NOT NULL
+                 AND e.end_time <= CURRENT_TIMESTAMP
+                 AND ea.status = 'completed'
+               )
+             )
+           ORDER BY ea.start_time DESC, ea.id DESC
+           LIMIT 1
+         ) attempt ON TRUE
          WHERE sf.exam_id = $1
            AND (e.start_time IS NOT NULL OR ($3::boolean = TRUE AND e.start_time IS NULL))
            AND sf.is_exam_paper = TRUE
            AND sf.file_type = 'pdf'
            AND sf.file_data IS NOT NULL
-           AND EXISTS (
-             SELECT 1 FROM exam_attempts ea
-             WHERE ea.exam_id = sf.exam_id
-               AND ea.user_id = $2
-               AND (
-                 ea.status = 'in_progress'
-                 OR (
-                   $3::boolean = TRUE
-                   AND e.start_time IS NULL
-                   AND ea.status = ANY($4::varchar[])
-                 )
-                 OR (
-                   e.start_time IS NOT NULL
-                   AND e.end_time IS NOT NULL
-                   AND e.end_time <= CURRENT_TIMESTAMP
-                   AND ea.status = 'completed'
-                 )
-               )
-           )
+           AND COALESCE(sf.language_mode, e.language_mode, 'zh') = COALESCE(attempt.paper_language_mode, e.language_mode, 'zh')
          ORDER BY sf.created_at DESC, sf.id DESC
          LIMIT 1`,
-        [examId, req.user.id, topicPractice, topicPractice ? ['in_progress', 'practice', 'completed'] : ['in_progress']],
+        [examId, req.user.id, topicPractice, topicPractice ? ['in_progress', 'practice', 'completed'] : ['in_progress'], attemptId],
       );
 
       const paper = result.rows[0];
@@ -269,6 +280,7 @@ const examController = {
   async getExamSolution(req, res) {
     try {
       const examId = parseInt(req.params.examId, 10);
+      const attemptId = Number.parseInt(req.query.attemptId, 10) || null;
       if (!Number.isFinite(examId) || examId <= 0) {
         return res.status(400).json({ success: false, message: "ID de thi khong hop le" });
       }
@@ -277,6 +289,16 @@ const examController = {
         `SELECT sf.file_name, sf.file_data
          FROM admin_exam_source_files sf
          JOIN exams e ON e.id = sf.exam_id
+         JOIN LATERAL (
+           SELECT ea.paper_language_mode
+           FROM exam_attempts ea
+           WHERE ea.exam_id = sf.exam_id
+             AND ea.user_id = $2
+             AND ea.status = 'completed'
+             AND ($3::int IS NULL OR ea.id = $3)
+           ORDER BY ea.submit_time DESC NULLS LAST, ea.id DESC
+           LIMIT 1
+         ) attempt ON TRUE
          WHERE sf.exam_id = $1
            AND (
              e.start_time IS NULL
@@ -285,15 +307,10 @@ const examController = {
            AND sf.is_solution_file = TRUE
            AND sf.file_type = 'pdf'
            AND sf.file_data IS NOT NULL
-           AND EXISTS (
-             SELECT 1 FROM exam_attempts ea
-             WHERE ea.exam_id = sf.exam_id
-               AND ea.user_id = $2
-               AND ea.status = 'completed'
-           )
+           AND COALESCE(sf.language_mode, e.language_mode, 'zh') = COALESCE(attempt.paper_language_mode, e.language_mode, 'zh')
          ORDER BY sf.created_at DESC, sf.id DESC
          LIMIT 1`,
-        [examId, req.user.id],
+        [examId, req.user.id, attemptId],
       );
 
       const solution = result.rows[0];
@@ -485,6 +502,7 @@ const examController = {
 
       if (exam.start_time || pdfWorkspace) {
         const db = require("../config/database");
+        const paperLanguageMode = normalizePdfLanguageMode(req.body?.paperLanguageMode, normalizePdfLanguageMode(exam.language_mode));
         const roomPaperResult = await db.query(
           `SELECT COUNT(*)::int AS question_count,
                   COUNT(*) FILTER (
@@ -512,6 +530,25 @@ const examController = {
             code: 'ROOM_PAPER_NOT_CONFIGURED',
           });
         }
+
+        const languagePaperResult = await db.query(
+          `SELECT 1
+           FROM admin_exam_source_files sf
+           WHERE sf.exam_id = $1
+             AND sf.is_exam_paper = TRUE
+             AND sf.file_type = 'pdf'
+             AND sf.file_data IS NOT NULL
+             AND COALESCE(sf.language_mode, 'zh') = $2
+           LIMIT 1`,
+          [parsedId, paperLanguageMode],
+        );
+        if (languagePaperResult.rows.length === 0) {
+          return res.status(409).json({
+            success: false,
+            message: `Chưa có file PDF ${paperLanguageMode === 'vi' ? 'tiếng Việt' : paperLanguageMode === 'en' ? 'tiếng Anh' : 'tiếng Trung'} cho bài này. Hãy chọn ngôn ngữ khác.`,
+            code: 'PDF_LANGUAGE_NOT_AVAILABLE',
+          });
+        }
       }
 
       const existingAttempt = !practiceMode && (!restart || Boolean(exam.start_time))
@@ -521,6 +558,9 @@ const examController = {
         restart,
         practiceMode,
         singleAttempt: Boolean(exam.start_time && !isAdmin),
+        paperLanguageMode: (exam.start_time || pdfWorkspace)
+          ? normalizePdfLanguageMode(req.body?.paperLanguageMode, normalizePdfLanguageMode(exam.language_mode))
+          : null,
       });
       const savedAnswers = existingAttempt
         ? await ExamAttempt.getSavedAnswers(attempt.id)

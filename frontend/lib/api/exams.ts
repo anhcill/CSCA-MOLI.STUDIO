@@ -29,6 +29,7 @@ export interface Exam {
   language_mode?: string;
   exam_type?: string;
   has_exam_pdf?: boolean;
+  paper_languages?: string[];
   // New: Stats
   pass_rate?: number;
   overall_difficulty?: string;
@@ -37,6 +38,7 @@ export interface Exam {
     id: number;
     attempt_number: number;
     start_time: string;
+    paper_language_mode?: string | null;
     answered_count: number;
   } | null;
 }
@@ -87,6 +89,7 @@ export interface ExamStartOptions {
   practiceMode?: boolean;
   mode?: 'resume' | 'restart' | 'practice';
   pdfWorkspace?: boolean;
+  paperLanguageMode?: string;
 }
 
 export interface PracticeFeedback {
@@ -192,17 +195,18 @@ const examApi = {
     return response.data.data;
   },
 
-  async getExamPaper(examId: number, topicPractice = false): Promise<Blob> {
+  async getExamPaper(examId: number, topicPractice = false, attemptId?: number): Promise<Blob> {
     const response = await axios.get(`/exams/${examId}/paper`, {
-      params: topicPractice ? { workspace: 'topic' } : undefined,
+      params: topicPractice || attemptId ? { ...(topicPractice ? { workspace: 'topic' } : {}), ...(attemptId ? { attemptId } : {}) } : undefined,
       responseType: 'blob',
       headers: { Accept: 'application/pdf' },
     });
     return response.data;
   },
 
-  async getExamSolution(examId: number): Promise<Blob> {
+  async getExamSolution(examId: number, attemptId?: number): Promise<Blob> {
     const response = await axios.get(`/exams/${examId}/solution`, {
+      params: attemptId ? { attemptId } : undefined,
       responseType: 'blob',
       headers: { Accept: 'application/pdf' },
     });

@@ -128,17 +128,19 @@ const ExamAttempt = {
 
   // Bắt đầu làm bài thi
   async start(userId, examId, options = {}) {
+    const paperLanguageMode = options.paperLanguageMode || null;
     if (options.practiceMode) {
       const result = await pool.query(
-        `INSERT INTO exam_attempts (user_id, exam_id, attempt_number, status)
+        `INSERT INTO exam_attempts (user_id, exam_id, attempt_number, status, paper_language_mode)
          VALUES (
            $1,
            $2,
            (SELECT COALESCE(MAX(attempt_number), 0) + 1 FROM exam_attempts WHERE user_id = $1 AND exam_id = $2),
-           'practice'
+           'practice',
+           $3
          )
          RETURNING *`,
-        [userId, examId]
+        [userId, examId, paperLanguageMode]
       );
       return result.rows[0];
     }
@@ -178,15 +180,16 @@ const ExamAttempt = {
         }
 
         const result = await client.query(
-          `INSERT INTO exam_attempts (user_id, exam_id, attempt_number, status)
+          `INSERT INTO exam_attempts (user_id, exam_id, attempt_number, status, paper_language_mode)
            VALUES (
              $1,
              $2,
              (SELECT COALESCE(MAX(attempt_number), 0) + 1 FROM exam_attempts WHERE user_id = $1 AND exam_id = $2),
-             'in_progress'
+             'in_progress',
+             $3
            )
            RETURNING *`,
-          [userId, examId],
+          [userId, examId, paperLanguageMode],
         );
         await client.query('COMMIT');
         return result.rows[0];
@@ -218,17 +221,18 @@ const ExamAttempt = {
 
         // Create new attempt atomically
         const insertQuery = `
-          INSERT INTO exam_attempts (user_id, exam_id, attempt_number, status)
+          INSERT INTO exam_attempts (user_id, exam_id, attempt_number, status, paper_language_mode)
           VALUES (
             $1, 
             $2, 
             (SELECT COALESCE(MAX(attempt_number), 0) + 1 FROM exam_attempts WHERE user_id = $1 AND exam_id = $2), 
-            'in_progress'
+            'in_progress',
+            $3
           )
           RETURNING *
         `;
 
-        const result = await pool.query(insertQuery, [userId, examId]);
+        const result = await pool.query(insertQuery, [userId, examId, paperLanguageMode]);
         return result.rows[0];
       } catch (err) {
         if (err.code === '23505' && err.constraint === 'exam_attempts_user_id_exam_id_attempt_number_key') {
@@ -754,6 +758,7 @@ const ExamAttempt = {
             AND sf.is_solution_file = TRUE
             AND sf.file_type = 'pdf'
             AND sf.file_data IS NOT NULL
+            AND COALESCE(sf.language_mode, e.language_mode, 'zh') = COALESCE(ea.paper_language_mode, e.language_mode, 'zh')
         )) AS has_solution_file,
         COALESCE(ea.total_possible_score, e.total_points, 0) AS total_possible_score,
         COALESCE(ea.score_percentage,

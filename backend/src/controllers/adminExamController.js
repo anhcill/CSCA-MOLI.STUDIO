@@ -246,6 +246,13 @@ function normalizeExamLanguageMode(value) {
   return allowed.has(mode) ? mode : "zh";
 }
 
+function normalizePdfLanguageVariant(value) {
+  const mode = normalizeExamLanguageMode(value);
+  if (mode === 'vi' || mode.startsWith('vi_')) return 'vi';
+  if (mode === 'en' || mode.startsWith('en_')) return 'en';
+  return 'zh';
+}
+
 function getExamAllowDownload(access) {
   return access?.vipTier === "basic";
 }
@@ -915,10 +922,12 @@ const AdminExamController = {
 
   async getRoomPaperConfig(req, res) {
     const { examId } = req.params;
+    const rawRequestedLanguage = String(req.query?.languageMode || req.query?.language_mode || '').trim();
+    const requestedLanguage = rawRequestedLanguage ? normalizePdfLanguageVariant(rawRequestedLanguage) : null;
     const client = await pool.connect();
     try {
       const examResult = await client.query(
-        `SELECT id, total_points
+        `SELECT id, total_points, language_mode
          FROM exams
          WHERE id = $1 AND deleted_at IS NULL
          LIMIT 1`,
@@ -928,7 +937,7 @@ const AdminExamController = {
         return res.status(404).json({ message: MISSING_EXAM_MESSAGE });
       }
 
-      const [sourceFiles, answerResult, attemptResult] = await Promise.all([
+      const [sourceFiles, answerResult, attemptResult, languageAttemptResult] = await Promise.all([
         listExamSourceFileRecords(client, examId),
         client.query(
           `SELECT q.id AS question_id,
@@ -951,10 +960,21 @@ const AdminExamController = {
            WHERE exam_id = $1`,
           [examId],
         ),
+        client.query(
+          `SELECT ARRAY_AGG(DISTINCT COALESCE(paper_language_mode, 'zh')) AS languages
+           FROM exam_attempts
+           WHERE exam_id = $1`,
+          [examId],
+        ),
       ]);
 
-      const paper = sourceFiles.find((file) => file.isExamPaper) || null;
-      const solution = sourceFiles.find((file) => file.isSolutionFile) || null;
+      // The PDF picker stores one concrete file per language. Old exam metadata
+      // can be bilingual such as vi_zh, so reduce it to a concrete first version.
+      const defaultLanguage = requestedLanguage || normalizePdfLanguageVariant(examResult.rows[0].language_mode);
+      const papers = sourceFiles.filter((file) => file.isExamPaper);
+      const solutions = sourceFiles.filter((file) => file.isSolutionFile);
+      const paper = papers.find((file) => file.languageMode === defaultLanguage) || null;
+      const solution = solutions.find((file) => file.languageMode === defaultLanguage) || null;
       const answers = answerResult.rows.map((row) => ({
         questionId: row.question_id,
         questionNumber: Number(row.question_number),
@@ -965,12 +985,16 @@ const AdminExamController = {
       return res.json({
         paper,
         solution,
+        paperLanguages: papers.map((file) => file.languageMode),
+        solutionLanguages: solutions.map((file) => file.languageMode),
+        selectedLanguageMode: defaultLanguage,
         questionCount: answers.length,
         totalPoints: Number(examResult.rows[0].total_points) || 100,
         optionKeys: ['A', 'B', 'C', 'D'],
         answers,
         attemptCount: Number(attemptResult.rows[0]?.count) || 0,
-        ready: Boolean(paper)
+        usedPaperLanguages: (languageAttemptResult.rows[0]?.languages || []).filter(Boolean),
+        ready: papers.length > 0
           && answers.length > 0
           && answers.every((item) => ['A', 'B', 'C', 'D'].includes(item.answerKey)),
       });
@@ -1172,25 +1196,44 @@ const AdminExamController = {
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
-      const exists = await ensureExamExists(client, examId);
-      if (!exists) {
+      const examResult = await client.query(
+        `SELECT id, language_mode
+         FROM exams
+         WHERE id = $1 AND deleted_at IS NULL`,
+        [examId],
+      );
+      const exam = examResult.rows[0];
+      if (!exam) {
         await client.query("ROLLBACK");
         return res.status(404).json({ message: MISSING_EXAM_MESSAGE });
       }
 
-      const attemptResult = await client.query(
-        'SELECT COUNT(*)::int AS count FROM exam_attempts WHERE exam_id = $1',
-        [examId],
+      const languageMode = normalizePdfLanguageVariant(req.body?.languageMode || req.body?.language_mode || exam.language_mode);
+      const usedLanguageResult = await client.query(
+        `SELECT EXISTS (
+           SELECT 1
+           FROM admin_exam_source_files sf
+           WHERE sf.exam_id = $1
+             AND sf.is_exam_paper = TRUE
+             AND COALESCE(sf.language_mode, 'zh') = $2
+         ) AS has_paper,
+         EXISTS (
+           SELECT 1
+           FROM exam_attempts ea
+           WHERE ea.exam_id = $1
+             AND COALESCE(ea.paper_language_mode, 'zh') = $2
+         ) AS has_attempt`,
+        [examId, languageMode],
       );
-      if (Number(attemptResult.rows[0]?.count) > 0) {
+      if (usedLanguageResult.rows[0]?.has_paper && usedLanguageResult.rows[0]?.has_attempt) {
         await client.query('ROLLBACK');
         return res.status(409).json({
-          message: 'Đề đã có lượt thi nên không thể thay file PDF.',
+          message: 'Phiên bản ngôn ngữ này đã có lượt làm nên không thể thay file PDF.',
           code: 'ROOM_PAPER_CONFIG_LOCKED',
         });
       }
 
-      const result = await saveExamPaperRecord(client, examId, req.file, req.user.id);
+      const result = await saveExamPaperRecord(client, examId, req.file, req.user.id, languageMode);
       const sourceFiles = await listExamSourceFileRecords(client, examId);
       await client.query("COMMIT");
 
@@ -1198,6 +1241,7 @@ const AdminExamController = {
         examId,
         sourceFileId: result.sourceFile?.id,
         fileName: result.sourceFile?.fileName,
+        languageMode,
         ip: req.ip,
         userAgent: req.headers["user-agent"],
       });
@@ -1227,7 +1271,7 @@ const AdminExamController = {
     try {
       await client.query("BEGIN");
       const examResult = await client.query(
-        `SELECT id
+        `SELECT id, language_mode
          FROM exams
          WHERE id = $1 AND deleted_at IS NULL
          FOR UPDATE`,
@@ -1238,7 +1282,8 @@ const AdminExamController = {
         await client.query("ROLLBACK");
         return res.status(404).json({ message: MISSING_EXAM_MESSAGE });
       }
-      const result = await saveExamSolutionFileRecord(client, examId, req.file, req.user.id);
+      const languageMode = normalizePdfLanguageVariant(req.body?.languageMode || req.body?.language_mode || exam.language_mode);
+      const result = await saveExamSolutionFileRecord(client, examId, req.file, req.user.id, languageMode);
       const sourceFiles = await listExamSourceFileRecords(client, examId);
       await client.query("COMMIT");
 
@@ -1246,6 +1291,7 @@ const AdminExamController = {
         examId,
         sourceFileId: result.sourceFile?.id,
         fileName: result.sourceFile?.fileName,
+        languageMode,
         ip: req.ip,
         userAgent: req.headers["user-agent"],
       });
@@ -1271,21 +1317,26 @@ const AdminExamController = {
     try {
       await client.query("BEGIN");
       const targetResult = await client.query(
-        `SELECT is_exam_paper
+        `SELECT is_exam_paper, language_mode
          FROM admin_exam_source_files
          WHERE id = $1 AND exam_id = $2
          LIMIT 1`,
         [sourceFileId, examId],
       );
       if (targetResult.rows[0]?.is_exam_paper) {
+        const languageMode = normalizePdfLanguageVariant(targetResult.rows[0]?.language_mode);
         const attemptResult = await client.query(
-          'SELECT COUNT(*)::int AS count FROM exam_attempts WHERE exam_id = $1',
-          [examId],
+          `SELECT EXISTS (
+             SELECT 1 FROM exam_attempts
+             WHERE exam_id = $1
+               AND COALESCE(paper_language_mode, 'zh') = $2
+           ) AS has_attempt`,
+          [examId, languageMode],
         );
-        if (Number(attemptResult.rows[0]?.count) > 0) {
+        if (attemptResult.rows[0]?.has_attempt) {
           await client.query('ROLLBACK');
           return res.status(409).json({
-            message: 'Đề đã có lượt thi nên không thể xóa file PDF.',
+            message: 'Phiên bản ngôn ngữ này đã có lượt làm nên không thể xóa file PDF.',
             code: 'ROOM_PAPER_CONFIG_LOCKED',
           });
         }

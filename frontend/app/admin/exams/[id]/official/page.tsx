@@ -400,10 +400,6 @@ export default function OfficialExamAdminPage() {
             showSolutionFile
             workspace="room"
             languageMode={exam?.language_mode || 'vi'}
-            onLanguageChange={async (languageMode) => {
-              await examAdminApi.updateExam(examId, { languageMode });
-              setExam((current) => current ? { ...current, language_mode: languageMode } : current);
-            }}
           />
         )}
 
