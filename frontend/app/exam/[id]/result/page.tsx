@@ -1000,9 +1000,9 @@ function ExamResultContent() {
           <button type="button" onClick={closeSolutionComparison} aria-label="Đóng đối chiếu PDF" className="absolute right-3 top-3 z-10 inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white/95 text-slate-700 shadow-lg transition hover:bg-slate-100">
             <FiX size={20} />
           </button>
-          <div className="grid h-full gap-px bg-slate-200 lg:grid-cols-2">
-            <iframe title="Đề thi PDF" src={comparisonUrls.paper} className="min-h-[50vh] w-full bg-white lg:min-h-0" />
-            <iframe title="Lời giải PDF" src={comparisonUrls.solution} className="min-h-[50vh] w-full bg-white lg:min-h-0" />
+          <div className="grid h-full grid-rows-2 gap-px bg-slate-200 lg:grid-cols-2 lg:grid-rows-1">
+            <iframe title="Đề thi PDF" src={comparisonUrls.paper} className="h-full min-h-0 w-full bg-white" />
+            <iframe title="Lời giải PDF" src={comparisonUrls.solution} className="h-full min-h-0 w-full bg-white" />
           </div>
         </div>
       )}

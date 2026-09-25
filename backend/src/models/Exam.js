@@ -81,6 +81,24 @@ const Exam = {
       WHERE e.status = 'published'
         AND e.deleted_at IS NULL
         AND e.start_time IS NULL
+        AND NOT (
+          EXISTS (
+            SELECT 1
+            FROM admin_exam_source_files sf
+            WHERE sf.exam_id = e.id
+              AND sf.is_exam_paper = TRUE
+              AND sf.file_type = 'pdf'
+              AND sf.file_data IS NOT NULL
+          )
+          AND EXISTS (
+            SELECT 1
+            FROM question_topic_mapping qtm
+            JOIN questions topic_q ON topic_q.id = qtm.question_id
+            WHERE topic_q.exam_id = e.id
+              AND topic_q.deleted_at IS NULL
+              AND topic_q.question_number > 0
+          )
+        )
       ORDER BY e.publish_date DESC
       LIMIT 20
     `;
@@ -183,6 +201,24 @@ const Exam = {
           AND e.status = 'published'
           AND e.deleted_at IS NULL
           AND e.start_time IS NULL
+          AND NOT (
+            EXISTS (
+              SELECT 1
+              FROM admin_exam_source_files sf
+              WHERE sf.exam_id = e.id
+                AND sf.is_exam_paper = TRUE
+                AND sf.file_type = 'pdf'
+                AND sf.file_data IS NOT NULL
+            )
+            AND EXISTS (
+              SELECT 1
+              FROM question_topic_mapping qtm
+              JOIN questions topic_q ON topic_q.id = qtm.question_id
+              WHERE topic_q.exam_id = e.id
+                AND topic_q.deleted_at IS NULL
+                AND topic_q.question_number > 0
+            )
+          )
         GROUP BY e.id, s.id, u.id
         ORDER BY e.publish_date DESC, e.created_at DESC
       `;
@@ -243,6 +279,24 @@ const Exam = {
           AND e.status = 'published'
           AND e.deleted_at IS NULL
           AND e.start_time IS NULL
+          AND NOT (
+            EXISTS (
+              SELECT 1
+              FROM admin_exam_source_files sf
+              WHERE sf.exam_id = e.id
+                AND sf.is_exam_paper = TRUE
+                AND sf.file_type = 'pdf'
+                AND sf.file_data IS NOT NULL
+            )
+            AND EXISTS (
+              SELECT 1
+              FROM question_topic_mapping qtm
+              JOIN questions topic_q ON topic_q.id = qtm.question_id
+              WHERE topic_q.exam_id = e.id
+                AND topic_q.deleted_at IS NULL
+                AND topic_q.question_number > 0
+            )
+          )
         GROUP BY e.id, s.id, u.id
         ORDER BY e.publish_date DESC, e.created_at DESC
       `;
