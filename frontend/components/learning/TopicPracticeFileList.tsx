@@ -18,6 +18,11 @@ function formatDate(value?: string | null) {
   return Number.isNaN(date.getTime()) ? null : date.toLocaleDateString('vi-VN');
 }
 
+function languageLabel(value?: string | null) {
+  const labels: Record<string, string> = { vi: 'Tiếng Việt', en: 'English', zh: '中文' };
+  return labels[String(value || '').toLowerCase()] || String(value || '中文').replace(/_/g, ' + ');
+}
+
 export default function TopicPracticeFileList({ topicId, subjectSlug, subjectCode }: TopicPracticeFileListProps) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const [files, setFiles] = useState<TopicPracticeFile[]>([]);
@@ -85,7 +90,7 @@ export default function TopicPracticeFileList({ topicId, subjectSlug, subjectCod
                 <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4 dark:border-slate-800">
                   <div className="flex min-w-0 items-center gap-3">
                     <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-red-50 text-red-600 dark:bg-red-500/15 dark:text-red-200"><FiFileText size={20} /></div>
-                    <div className="min-w-0"><p className="truncate text-sm font-black text-slate-950 dark:text-white">{file.file_name || `File luyện ${index + 1}`}</p><p className="mt-0.5 text-xs font-semibold text-slate-400 dark:text-slate-400">PDF có đáp án đi kèm</p></div>
+                    <div className="min-w-0"><p className="truncate text-sm font-black text-slate-950 dark:text-white">{file.file_name || `File luyện ${index + 1}`}</p><p className="mt-0.5 text-xs font-semibold text-slate-400 dark:text-slate-400">{languageLabel(file.language_mode)} · PDF có đáp án đi kèm</p></div>
                   </div>
                   <span className="shrink-0 rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-black text-slate-600 dark:bg-slate-800 dark:text-slate-300">#{String(index + 1).padStart(2, '0')}</span>
                 </div>
@@ -94,6 +99,7 @@ export default function TopicPracticeFileList({ topicId, subjectSlug, subjectCod
                   <p className="mt-2 line-clamp-2 min-h-10 text-sm font-medium leading-5 text-slate-500 dark:text-slate-300">{file.description || 'Luyện đúng trọng tâm của chủ đề bằng file PDF này.'}</p>
                   <div className="mt-5 flex flex-wrap gap-2 text-xs font-bold">
                     <span className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-2.5 py-1.5 text-slate-600 dark:bg-slate-800 dark:text-slate-200"><FiLayers /> {file.question_count} câu</span>
+                    <span className="inline-flex items-center gap-1.5 rounded-lg bg-red-50 px-2.5 py-1.5 text-red-700 dark:bg-red-500/15 dark:text-red-200">{languageLabel(file.language_mode)}</span>
                     {file.pages ? <span className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-2.5 py-1.5 text-slate-600 dark:bg-slate-800 dark:text-slate-200"><FiFileText /> {file.pages} trang</span> : null}
                     {publishDate ? <span className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-2.5 py-1.5 text-slate-600 dark:bg-slate-800 dark:text-slate-200"><FiClock /> {publishDate}</span> : null}
                   </div>

@@ -336,6 +336,7 @@ export interface TopicPracticeAdminItem {
     title: string;
     description?: string | null;
     status: 'draft' | 'published' | 'archived' | string;
+  language_mode?: string | null;
     duration: number;
     publish_date?: string | null;
     subject_id: number;

@@ -26,8 +26,25 @@ type EditorFile = {
   subjectCode: string;
   subjectName: string;
   status: string;
+  languageMode: string;
   topicId?: number;
 };
+
+const LANGUAGE_LABELS: Record<string, string> = {
+  vi: 'Tiếng Việt',
+  en: 'English',
+  zh: '中文',
+  vi_zh: 'Việt + 中文',
+  vi_en: 'Việt + English',
+  zh_vi: '中文 + Việt',
+  zh_en: '中文 + English',
+  en_vi: 'English + Việt',
+  en_zh: 'English + 中文',
+};
+
+function languageLabel(value?: string | null) {
+  return LANGUAGE_LABELS[String(value || '').trim().toLowerCase()] || '中文';
+}
 
 function formatDate(value?: string | null) {
   if (!value) return 'Chưa có';
@@ -43,6 +60,7 @@ function toEditorFile(item: TopicPracticeAdminItem): EditorFile {
     subjectCode: item.subject_code,
     subjectName: item.subject_name,
     status: item.status,
+    languageMode: item.language_mode || 'zh',
     topicId: item.topic_id || undefined,
   };
 }
@@ -56,10 +74,12 @@ function PracticeEditor({ file, onClose, onChanged }: { file: EditorFile; onClos
   const [savingTopic, setSavingTopic] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [status, setStatus] = useState(file.status);
+  const [languageMode, setLanguageMode] = useState(file.languageMode || 'zh');
 
   useEffect(() => {
     setSelectedTopicId(String(file.topicId || ''));
     setStatus(file.status);
+    setLanguageMode(file.languageMode || 'zh');
     setPaperConfig(null);
     setParticipants([]);
     examAdminApi.getTopicPracticeTopics(file.subjectCode)
@@ -81,6 +101,12 @@ function PracticeEditor({ file, onClose, onChanged }: { file: EditorFile; onClos
     } finally {
       setSavingTopic(false);
     }
+  };
+
+  const changeLanguage = async (nextLanguage: string) => {
+    await examAdminApi.updateExam(file.examId, { languageMode: nextLanguage });
+    setLanguageMode(nextLanguage);
+    await onChanged();
   };
 
   const setPublished = async () => {
@@ -123,7 +149,7 @@ function PracticeEditor({ file, onClose, onChanged }: { file: EditorFile; onClos
           <div className="min-w-0">
             <p className="text-xs font-black uppercase tracking-widest text-red-500">File luyện theo chủ đề</p>
             <h2 className="mt-1 truncate text-2xl font-black text-slate-950 dark:text-white">{file.title}</h2>
-            <p className="mt-1 text-sm font-semibold text-slate-500 dark:text-slate-300">{file.subjectName} · ID #{file.examId}</p>
+            <p className="mt-1 text-sm font-semibold text-slate-500 dark:text-slate-300">{file.subjectName} · {languageLabel(languageMode)} · ID #{file.examId}</p>
           </div>
           <button type="button" onClick={onClose} className="rounded-xl border border-slate-200 bg-white p-2 text-slate-500 hover:text-red-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"><FiX size={20} /></button>
         </div>
@@ -143,7 +169,14 @@ function PracticeEditor({ file, onClose, onChanged }: { file: EditorFile; onClos
           <p className="md:col-span-2 text-xs font-semibold leading-5 text-slate-500 dark:text-slate-300">Trình tự: chủ đề → file → tải PDF → lưu đủ đáp án → đăng. File lời giải PDF là tùy chọn và chỉ mở cho học viên sau khi nộp bài. Sau khi có người làm, hệ thống khóa đổi PDF, đáp án và chủ đề để bảo toàn thống kê.</p>
         </div>
 
-        <RoomExamPaperPanel examId={file.examId} onConfigChange={setPaperConfig} showSolutionFile />
+        <RoomExamPaperPanel
+          examId={file.examId}
+          onConfigChange={setPaperConfig}
+          showSolutionFile
+          workspace="topic"
+          languageMode={languageMode}
+          onLanguageChange={changeLanguage}
+        />
 
         <section className="mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-[#111b2d]">
           <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
@@ -170,6 +203,7 @@ export default function AdminTopicPracticePage() {
   const [newTitle, setNewTitle] = useState('');
   const [newDescription, setNewDescription] = useState('');
   const [newSubjectId, setNewSubjectId] = useState('');
+  const [newLanguageMode, setNewLanguageMode] = useState('zh');
   const [creating, setCreating] = useState(false);
 
   const load = useCallback(async () => {
@@ -240,13 +274,14 @@ export default function AdminTopicPracticePage() {
         duration: 60,
         totalPoints: 100,
         description: newDescription.trim(),
-        languageMode: 'zh',
+        languageMode: newLanguageMode,
         is_simulated: false,
       });
-      setEditorFile({ examId: result.exam.id, title: result.exam.title, subjectId: subject.id, subjectCode: subject.code, subjectName: subject.name, status: result.exam.status, topicId: selectedTopic.id });
+      setEditorFile({ examId: result.exam.id, title: result.exam.title, subjectId: subject.id, subjectCode: subject.code, subjectName: subject.name, status: result.exam.status, languageMode: result.exam.language_mode || newLanguageMode, topicId: selectedTopic.id });
       setShowCreateFile(false);
       setNewTitle('');
       setNewDescription('');
+      setNewLanguageMode('zh');
     } catch (error: any) {
       alert(error?.response?.data?.message || 'Không tạo được file luyện.');
     } finally {
@@ -272,16 +307,16 @@ export default function AdminTopicPracticePage() {
 
         <section>
           <div className="mb-3 flex items-center justify-between gap-3"><div><h3 className="text-lg font-black text-slate-950 dark:text-white">Chủ đề luyện</h3><p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-300">Mở một chủ đề rồi mới tạo file PDF bên trong.</p></div><span className="rounded-full bg-red-50 px-3 py-1.5 text-xs font-black text-red-700 dark:bg-red-500/15 dark:text-red-200">Bước 1</span></div>
-          {loading ? <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm font-bold text-slate-400 dark:border-slate-800 dark:bg-[#111b2d]">Đang tải chủ đề...</div> : topics.length === 0 ? <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-9 text-center dark:border-slate-700 dark:bg-[#111b2d]"><FiFolder className="mx-auto text-red-500" size={28} /><p className="mt-3 font-black text-slate-800 dark:text-white">Chưa có chủ đề luyện</p><p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-300">Tạo chủ đề đầu tiên trước khi thêm file.</p><button type="button" onClick={() => setShowCreateTopic(true)} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-black text-white hover:bg-red-700"><FiPlus /> Tạo chủ đề đầu tiên</button></div> : <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{topics.map((topic) => { const files = filesByTopic(topic.id); return <article key={topic.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-red-200 dark:border-slate-800 dark:bg-[#111b2d] dark:hover:border-red-500/40"><div className="flex items-start justify-between gap-3"><span className="rounded-xl bg-red-50 p-2.5 text-red-600 dark:bg-red-500/15 dark:text-red-300"><FiFolder size={19} /></span><span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-black text-slate-600 dark:bg-slate-800 dark:text-slate-300">{topic.subject_name}</span></div><h4 className="mt-4 truncate text-base font-black text-slate-950 dark:text-white">{topic.name}</h4><p className="mt-1 line-clamp-2 min-h-10 text-sm font-medium text-slate-500 dark:text-slate-300">{topic.description || 'Thêm các file PDF cùng nội dung vào chủ đề này.'}</p><div className="mt-4 flex items-center justify-between gap-3"><span className="text-xs font-bold text-slate-500 dark:text-slate-300">{files.length} file · {files.filter((file) => file.status === 'published').length} đã đăng</span><button type="button" onClick={() => { setSelectedTopic(topic); setNewTitle(''); setNewDescription(''); setShowCreateFile(true); }} className="inline-flex items-center gap-1.5 rounded-xl bg-red-600 px-3 py-2 text-xs font-black text-white hover:bg-red-700"><FiPlus /> Thêm file</button></div></article>; })}</div>}
+          {loading ? <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm font-bold text-slate-400 dark:border-slate-800 dark:bg-[#111b2d]">Đang tải chủ đề...</div> : topics.length === 0 ? <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-9 text-center dark:border-slate-700 dark:bg-[#111b2d]"><FiFolder className="mx-auto text-red-500" size={28} /><p className="mt-3 font-black text-slate-800 dark:text-white">Chưa có chủ đề luyện</p><p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-300">Tạo chủ đề đầu tiên trước khi thêm file.</p><button type="button" onClick={() => setShowCreateTopic(true)} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-black text-white hover:bg-red-700"><FiPlus /> Tạo chủ đề đầu tiên</button></div> : <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{topics.map((topic) => { const files = filesByTopic(topic.id); return <article key={topic.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-red-200 dark:border-slate-800 dark:bg-[#111b2d] dark:hover:border-red-500/40"><div className="flex items-start justify-between gap-3"><span className="rounded-xl bg-red-50 p-2.5 text-red-600 dark:bg-red-500/15 dark:text-red-300"><FiFolder size={19} /></span><span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-black text-slate-600 dark:bg-slate-800 dark:text-slate-300">{topic.subject_name}</span></div><h4 className="mt-4 truncate text-base font-black text-slate-950 dark:text-white">{topic.name}</h4><p className="mt-1 line-clamp-2 min-h-10 text-sm font-medium text-slate-500 dark:text-slate-300">{topic.description || 'Thêm các file PDF cùng nội dung vào chủ đề này.'}</p><div className="mt-4 flex items-center justify-between gap-3"><span className="text-xs font-bold text-slate-500 dark:text-slate-300">{files.length} file · {files.filter((file) => file.status === 'published').length} đã đăng</span><button type="button" onClick={() => { setSelectedTopic(topic); setNewTitle(''); setNewDescription(''); setNewLanguageMode('zh'); setShowCreateFile(true); }} className="inline-flex items-center gap-1.5 rounded-xl bg-red-600 px-3 py-2 text-xs font-black text-white hover:bg-red-700"><FiPlus /> Thêm file</button></div></article>; })}</div>}
         </section>
 
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-[#111b2d] dark:shadow-none">
-          {loading ? <div className="p-12 text-center text-sm font-bold text-slate-400">Đang tải file luyện...</div> : items.length === 0 ? <div className="p-12 text-center text-sm font-bold text-slate-400">Chưa có file PDF luyện tập. Hãy tạo chủ đề, mở card chủ đề rồi thêm file.</div> : <div className="overflow-x-auto"><table className="w-full min-w-[980px] text-sm"><thead><tr className="border-b border-slate-100 text-left text-[11px] font-black uppercase tracking-wide text-slate-400 dark:border-slate-800"><th className="px-5 py-4">File / chủ đề</th><th className="px-4 py-4">Trạng thái</th><th className="px-4 py-4 text-center">Đáp án</th><th className="px-4 py-4 text-center">Người học</th><th className="px-4 py-4 text-center">Lượt luyện</th><th className="px-4 py-4 text-center">Điểm TB</th><th className="px-5 py-4 text-right">Thao tác</th></tr></thead><tbody>{items.map((item) => <tr key={item.exam_id} className="border-b border-slate-50 last:border-0 hover:bg-red-50/40 dark:border-slate-800/70 dark:hover:bg-slate-800/40"><td className="px-5 py-4"><p className="font-black text-slate-950 dark:text-white">{item.title}</p><p className="mt-1 text-xs font-semibold text-red-600 dark:text-red-300">{item.subject_name} · {item.topic_name || 'Chưa gán chủ đề'}</p><p className="mt-1 text-xs text-slate-400">{item.file_name} · {item.question_count} câu</p></td><td className="px-4 py-4"><span className={`rounded-full px-2.5 py-1 text-xs font-black ${item.status === 'published' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-200'}`}>{item.status === 'published' ? 'Đã đăng' : 'Nháp'}</span></td><td className="px-4 py-4 text-center"><span className={`font-black ${item.answers_ready ? 'text-emerald-600 dark:text-emerald-300' : 'text-rose-600 dark:text-rose-300'}`}>{item.answered_count}/{item.question_count}</span></td><td className="px-4 py-4 text-center font-black text-slate-700 dark:text-slate-200">{item.learner_count}</td><td className="px-4 py-4 text-center font-black text-slate-700 dark:text-slate-200">{item.attempt_count}</td><td className="px-4 py-4 text-center font-black text-slate-700 dark:text-slate-200">{Number(item.average_score).toFixed(1)}</td><td className="px-5 py-4 text-right"><button type="button" onClick={() => setEditorFile(toEditorFile(item))} className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-3 py-2 text-xs font-black text-white hover:bg-slate-700 dark:bg-red-600 dark:hover:bg-red-700">Quản lý <FiChevronRight /></button></td></tr>)}</tbody></table></div>}
+          {loading ? <div className="p-12 text-center text-sm font-bold text-slate-400">Đang tải file luyện...</div> : items.length === 0 ? <div className="p-12 text-center text-sm font-bold text-slate-400">Chưa có file PDF luyện tập. Hãy tạo chủ đề, mở card chủ đề rồi thêm file.</div> : <div className="overflow-x-auto"><table className="w-full min-w-[980px] text-sm"><thead><tr className="border-b border-slate-100 text-left text-[11px] font-black uppercase tracking-wide text-slate-400 dark:border-slate-800"><th className="px-5 py-4">File / chủ đề</th><th className="px-4 py-4">Trạng thái</th><th className="px-4 py-4 text-center">Đáp án</th><th className="px-4 py-4 text-center">Người học</th><th className="px-4 py-4 text-center">Lượt luyện</th><th className="px-4 py-4 text-center">Điểm TB</th><th className="px-5 py-4 text-right">Thao tác</th></tr></thead><tbody>{items.map((item) => <tr key={item.exam_id} className="border-b border-slate-50 last:border-0 hover:bg-red-50/40 dark:border-slate-800/70 dark:hover:bg-slate-800/40"><td className="px-5 py-4"><p className="font-black text-slate-950 dark:text-white">{item.title}</p><p className="mt-1 text-xs font-semibold text-red-600 dark:text-red-300">{item.subject_name} · {item.topic_name || 'Chưa gán chủ đề'} · {languageLabel(item.language_mode)}</p><p className="mt-1 text-xs text-slate-400">{item.file_name} · {item.question_count} câu</p></td><td className="px-4 py-4"><span className={`rounded-full px-2.5 py-1 text-xs font-black ${item.status === 'published' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-200'}`}>{item.status === 'published' ? 'Đã đăng' : 'Nháp'}</span></td><td className="px-4 py-4 text-center"><span className={`font-black ${item.answers_ready ? 'text-emerald-600 dark:text-emerald-300' : 'text-rose-600 dark:text-rose-300'}`}>{item.answered_count}/{item.question_count}</span></td><td className="px-4 py-4 text-center font-black text-slate-700 dark:text-slate-200">{item.learner_count}</td><td className="px-4 py-4 text-center font-black text-slate-700 dark:text-slate-200">{item.attempt_count}</td><td className="px-4 py-4 text-center font-black text-slate-700 dark:text-slate-200">{Number(item.average_score).toFixed(1)}</td><td className="px-5 py-4 text-right"><button type="button" onClick={() => setEditorFile(toEditorFile(item))} className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-3 py-2 text-xs font-black text-white hover:bg-slate-700 dark:bg-red-600 dark:hover:bg-red-700">Quản lý <FiChevronRight /></button></td></tr>)}</tbody></table></div>}
         </div>
       </section>
 
       {showCreateTopic && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm"><div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl dark:bg-[#111b2d]"><div className="flex items-start justify-between gap-4"><div><h2 className="text-xl font-black text-slate-950 dark:text-white">Tạo chủ đề luyện</h2><p className="mt-1 text-sm text-slate-500 dark:text-slate-300">Chủ đề là nơi chứa các file PDF cùng một nội dung.</p></div><button type="button" onClick={() => setShowCreateTopic(false)} className="text-slate-400 hover:text-red-600"><FiX size={22} /></button></div><label className="mt-5 block text-sm font-bold text-slate-700 dark:text-slate-200">Môn<select value={newSubjectId} onChange={(event) => setNewSubjectId(event.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 outline-none focus:border-red-400 dark:border-slate-700 dark:bg-slate-950 dark:text-white"><option value="">Chọn môn</option>{subjects.map((subject) => <option key={subject.id} value={subject.id}>{subject.name}</option>)}</select></label><label className="mt-4 block text-sm font-bold text-slate-700 dark:text-slate-200">Tên chủ đề<input value={newTitle} onChange={(event) => setNewTitle(event.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 outline-none focus:border-red-400 dark:border-slate-700 dark:bg-slate-950 dark:text-white" placeholder="Ví dụ: Hàm số" /></label><label className="mt-4 block text-sm font-bold text-slate-700 dark:text-slate-200">Mô tả (không bắt buộc)<textarea value={newDescription} onChange={(event) => setNewDescription(event.target.value)} className="mt-1.5 min-h-24 w-full rounded-xl border border-slate-200 bg-white p-3 outline-none focus:border-red-400 dark:border-slate-700 dark:bg-slate-950 dark:text-white" placeholder="Nội dung trọng tâm của chủ đề" /></label><div className="mt-6 flex justify-end gap-3"><button type="button" onClick={() => setShowCreateTopic(false)} className="rounded-xl px-4 py-2.5 text-sm font-bold text-slate-600 dark:text-slate-300">Hủy</button><button type="button" onClick={createTopic} disabled={creating} className="rounded-xl bg-red-600 px-5 py-2.5 text-sm font-black text-white hover:bg-red-700 disabled:opacity-50">{creating ? 'Đang tạo...' : 'Tạo chủ đề'}</button></div></div></div>}
-      {showCreateFile && selectedTopic && <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm"><div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl dark:bg-[#111b2d]"><div className="flex items-start justify-between gap-4"><div><p className="text-xs font-black uppercase tracking-widest text-red-500">Thêm file vào chủ đề</p><h2 className="mt-1 text-xl font-black text-slate-950 dark:text-white">{selectedTopic.name}</h2><p className="mt-1 text-sm text-slate-500 dark:text-slate-300">{selectedTopic.subject_name} · PDF và đáp án được cấu hình ở bước sau.</p></div><button type="button" onClick={() => setShowCreateFile(false)} className="text-slate-400 hover:text-red-600"><FiX size={22} /></button></div><label className="mt-5 block text-sm font-bold text-slate-700 dark:text-slate-200">Tên file<input value={newTitle} onChange={(event) => setNewTitle(event.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 outline-none focus:border-red-400 dark:border-slate-700 dark:bg-slate-950 dark:text-white" placeholder="Ví dụ: Hàm số — Bộ 01" /></label><label className="mt-4 block text-sm font-bold text-slate-700 dark:text-slate-200">Ghi chú (không bắt buộc)<textarea value={newDescription} onChange={(event) => setNewDescription(event.target.value)} className="mt-1.5 min-h-24 w-full rounded-xl border border-slate-200 bg-white p-3 outline-none focus:border-red-400 dark:border-slate-700 dark:bg-slate-950 dark:text-white" placeholder="Nội dung trọng tâm của file" /></label><div className="mt-6 flex justify-end gap-3"><button type="button" onClick={() => setShowCreateFile(false)} className="rounded-xl px-4 py-2.5 text-sm font-bold text-slate-600 dark:text-slate-300">Hủy</button><button type="button" onClick={createPracticeFile} disabled={creating} className="rounded-xl bg-red-600 px-5 py-2.5 text-sm font-black text-white hover:bg-red-700 disabled:opacity-50">{creating ? 'Đang tạo...' : 'Tạo và cấu hình'}</button></div></div></div>}
+      {showCreateFile && selectedTopic && <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm"><div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl dark:bg-[#111b2d]"><div className="flex items-start justify-between gap-4"><div><p className="text-xs font-black uppercase tracking-widest text-red-500">Thêm file vào chủ đề</p><h2 className="mt-1 text-xl font-black text-slate-950 dark:text-white">{selectedTopic.name}</h2><p className="mt-1 text-sm text-slate-500 dark:text-slate-300">{selectedTopic.subject_name} · Mỗi ngôn ngữ là một file PDF và có file lời giải riêng.</p></div><button type="button" onClick={() => setShowCreateFile(false)} className="text-slate-400 hover:text-red-600"><FiX size={22} /></button></div><label className="mt-5 block text-sm font-bold text-slate-700 dark:text-slate-200">Tên file<input value={newTitle} onChange={(event) => setNewTitle(event.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 outline-none focus:border-red-400 dark:border-slate-700 dark:bg-slate-950 dark:text-white" placeholder="Ví dụ: Hàm số — Bộ 01" /></label><label className="mt-4 block text-sm font-bold text-slate-700 dark:text-slate-200">Ngôn ngữ của file PDF<select value={newLanguageMode} onChange={(event) => setNewLanguageMode(event.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 outline-none focus:border-red-400 dark:border-slate-700 dark:bg-slate-950 dark:text-white"><option value="vi">Tiếng Việt</option><option value="en">English</option><option value="zh">中文</option></select></label><label className="mt-4 block text-sm font-bold text-slate-700 dark:text-slate-200">Ghi chú (không bắt buộc)<textarea value={newDescription} onChange={(event) => setNewDescription(event.target.value)} className="mt-1.5 min-h-24 w-full rounded-xl border border-slate-200 bg-white p-3 outline-none focus:border-red-400 dark:border-slate-700 dark:bg-slate-950 dark:text-white" placeholder="Nội dung trọng tâm của file" /></label><div className="mt-6 flex justify-end gap-3"><button type="button" onClick={() => setShowCreateFile(false)} className="rounded-xl px-4 py-2.5 text-sm font-bold text-slate-600 dark:text-slate-300">Hủy</button><button type="button" onClick={createPracticeFile} disabled={creating} className="rounded-xl bg-red-600 px-5 py-2.5 text-sm font-black text-white hover:bg-red-700 disabled:opacity-50">{creating ? 'Đang tạo...' : 'Tạo và cấu hình'}</button></div></div></div>}
       {editorFile && <PracticeEditor file={editorFile} onClose={() => setEditorFile(null)} onChanged={load} />}
     </AdminLayout>
   );

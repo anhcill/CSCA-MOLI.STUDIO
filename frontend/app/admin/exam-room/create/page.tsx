@@ -18,7 +18,7 @@ export default function CreateRoomExamPage() {
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [form, setForm] = useState({ title: '', subjectId: 0, duration: 90, totalPoints: 100, startTime: '', endTime: '', maxParticipants: 0, description: '' });
+  const [form, setForm] = useState({ title: '', subjectId: 0, duration: 90, totalPoints: 100, startTime: '', endTime: '', maxParticipants: 0, description: '', languageMode: 'vi' });
 
   useEffect(() => {
     const token = typeof window !== 'undefined' ? sessionStorage.getItem('token') : null;
@@ -43,7 +43,7 @@ export default function CreateRoomExamPage() {
         description: form.description.trim(),
         shuffle_mode: false,
         is_simulated: false,
-        languageMode: 'vi',
+        languageMode: form.languageMode,
         start_time: new Date(form.startTime).toISOString(),
         end_time: new Date(form.endTime).toISOString(),
         maxParticipants: form.maxParticipants,
@@ -69,6 +69,7 @@ export default function CreateRoomExamPage() {
           <div className="mt-5 grid gap-4 md:grid-cols-2">
             <label className="md:col-span-2 text-sm font-bold text-gray-700">Tên kỳ thi *<input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="VD: Thi thử CSCA tháng 9" className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2.5 outline-none focus:ring-2 focus:ring-violet-500" /></label>
             <label className="text-sm font-bold text-gray-700">Môn thi *<select value={form.subjectId} onChange={(e) => setForm({ ...form, subjectId: Number(e.target.value) })} className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2.5 outline-none focus:ring-2 focus:ring-violet-500"><option value={0}>Chọn môn</option>{subjects.map((subject) => <option key={subject.id} value={subject.id}>{subject.name}</option>)}</select></label>
+            <label className="text-sm font-bold text-gray-700">Ngôn ngữ file PDF *<select value={form.languageMode} onChange={(e) => setForm({ ...form, languageMode: e.target.value })} className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2.5 outline-none focus:ring-2 focus:ring-violet-500"><option value="vi">Tiếng Việt</option><option value="en">English</option><option value="zh">中文</option></select></label>
             <label className="text-sm font-bold text-gray-700">Thời gian làm bài (phút)<input type="number" min={1} value={form.duration} onChange={(e) => setForm({ ...form, duration: Number(e.target.value) })} className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2.5" /></label>
             <label className="text-sm font-bold text-gray-700"><span className="inline-flex items-center gap-1"><FiCalendar /> Bắt đầu *</span><input type="datetime-local" value={form.startTime} onChange={(e) => setForm({ ...form, startTime: e.target.value })} className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2.5" /></label>
             <label className="text-sm font-bold text-gray-700">Kết thúc *<input type="datetime-local" value={form.endTime} onChange={(e) => setForm({ ...form, endTime: e.target.value })} className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2.5" /></label>

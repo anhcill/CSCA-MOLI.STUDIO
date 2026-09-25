@@ -196,8 +196,8 @@ const examController = {
     }
   },
 
-  // Tạo đề thi mới (Admin only)
-  // Serve the original PDF only while this user has an active attempt.
+  // Serve the original PDF only during a valid active attempt. A completed room
+  // exam can fetch it again only after its scheduled end time for PDF comparison.
   // The file is never exposed through a public/static URL.
   async getExamPaper(req, res) {
     try {
@@ -220,7 +220,20 @@ const examController = {
              SELECT 1 FROM exam_attempts ea
              WHERE ea.exam_id = sf.exam_id
                AND ea.user_id = $2
-               AND ea.status = ANY($4::varchar[])
+               AND (
+                 ea.status = 'in_progress'
+                 OR (
+                   $3::boolean = TRUE
+                   AND e.start_time IS NULL
+                   AND ea.status = ANY($4::varchar[])
+                 )
+                 OR (
+                   e.start_time IS NOT NULL
+                   AND e.end_time IS NOT NULL
+                   AND e.end_time <= CURRENT_TIMESTAMP
+                   AND ea.status = 'completed'
+                 )
+               )
            )
          ORDER BY sf.created_at DESC, sf.id DESC
          LIMIT 1`,
@@ -251,8 +264,8 @@ const examController = {
     }
   },
 
-  // A solution PDF is available only for a completed, unscheduled practice file.
-  // It uses an authenticated blob response so it is never a public/static asset.
+  // A solution PDF is available only after a completed practice file, or after
+  // the scheduled room exam has ended. It is never a public/static asset.
   async getExamSolution(req, res) {
     try {
       const examId = parseInt(req.params.examId, 10);
@@ -265,7 +278,10 @@ const examController = {
          FROM admin_exam_source_files sf
          JOIN exams e ON e.id = sf.exam_id
          WHERE sf.exam_id = $1
-           AND e.start_time IS NULL
+           AND (
+             e.start_time IS NULL
+             OR (e.end_time IS NOT NULL AND e.end_time <= CURRENT_TIMESTAMP)
+           )
            AND sf.is_solution_file = TRUE
            AND sf.file_type = 'pdf'
            AND sf.file_data IS NOT NULL
@@ -285,7 +301,7 @@ const examController = {
         return res.status(403).json({
           success: false,
           code: "EXAM_SOLUTION_NOT_AVAILABLE",
-          message: "File lời giải chỉ mở sau khi bạn hoàn thành bài luyện.",
+          message: "File lời giải chỉ mở sau khi bạn hoàn thành bài luyện hoặc kỳ thi kết thúc.",
         });
       }
 

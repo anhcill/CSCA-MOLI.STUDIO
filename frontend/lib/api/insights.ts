@@ -566,6 +566,7 @@ export interface TopicPracticeFile {
   description?: string | null;
   duration: number;
   difficulty_level?: string | null;
+  language_mode?: string | null;
   publish_date?: string | null;
   topic_name: string;
   file_name: string;

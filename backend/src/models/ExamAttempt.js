@@ -745,7 +745,9 @@ const ExamAttempt = {
             AND sf.file_type = 'pdf'
             AND sf.file_data IS NOT NULL
         )) AS is_room_exam,
-        (e.start_time IS NULL AND ea.status = 'completed' AND EXISTS (
+        (ea.status = 'completed'
+          AND (e.start_time IS NULL OR (e.end_time IS NOT NULL AND e.end_time <= CURRENT_TIMESTAMP))
+          AND EXISTS (
           SELECT 1
           FROM admin_exam_source_files sf
           WHERE sf.exam_id = e.id

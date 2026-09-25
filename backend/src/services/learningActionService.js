@@ -424,6 +424,7 @@ async function getTopicPracticeFiles(userId, topicId, subjectCode) {
         e.description,
         e.duration,
         e.difficulty_level,
+        e.language_mode,
         e.publish_date,
         qt.name AS topic_name,
         paper.file_name,

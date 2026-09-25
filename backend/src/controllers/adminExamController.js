@@ -638,6 +638,7 @@ const AdminExamController = {
            e.title,
            e.description,
            e.status,
+           e.language_mode,
            e.duration,
            e.publish_date,
            s.id AS subject_id,
@@ -1226,7 +1227,7 @@ const AdminExamController = {
     try {
       await client.query("BEGIN");
       const examResult = await client.query(
-        `SELECT id, start_time
+        `SELECT id
          FROM exams
          WHERE id = $1 AND deleted_at IS NULL
          FOR UPDATE`,
@@ -1237,11 +1238,6 @@ const AdminExamController = {
         await client.query("ROLLBACK");
         return res.status(404).json({ message: MISSING_EXAM_MESSAGE });
       }
-      if (exam.start_time) {
-        await client.query("ROLLBACK");
-        return res.status(409).json({ message: "File lời giải PDF chỉ dùng cho file luyện theo chủ đề." });
-      }
-
       const result = await saveExamSolutionFileRecord(client, examId, req.file, req.user.id);
       const sourceFiles = await listExamSourceFileRecords(client, examId);
       await client.query("COMMIT");

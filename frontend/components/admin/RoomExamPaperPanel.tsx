@@ -17,10 +17,16 @@ export default function RoomExamPaperPanel({
   examId,
   onConfigChange,
   showSolutionFile = false,
+  workspace = 'room',
+  languageMode = 'zh',
+  onLanguageChange,
 }: {
   examId: number;
   onConfigChange?: (config: RoomPaperConfig) => void;
   showSolutionFile?: boolean;
+  workspace?: 'room' | 'topic';
+  languageMode?: string;
+  onLanguageChange?: (languageMode: string) => Promise<void> | void;
 }) {
   const paperInputRef = useRef<HTMLInputElement>(null);
   const solutionInputRef = useRef<HTMLInputElement>(null);
@@ -35,6 +41,28 @@ export default function RoomExamPaperPanel({
   const [deletingSolution, setDeletingSolution] = useState(false);
   const [bulkAnswerText, setBulkAnswerText] = useState('');
   const [bulkAnswerMessage, setBulkAnswerMessage] = useState('');
+  const [changingLanguage, setChangingLanguage] = useState(false);
+
+  const isTopicPractice = workspace === 'topic';
+  const workspaceCopy = isTopicPractice
+    ? {
+      paperTitle: 'File PDF luyện theo chủ đề',
+      paperDescription: 'Học viên làm trực tiếp trên PDF. Tải file, dán nhanh bảng đáp án hoặc chọn từng đáp án trước khi đăng.',
+      paperEmpty: 'Chưa có file PDF luyện tập.',
+      uploadPaper: 'Tải file PDF',
+      replacePaper: 'Thay file PDF',
+      deletePaper: 'Xóa file PDF đang dùng cho bài luyện?',
+      solutionHint: 'Chỉ mở cho học viên sau khi đã nộp bài.',
+    }
+    : {
+      paperTitle: 'Đề PDF phòng thi',
+      paperDescription: 'Thí sinh đọc đề trực tiếp từ PDF. Tải file, dán nhanh bảng đáp án hoặc chọn từng đáp án trước khi mở kỳ thi.',
+      paperEmpty: 'Chưa có file PDF đề thi.',
+      uploadPaper: 'Tải file PDF',
+      replacePaper: 'Thay file PDF',
+      deletePaper: 'Xóa file PDF đang dùng trong phòng thi?',
+      solutionHint: 'Chỉ mở sau khi kỳ thi đã kết thúc.',
+    };
 
   const loadConfig = async () => {
     try {
@@ -79,7 +107,7 @@ export default function RoomExamPaperPanel({
   };
 
   const deletePaper = async () => {
-    if (!config?.paper || !confirm('Xóa file PDF đang dùng trong phòng thi?')) return;
+    if (!config?.paper || !confirm(workspaceCopy.deletePaper)) return;
     try {
       setDeletingPaper(true);
       await examAdminApi.deleteExamSourceFile(examId, config.paper.id);
@@ -177,6 +205,18 @@ export default function RoomExamPaperPanel({
     }
   };
 
+  const updateLanguage = async (nextLanguage: string) => {
+    if (!onLanguageChange || nextLanguage === languageMode) return;
+    try {
+      setChangingLanguage(true);
+      await onLanguageChange(nextLanguage);
+    } catch (error: any) {
+      alert(error?.response?.data?.message || 'Không thể đổi ngôn ngữ của file.');
+    } finally {
+      setChangingLanguage(false);
+    }
+  };
+
   if (loading && !config) {
     return (
       <div className="flex min-h-60 items-center justify-center rounded-2xl border border-gray-200 bg-white">
@@ -190,9 +230,9 @@ export default function RoomExamPaperPanel({
       <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5 text-blue-950 shadow-sm dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-100">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div>
-            <h2 className="flex items-center gap-2 text-lg font-black"><FiFileText /> Đề PDF phòng thi</h2>
+            <h2 className="flex items-center gap-2 text-lg font-black"><FiFileText /> {workspaceCopy.paperTitle}</h2>
             <p className="mt-1 max-w-3xl text-sm text-blue-800 dark:text-blue-200">
-              Thí sinh đọc đề trực tiếp từ PDF. Admin chỉ cần tải file, nhập số câu và chọn đáp án đúng; không OCR và không nhập lại nội dung câu hỏi.
+              {workspaceCopy.paperDescription}
             </p>
           </div>
           <input
@@ -213,7 +253,7 @@ export default function RoomExamPaperPanel({
             className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {uploadingPaper ? <FiRefreshCw className="animate-spin" /> : <FiUpload />}
-            {config?.paper ? 'Thay file PDF' : 'Tải file PDF'}
+            {config?.paper ? workspaceCopy.replacePaper : workspaceCopy.uploadPaper}
           </button>
         </div>
 
@@ -236,7 +276,7 @@ export default function RoomExamPaperPanel({
           </div>
         ) : (
           <div className="mt-4 rounded-xl border border-dashed border-blue-300 bg-white/60 p-4 text-sm font-bold text-blue-700">
-            Chưa có file PDF đề thi.
+            {workspaceCopy.paperEmpty}
           </div>
         )}
       </div>
@@ -244,8 +284,8 @@ export default function RoomExamPaperPanel({
       {locked && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold text-amber-800">
           {showSolutionFile
-            ? `Đề đã có ${config?.attemptCount} lượt thi. File PDF và đáp án đã được khóa để bảo toàn kết quả; bạn vẫn có thể cập nhật file lời giải.`
-            : `Đề đã có ${config?.attemptCount} lượt thi. File PDF và đáp án đã được khóa để bảo toàn kết quả.`}
+            ? `Đề đã có ${config?.attemptCount} lượt làm. File PDF và đáp án đã được khóa để bảo toàn kết quả; bạn vẫn có thể cập nhật file lời giải.`
+            : `Đề đã có ${config?.attemptCount} lượt làm. File PDF và đáp án đã được khóa để bảo toàn kết quả.`}
         </div>
       )}
 
@@ -255,18 +295,39 @@ export default function RoomExamPaperPanel({
             <h2 className="text-lg font-black text-gray-900 dark:text-white">Bảng đáp án chấm thi</h2>
             <p className="mt-1 text-sm text-gray-500">Đã nhập {answeredCount}/{questionCount} câu.</p>
           </div>
-          <label className="w-full max-w-48 text-sm font-bold text-gray-700 dark:text-slate-200">
-            Số câu trong đề
-            <input
-              type="number"
-              min={1}
-              max={200}
-              value={questionCount}
-              disabled={locked}
-              onChange={(event) => setQuestionCount(Math.max(1, Math.min(200, Number(event.target.value) || 1)))}
-              className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-gray-900 outline-none focus:ring-2 focus:ring-violet-500 disabled:bg-gray-100 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:disabled:bg-slate-800"
-            />
-          </label>
+          <div className="grid w-full gap-3 sm:grid-cols-2 md:w-auto">
+            <label className="text-sm font-bold text-gray-700 dark:text-slate-200">
+              Ngôn ngữ file PDF
+              <select
+                value={languageMode}
+                disabled={changingLanguage || locked || !onLanguageChange}
+                onChange={(event) => updateLanguage(event.target.value)}
+                className="mt-1 h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-gray-900 outline-none focus:ring-2 focus:ring-violet-500 disabled:bg-gray-100 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:disabled:bg-slate-800"
+              >
+                <option value="vi">Tiếng Việt</option>
+                <option value="en">English</option>
+                <option value="zh">中文</option>
+                <option value="vi_zh">Việt + 中文</option>
+                <option value="vi_en">Việt + English</option>
+                <option value="zh_vi">中文 + Việt</option>
+                <option value="zh_en">中文 + English</option>
+                <option value="en_vi">English + Việt</option>
+                <option value="en_zh">English + 中文</option>
+              </select>
+            </label>
+            <label className="text-sm font-bold text-gray-700 dark:text-slate-200">
+              Số câu trong đề
+              <input
+                type="number"
+                min={1}
+                max={200}
+                value={questionCount}
+                disabled={locked}
+                onChange={(event) => setQuestionCount(Math.max(1, Math.min(200, Number(event.target.value) || 1)))}
+                className="mt-1 h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-gray-900 outline-none focus:ring-2 focus:ring-violet-500 disabled:bg-gray-100 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:disabled:bg-slate-800"
+              />
+            </label>
+          </div>
         </div>
 
         {showSolutionFile && <div className="mt-4 flex flex-col gap-3 rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 dark:border-emerald-900 dark:bg-emerald-950/25 md:flex-row md:items-center md:justify-between">
@@ -277,7 +338,7 @@ export default function RoomExamPaperPanel({
                 {config.solution.fileName} · {formatBytes(config.solution.fileSize)}{config.solution.pages ? ` · ${config.solution.pages} trang` : ''}
               </p>
             ) : (
-              <p className="mt-1 text-xs font-semibold text-emerald-800 dark:text-emerald-200">Hiển thị cho học viên sau khi đã nộp bài.</p>
+              <p className="mt-1 text-xs font-semibold text-emerald-800 dark:text-emerald-200">{workspaceCopy.solutionHint}</p>
             )}
           </div>
           <div className="flex shrink-0 flex-wrap gap-2">
@@ -312,10 +373,10 @@ export default function RoomExamPaperPanel({
           </div>
         </div>}
 
-        {showSolutionFile && config?.solution && <div className="mt-4 rounded-xl border border-violet-200 bg-violet-50/70 p-4 dark:border-violet-900 dark:bg-violet-950/25">
+        {showSolutionFile && config?.paper && <div className="mt-4 rounded-xl border border-violet-200 bg-violet-50/70 p-4 dark:border-violet-900 dark:bg-violet-950/25">
           <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
             <label className="block min-w-0 flex-1 text-sm font-black text-violet-950 dark:text-violet-100">
-              Dán bảng đáp án từ file lời giải
+              Dán nhanh bảng đáp án
               <textarea
                 value={bulkAnswerText}
                 disabled={locked}

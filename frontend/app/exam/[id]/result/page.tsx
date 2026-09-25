@@ -254,7 +254,7 @@ function ExamResultContent() {
     try {
       setOpeningSolution(true);
       const [paper, solution] = await Promise.all([
-        examApi.getExamPaper(result.exam_id, true),
+        examApi.getExamPaper(result.exam_id, !result.is_room_exam),
         examApi.getExamSolution(result.exam_id),
       ]);
       setComparisonUrls({

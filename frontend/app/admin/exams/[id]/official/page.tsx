@@ -33,6 +33,7 @@ interface ExamMeta {
   id: number;
   title: string;
   status: string;
+  language_mode?: string | null;
   start_time?: string | null;
   end_time?: string | null;
   max_participants?: number;
@@ -392,7 +393,19 @@ export default function OfficialExamAdminPage() {
           />
         )}
 
-        {activeTab === 'paper' && <RoomExamPaperPanel examId={examId} onConfigChange={(config) => setPaperReady(Boolean(config.ready))} />}
+        {activeTab === 'paper' && (
+          <RoomExamPaperPanel
+            examId={examId}
+            onConfigChange={(config) => setPaperReady(Boolean(config.ready))}
+            showSolutionFile
+            workspace="room"
+            languageMode={exam?.language_mode || 'vi'}
+            onLanguageChange={async (languageMode) => {
+              await examAdminApi.updateExam(examId, { languageMode });
+              setExam((current) => current ? { ...current, language_mode: languageMode } : current);
+            }}
+          />
+        )}
 
         {activeTab === 'registrations' && (
           <section className="rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
