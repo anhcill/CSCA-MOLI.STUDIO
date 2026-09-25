@@ -18,7 +18,16 @@ export default function PdfComparisonDocument({ url, title }: PdfComparisonDocum
     const container = containerRef.current;
     if (!container) return;
 
-    const updateWidth = () => setContainerWidth(Math.floor(container.clientWidth));
+    const updateWidth = () => {
+      const nextWidth = Math.floor(container.clientWidth);
+      // Rendering pages can introduce a scrollbar that changes width by a few
+      // pixels. Ignore that tiny oscillation so PDF.js does not reload forever.
+      setContainerWidth((currentWidth) => (
+        currentWidth === 0 || Math.abs(currentWidth - nextWidth) >= 24
+          ? nextWidth
+          : currentWidth
+      ));
+    };
     updateWidth();
     const observer = new ResizeObserver(updateWidth);
     observer.observe(container);
@@ -108,7 +117,7 @@ export default function PdfComparisonDocument({ url, title }: PdfComparisonDocum
   }, [containerWidth, url]);
 
   return (
-    <div className="relative h-full overflow-y-auto bg-slate-100 p-3 sm:p-4" aria-label={title}>
+    <div className="relative h-full overflow-y-scroll bg-slate-100 p-3 [scrollbar-gutter:stable] sm:p-4" aria-label={title}>
       <div ref={containerRef} />
       {status === 'loading' && (
         <div className="absolute inset-0 grid place-items-center bg-white/80">
