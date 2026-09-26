@@ -453,6 +453,9 @@ const examController = {
         practiceMode,
         singleAttempt: Boolean(exam.start_time && !isAdmin),
       });
+      // The exam list is ranked by total attempts. Invalidate all variants of
+      // that list as soon as an attempt starts so the ranking is immediately fresh.
+      cache.delByPrefix("exams:");
       const savedAnswers = existingAttempt
         ? await ExamAttempt.getSavedAnswers(attempt.id)
         : [];

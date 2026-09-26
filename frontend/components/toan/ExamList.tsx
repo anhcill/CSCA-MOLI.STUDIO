@@ -17,7 +17,7 @@ interface ExamListProps {
 }
 
 type FilterType = 'all' | 'done' | 'not-done';
-type SortType = 'newest' | 'oldest' | 'name';
+type SortType = 'popular' | 'newest' | 'oldest' | 'name';
 type ExamTypeTab = 'regular' | 'vip';
 
 const isVipExam = (exam: Exam) =>
@@ -31,6 +31,11 @@ const getExamTier = (exam: Exam): TierLevel => {
 
 const getAttemptCount = (exam: Exam) => {
   const count = Number(exam.user_attempt_count ?? 0);
+  return Number.isFinite(count) ? count : 0;
+};
+
+const getPopularityAttemptCount = (exam: Exam) => {
+  const count = Number((exam as Exam & { popularity_attempt_count?: number }).popularity_attempt_count ?? 0);
   return Number.isFinite(count) ? count : 0;
 };
 
@@ -57,7 +62,7 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
   const [filter, setFilter] = useState<FilterType>('all');
   const [examTypeTab, setExamTypeTab] = useState<ExamTypeTab>('regular');
   const [search, setSearch] = useState('');
-  const [sort, setSort] = useState<SortType>('newest');
+  const [sort, setSort] = useState<SortType>('popular');
   const [showDone, setShowDone] = useState(false);
   const canAccessExam = (exam: Exam) => canAccessContent(user, getExamTier(exam), exam.subject_code);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -161,7 +166,11 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
 
     // Sort
     result.sort((a, b) => {
-      if (sort === 'newest') {
+      if (sort === 'popular') {
+        const popularityDifference = getPopularityAttemptCount(b) - getPopularityAttemptCount(a);
+        if (popularityDifference !== 0) return popularityDifference;
+        return new Date(b.publish_date || 0).getTime() - new Date(a.publish_date || 0).getTime();
+      } else if (sort === 'newest') {
         return new Date(b.publish_date || 0).getTime() - new Date(a.publish_date || 0).getTime();
       } else if (sort === 'oldest') {
         return new Date(a.publish_date || 0).getTime() - new Date(b.publish_date || 0).getTime();
@@ -466,12 +475,14 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
     title,
     description,
     count,
+    exams,
     grouped,
     variant,
   }: {
     title: string;
     description: string;
     count: number;
+    exams: Exam[];
     grouped: Map<number, Exam[]>;
     variant: 'regular' | 'vip';
   }) => {
@@ -510,7 +521,11 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
           </div>
         ) : (
           <div className="flex-1 overflow-y-auto overscroll-contain p-3 sm:p-4 space-y-6">
-            {[...grouped.entries()].map(([year, yearExams]) => (
+            {sort === 'popular' ? (
+              <div className="space-y-2">
+                {exams.map(exam => <ExamCard key={exam.id} exam={exam} />)}
+              </div>
+            ) : [...grouped.entries()].map(([year, yearExams]) => (
               <div key={`${variant}-${year}`}>
                 <div className="flex items-center gap-3 mb-3">
                   <span className={`text-lg font-black ${isVipSection ? 'text-amber-700' : 'text-red-600'}`}>
@@ -652,6 +667,7 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
             onChange={e => setSort(e.target.value as SortType)}
             className="text-xs font-semibold border border-rose-100 rounded-lg px-2.5 py-1.5 bg-white/80 text-gray-600 focus:outline-none focus:ring-2 focus:ring-red-300 cursor-pointer"
           >
+            <option value="popular">{t('examList.popular')}</option>
             <option value="newest">{t('examList.newest')}</option>
             <option value="oldest">{t('examList.oldest')}</option>
             <option value="name">{t('examList.byName')}</option>
@@ -757,6 +773,7 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
             title={activeExamMeta.title}
             description={activeExamMeta.description}
             count={activeExamList.length}
+            exams={activeExamList}
             grouped={activeExamByYear}
             variant={activeExamMeta.variant}
           />

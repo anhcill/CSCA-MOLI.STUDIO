@@ -141,6 +141,7 @@ const Exam = {
              WHERE exam_id = e.id AND user_id = $2 AND status = 'completed'),
             0
           ) as user_attempt_count,
+           COUNT(DISTINCT CASE WHEN ea.status <> 'practice' THEN ea.id END)::int AS popularity_attempt_count,
           COALESCE(
             (SELECT MAX(total_score) FROM exam_attempts
              WHERE exam_id = e.id AND user_id = $2 AND status = 'completed'),
@@ -184,7 +185,7 @@ const Exam = {
           AND e.deleted_at IS NULL
           AND e.start_time IS NULL
         GROUP BY e.id, s.id, u.id
-        ORDER BY e.publish_date DESC, e.created_at DESC
+        ORDER BY popularity_attempt_count DESC, e.publish_date DESC NULLS LAST, e.created_at DESC
       `;
       params = [subjectSlug, userId];
     } else {
@@ -201,6 +202,7 @@ const Exam = {
              WHERE exam_id = e.id AND user_id = $2 AND status = 'completed'),
             0
           ) as user_attempt_count,
+           COUNT(DISTINCT CASE WHEN ea.status <> 'practice' THEN ea.id END)::int AS popularity_attempt_count,
           COALESCE(
             (SELECT MAX(total_score) FROM exam_attempts
              WHERE exam_id = e.id AND user_id = $2 AND status = 'completed'),
@@ -244,7 +246,7 @@ const Exam = {
           AND e.deleted_at IS NULL
           AND e.start_time IS NULL
         GROUP BY e.id, s.id, u.id
-        ORDER BY e.publish_date DESC, e.created_at DESC
+        ORDER BY popularity_attempt_count DESC, e.publish_date DESC NULLS LAST, e.created_at DESC
       `;
       params = [subjectCode, userId];
     }

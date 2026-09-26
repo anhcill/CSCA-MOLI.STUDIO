@@ -321,6 +321,7 @@ const COPY: CopyMap = {
   'examList.done': { vi: 'Đã làm', en: 'Done', zh: '已做' },
   'examList.notDone': { vi: 'Chưa làm', en: 'Not done', zh: '未做' },
   'examList.sort': { vi: 'Sắp xếp:', en: 'Sort:', zh: '排序：' },
+  'examList.popular': { vi: 'Làm nhiều nhất', en: 'Most attempted', zh: '练习最多' },
   'examList.newest': { vi: 'Mới nhất', en: 'Newest', zh: '最新' },
   'examList.oldest': { vi: 'Cũ nhất', en: 'Oldest', zh: '最旧' },
   'examList.byName': { vi: 'Theo tên', en: 'By name', zh: '按名称' },
