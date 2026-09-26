@@ -562,8 +562,8 @@ const examController = {
           ? normalizePdfLanguageMode(req.body?.paperLanguageMode, normalizePdfLanguageMode(exam.language_mode))
           : null,
       });
-      // The mock-exam list is ordered by distinct learners. Clear its cache as
-      // soon as a learner starts an attempt so the popularity order stays fresh.
+      // The exam list is ranked by total attempts. Invalidate all variants of
+      // that list as soon as an attempt starts so the ranking is immediately fresh.
       cache.delByPrefix("exams:");
       const savedAnswers = existingAttempt
         ? await ExamAttempt.getSavedAnswers(attempt.id)
