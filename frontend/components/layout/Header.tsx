@@ -45,6 +45,7 @@ const COURSE_ITEMS = [
 const MAIN_NAV_TOP = [
   { id: 'home', labelKey: 'nav.home', href: '/', icon: FiHome },
   { id: 'exam', labelKey: 'nav.examRoom', href: '/exam-room', icon: FiMonitor },
+  { id: 'station', labelKey: 'nav.studyStation', href: '/tram-dong-luc', icon: FaFire },
 ];
 
 const MAIN_NAV_BOTTOM = [
@@ -218,10 +219,33 @@ export default function Header() {
 
               {MAIN_NAV_TOP.slice(1).map((item) => {
                 const Icon = item.icon;
+                const isStation = item.id === 'station';
                 return (
-                  <Link key={item.id} href={item.href} className={navLinkClass(isActive(item.href))}>
-                    {Icon && <Icon className="text-lg" />}
-                    {t(item.labelKey)}
+                  <Link
+                    key={item.id}
+                    href={item.href}
+                    className={`relative ${navLinkClass(isActive(item.href))} ${
+                      isStation
+                        ? nationalDayTheme
+                          ? 'border border-amber-300/40 text-amber-200 shadow-sm'
+                          : 'border border-rose-200/80 bg-rose-50/50 text-rose-600 hover:border-rose-300 hover:bg-rose-100/70 hover:text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-400'
+                        : ''
+                    }`}
+                  >
+                    {Icon && (
+                      <Icon
+                        className={`text-lg ${
+                          isStation ? 'text-rose-500 animate-pulse' : ''
+                        }`}
+                      />
+                    )}
+                    <span>{t(item.labelKey)}</span>
+                    {isStation && (
+                      <span className="flex items-center gap-1 rounded-full bg-gradient-to-r from-red-500 to-rose-600 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-white shadow-sm">
+                        <span className="h-1.5 w-1.5 rounded-full bg-white animate-ping" />
+                        LIVE
+                      </span>
+                    )}
                   </Link>
                 );
               })}
@@ -450,10 +474,34 @@ export default function Header() {
 
             {[...MAIN_NAV_TOP.slice(1), ...MAIN_NAV_BOTTOM].map((item) => {
               const Icon = item.icon;
+              const isStation = item.id === 'station';
               return (
-                <Link key={item.id} href={item.href} onClick={() => setMobileOpen(false)} className="flex items-center gap-3 rounded-2xl p-4 font-bold text-gray-800 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-800">
-                  {Icon && <Icon className="text-gray-400 dark:text-gray-500" />}
-                  {t(item.labelKey)}
+                <Link
+                  key={item.id}
+                  href={item.href}
+                  onClick={() => setMobileOpen(false)}
+                  className={`flex items-center gap-3 rounded-2xl p-4 font-bold transition-colors ${
+                    isStation
+                      ? 'border border-rose-200/80 bg-rose-50/70 text-rose-600 dark:border-rose-900/40 dark:bg-rose-950/30 dark:text-rose-400'
+                      : 'text-gray-800 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-800'
+                  }`}
+                >
+                  {Icon && (
+                    <Icon
+                      className={
+                        isStation
+                          ? 'text-rose-500 text-lg'
+                          : 'text-gray-400 dark:text-gray-500'
+                      }
+                    />
+                  )}
+                  <span>{t(item.labelKey)}</span>
+                  {isStation && (
+                    <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-rose-500 px-2 py-0.5 text-[10px] font-black uppercase text-white shadow-sm">
+                      <span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse" />
+                      LIVE
+                    </span>
+                  )}
                 </Link>
               );
             })}

@@ -39,6 +39,7 @@ const COPY: CopyMap = {
   'nav.chooseSubject': { vi: 'Chọn môn học', en: 'Choose a subject', zh: '选择科目' },
   'nav.roadmap': { vi: 'Lộ trình', en: 'Roadmap', zh: '学习路径' },
   'nav.examRoom': { vi: 'Phòng thi', en: 'Exam room', zh: '考试中心' },
+  'nav.studyStation': { vi: 'Trạm Động Lực', en: 'Study Station', zh: '自习动力站' },
   'nav.games': { vi: 'Game học tập', en: 'Learning games', zh: '学习游戏' },
   'nav.docs': { vi: 'Tài liệu', en: 'Materials', zh: '资料' },
   'nav.forum': { vi: 'Diễn đàn', en: 'Forum', zh: '论坛' },

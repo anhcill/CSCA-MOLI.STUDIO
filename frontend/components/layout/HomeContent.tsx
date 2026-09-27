@@ -19,7 +19,7 @@ import {
   FiUsers,
   FiZap,
 } from 'react-icons/fi';
-import { FaCrown } from 'react-icons/fa';
+import { FaCrown, FaFire } from 'react-icons/fa';
 import { useLanguage } from '@/context/LanguageContext';
 import { CourseTutorShowcase } from '@/components/courses/CourseTutorShowcase';
 import ChinaCampusShowcase from './ChinaCampusShowcase';
@@ -322,6 +322,48 @@ export default function HomeContent() {
               </div>
             </div>
           ))}
+        </div>
+      </section>
+
+      {/* Trạm Động Lực Spotlight Section */}
+      <section className="w-full bg-white px-4 pt-8 pb-4 dark:bg-gray-900 sm:px-6">
+        <div className="mx-auto max-w-6xl">
+          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-purple-950 to-rose-950 p-6 sm:p-8 text-white shadow-2xl border border-rose-500/25">
+            {/* Ambient glow effects */}
+            <div className="pointer-events-none absolute -right-20 -top-20 h-72 w-72 rounded-full bg-rose-500/20 blur-3xl" />
+            <div className="pointer-events-none absolute -left-20 -bottom-20 h-72 w-72 rounded-full bg-indigo-500/20 blur-3xl" />
+
+            <div className="relative z-10 flex flex-col lg:flex-row items-center justify-between gap-6">
+              <div className="max-w-2xl text-center lg:text-left">
+                <div className="inline-flex items-center gap-2 rounded-full border border-rose-400/40 bg-rose-500/20 px-3.5 py-1 text-xs font-bold text-rose-300 backdrop-blur-md mb-3">
+                  <span className="flex h-2 w-2 rounded-full bg-rose-400 animate-ping" />
+                  <span>PHÒNG HỌC CHUNG TRỰC TUYẾN 24/7</span>
+                </div>
+                <h3 className="text-2xl sm:text-3xl font-black tracking-tight text-white mb-2 flex items-center justify-center lg:justify-start gap-2.5">
+                  <span>Trạm Động Lực & Học Tập CSCA</span>
+                  <FaFire className="text-rose-400 animate-pulse text-2xl" />
+                </h3>
+                <p className="text-sm sm:text-base text-slate-300 leading-relaxed mb-4">
+                  Không gian học tập ảo chuẩn TikTok — Bật camera, giữ vững kỷ luật, đặt mục tiêu hôm nay và cùng hàng trăm sĩ tử săn học bổng bứt phá mỗi ngày!
+                </p>
+                <div className="flex flex-wrap items-center justify-center lg:justify-start gap-2.5 text-xs text-slate-300">
+                  <span className="rounded-xl bg-white/10 px-3 py-1.5 backdrop-blur-sm border border-white/10">🎧 Video Study-With-Me</span>
+                  <span className="rounded-xl bg-white/10 px-3 py-1.5 backdrop-blur-sm border border-white/10">🎯 Bảng mục tiêu hôm nay</span>
+                  <span className="rounded-xl bg-white/10 px-3 py-1.5 backdrop-blur-sm border border-white/10">💬 Chat phòng học chung</span>
+                </div>
+              </div>
+
+              <div className="shrink-0 flex flex-col sm:flex-row items-center gap-3">
+                <Link
+                  href="/tram-dong-luc"
+                  className="flex items-center gap-2.5 rounded-2xl bg-gradient-to-r from-rose-500 to-amber-500 px-6 py-3.5 text-sm sm:text-base font-extrabold text-white shadow-lg shadow-rose-500/30 transition-all hover:scale-105 hover:shadow-xl active:scale-95"
+                >
+                  <span>Vào Trạm Động Lực ngay</span>
+                  <FiArrowRight className="text-lg" />
+                </Link>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 

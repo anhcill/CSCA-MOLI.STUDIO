@@ -115,6 +115,33 @@ const SLIDE_COPY = [
     bgImage: '/images/h-nhan-dan.jpg',
     accentColor: 'from-rose-500 to-pink-600',
   },
+  {
+    id: 5,
+    title: {
+      vi: 'Trạm Động Lực & Phòng Học 24/7',
+      en: 'Study Station & Motivation Room',
+      zh: '自习动力站与全天候自习室',
+    },
+    subtitle: {
+      vi: 'Không gian học tập ảo chuẩn TikTok — Bật cam, giữ kỷ luật và bứt phá mục tiêu cùng cộng đồng CSCA',
+      en: 'TikTok-style virtual study space — Keep discipline, hit daily goals with CSCA community',
+      zh: 'TikTok风格沉浸式自习室 — 保持自律，与CSCA社群共同冲刺目标',
+    },
+    badge: {
+      vi: '🔥 Phòng học trực tuyến LIVE',
+      en: '🔥 24/7 Live Virtual Room',
+      zh: '🔥 24/7 在线自习室',
+    },
+    cta: {
+      vi: 'Vào Trạm Động Lực',
+      en: 'Enter Study Station',
+      zh: '进入自习动力站',
+    },
+    ctaHref: '/tram-dong-luc',
+    icon: FiTarget,
+    bgImage: '/images/pexels-markus-winkler-1430818-30855414.jpg',
+    accentColor: 'from-rose-500 to-amber-500',
+  },
 ];
 
 const BANNER_IMAGES = [
@@ -149,10 +176,11 @@ const QUICK_STATS = [
 ];
 
 const SUBJECT_PILLS = [
-  { labelKey: 'subject.math', href: '/toan/de-mo-phong' },
-  { labelKey: 'subject.physics', href: '/vat-ly' },
-  { labelKey: 'subject.chemistry', href: '/hoa' },
-  { labelKey: 'subject.chineseSoc', href: '/tiengtrung-xahoi' },
+  { labelKey: 'subject.math', href: '/toan/de-mo-phong', isStation: false },
+  { labelKey: 'subject.physics', href: '/vat-ly', isStation: false },
+  { labelKey: 'subject.chemistry', href: '/hoa', isStation: false },
+  { labelKey: 'subject.chineseSoc', href: '/tiengtrung-xahoi', isStation: false },
+  { labelKey: 'nav.studyStation', href: '/tram-dong-luc', isStation: true },
 ];
 
 export default function Banner() {
@@ -281,6 +309,17 @@ export default function Banner() {
                   {pick(slide.cta)} <FiArrowRight size={18} />
                 </Link>
                 <Link
+                  href="/tram-dong-luc"
+                  className="group flex items-center gap-2 rounded-xl border border-rose-400/60 bg-gradient-to-r from-rose-500/25 to-amber-500/25 px-5 py-3 text-sm font-bold text-white shadow-xl backdrop-blur-md transition-all hover:scale-105 hover:from-rose-500/40 hover:to-amber-500/40 active:scale-95 sm:px-6 sm:py-4 sm:text-base"
+                >
+                  <span className="relative flex h-2 w-2">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-400 opacity-75" />
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-rose-500" />
+                  </span>
+                  <span>Trạm Động Lực</span>
+                  <span className="rounded bg-rose-500 px-1.5 py-0.5 text-[9px] font-black uppercase text-white shadow-sm">LIVE 🔥</span>
+                </Link>
+                <Link
                   href="/register"
                   className="flex items-center gap-2 rounded-xl border border-white/40 bg-white/10 px-6 py-3 text-sm font-semibold text-white backdrop-blur-sm transition-all hover:bg-white/20 sm:px-8 sm:py-4 sm:text-base"
                 >
@@ -318,9 +357,13 @@ export default function Banner() {
                       <Link
                         key={subject.labelKey}
                         href={subject.href}
-                        className="rounded-full border border-white/20 bg-white/15 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-white/25"
+                        className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                          subject.isStation
+                            ? 'border border-rose-400/80 bg-rose-500/30 font-bold text-rose-200 hover:bg-rose-500/50'
+                            : 'border border-white/20 bg-white/15 text-white hover:bg-white/25'
+                        }`}
                       >
-                        {t(subject.labelKey)}
+                        {subject.isStation ? `🔥 ${t(subject.labelKey)}` : t(subject.labelKey)}
                       </Link>
                     ))}
                   </div>

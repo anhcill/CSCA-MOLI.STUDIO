@@ -20,6 +20,7 @@ export default function Footer() {
     { name: 'Công thức ôn thi', href: '/cong-thuc' },
     { name: 'Từ vựng', href: '/tu-vung' },
     { name: 'Đề mô phỏng', href: '/de-mo-phong' },
+    { name: 'Trạm Động Lực 🔥', href: '/tram-dong-luc' },
     { name: 'Tài liệu', href: '/tailieu' },
     { name: 'Diễn đàn', href: '/forum' },
   ];
