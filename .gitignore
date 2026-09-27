@@ -32,6 +32,10 @@ backend/.ai_ratelimit
 screenshots/
 
 # Local tooling
+.local/
+**/.local/
+__pycache__/
+**/__pycache__/
 .wrangler/
 .claude/settings.local.json
 .vscode/
@@ -50,3 +54,11 @@ COMMIT_EDITMSG
 commit-msg.txt
 commit_message.txt
 COMMIT_MSG.txt
+
+# Temporary local artifacts
+.tmp/
+tmp/
+output/
+outputs/
+voice_samples/
+

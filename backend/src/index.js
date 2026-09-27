@@ -263,6 +263,7 @@ app.use("/api/qa", require("./routes/qaRoutes")); // Q&A for Users
 app.use("/api/messages", require("./routes/messages")); // Private messaging
 app.use("/api/users", require("./routes/userProfile")); // Public user profiles
 app.use("/api/users", require("./routes/userActions")); // Block/Report actions
+app.use("/api/study-station", require("./routes/studyStationRoutes")); // Motivation station & study rooms
 
 // CSCA Courses stay isolated behind the feature flag, while being enabled by
 // default now that the course schema has been rolled out.
