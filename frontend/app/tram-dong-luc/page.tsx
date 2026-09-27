@@ -217,7 +217,7 @@ export default function TramDongLucPage() {
 
     // Optimistic temporary display
     const tempId = `temp-${Date.now()}`;
-    const mySenderName = user?.full_name || user?.name || user?.email?.split('@')[0] || 'Bạn (Sĩ tử CSCA)';
+    const mySenderName = user?.full_name || user?.username || user?.email?.split('@')[0] || 'Bạn (Sĩ tử CSCA)';
     const optimisticMsg = {
       id: tempId,
       sender: mySenderName,

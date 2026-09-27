@@ -38,7 +38,7 @@ export interface StudyRoom {
   isPrivate: boolean;
   code: string;
   createdAt: number;
-  goal: string;
+  goal?: string;
 }
 
 interface RoomMember {
@@ -144,9 +144,22 @@ export default function VirtualStudyRoom() {
       if (!isMounted) return;
       if (backendRooms.length > 0) {
         setRooms((prev) => {
-          const existingCodes = new Set(backendRooms.map((r) => r.code));
+          const mappedBackend: StudyRoom[] = backendRooms.map((r) => ({
+            id: r.id,
+            code: r.code,
+            name: r.name,
+            hostName: r.hostName,
+            hostAvatar: r.hostAvatar,
+            subject: r.subject,
+            goal: r.goal || 'Học tập trung',
+            memberCount: r.memberCount,
+            maxMembers: r.maxMembers,
+            isPrivate: r.isPrivate,
+            createdAt: r.createdAt,
+          }));
+          const existingCodes = new Set(mappedBackend.map((r) => r.code));
           const filteredPrev = prev.filter((r) => !existingCodes.has(r.code));
-          return [...backendRooms, ...filteredPrev];
+          return [...mappedBackend, ...filteredPrev];
         });
       }
     }).catch(() => {});
@@ -353,7 +366,16 @@ export default function VirtualStudyRoom() {
       });
       if (saved) {
         newRoom = {
-          ...saved,
+          id: saved.id,
+          code: saved.code,
+          name: saved.name,
+          hostName: saved.hostName,
+          hostAvatar: saved.hostAvatar,
+          subject: saved.subject,
+          goal: saved.goal || newRoom.goal,
+          memberCount: saved.memberCount,
+          maxMembers: saved.maxMembers,
+          isPrivate: saved.isPrivate,
           createdAt: typeof saved.createdAt === 'number' ? saved.createdAt : Date.now(),
         };
       }
