@@ -143,10 +143,12 @@ export default function ClientShell({ children }: { children: React.ReactNode })
   // during the campaign.  The original daily-letter behavior resumes after it.
   const showDailyGift = showMoliPet && isAuthenticated && !nationalDayTheme;
   const showNationalDayGreeting = nationalDayTheme && !isAdmin && !isAuth && !isExam && !isChat && !isGame;
-  const showPwaBanner = !isAdmin && !isAuth && !isExam && !isGame && !isChat;
+  // Keep public pages distraction-free. Guests still receive service-worker
+  // updates silently, but PWA and update prompts are reserved for signed-in learners.
+  const showPwaBanner = isAuthenticated && !isAdmin && !isAuth && !isExam && !isGame && !isChat;
   const showOnlineClassAnnouncement = !isAdmin && !isAuth && !isExam && !isGame && !isChat;
   const showNotificationPrompt = isAuthenticated && !isAdmin && !isAuth && !isExam && !isGame && !isChat;
-  const showUpdateToast = !isChat;
+  const showUpdateToast = isAuthenticated && !isChat;
   const moliPetPosition = 'left';
 
   // Register service worker + detect updates
