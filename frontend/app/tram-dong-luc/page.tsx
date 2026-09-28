@@ -733,80 +733,16 @@ export default function TramDongLucPage() {
         {/* ─── VIEW MODE: PHÒNG TỰ HỌC BẬT CAM (HOÀN TOÀN KHÔNG CÓ TIKTOK) ─────── */}
         {viewMode === 'room' && (
           <div className="space-y-6">
-            {/* 1. ĐỒNG HỒ LẬT POMODORO & BẢNG ĐIỀU KHIỂN TẬP TRUNG (THU GỌN GỌN GÀNG ĐỂ THẤY PHÒNG HỌC BÊN DƯỚI) */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
-              {/* ĐỒNG HỒ LẬT 3D POMODORO (BẢN COMPACT GỌN GÀNG, ĐẦY ĐỦ PHÍM TẮT & NÚT PHÓNG TO TOÀN MÀN HÌNH) */}
-              <div className="lg:col-span-5 flex flex-col">
-                <FlipClock isCompact={true} className="h-full" />
-              </div>
-
-              {/* 2 COMPACT CARDS: MỤC TIÊU HÔM NAY & CHÂM NGÔN / THÀNH NGỮ */}
-              <div className="lg:col-span-7 grid grid-cols-1 sm:grid-cols-2 gap-3 items-stretch h-full">
-                {/* Card 1: Lời Hứa & Mục Tiêu Hôm Nay */}
-                <div className="rounded-2xl border border-white/10 bg-slate-900/80 p-4 shadow-lg backdrop-blur-md flex flex-col justify-between">
-                  <div>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5">
-                        <FiZap className="text-amber-400 text-sm" />
-                        <h4 className="text-xs font-bold text-white">Mục Tiêu Hôm Nay</h4>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setShowNoteDrawer(true)}
-                        className="text-[11px] font-bold text-violet-400 hover:text-violet-300 transition-colors"
-                      >
-                        {studyNote ? 'Chỉnh sửa ↗' : '+ Đặt mục tiêu'}
-                      </button>
-                    </div>
-
-                    <p className="mt-2.5 text-xs text-slate-300 line-clamp-3 italic leading-relaxed">
-                      {studyNote ? `"${studyNote}"` : 'Viết ra cam kết buổi học để duy trì kỷ luật và không xao nhãng!'}
-                    </p>
-                  </div>
-
-                  <div className="mt-3 flex items-center justify-between border-t border-white/5 pt-2 text-[10px] text-slate-500">
-                    <span className="flex items-center gap-1 text-slate-400 font-medium">
-                      🎯 Tự giác kỷ luật
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setShowNoteDrawer(true)}
-                      className="text-violet-400 hover:underline font-semibold"
-                    >
-                      Mở rộng ↗
-                    </button>
-                  </div>
-                </div>
-
-                {/* Card 2: Châm ngôn & Thành ngữ truyền lửa */}
-                <div className="relative overflow-hidden rounded-2xl border border-violet-500/20 bg-gradient-to-br from-violet-950/40 via-slate-900 to-indigo-950/40 p-4 shadow-lg backdrop-blur-md flex flex-col justify-between">
-                  <FaQuoteLeft className="absolute -right-1 -bottom-1 text-5xl text-white/5 pointer-events-none" />
-                  <div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-black uppercase tracking-wider text-violet-400">
-                        Châm Ngôn & Thành Ngữ
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setQuoteIndex((prev) => (prev + 1) % MOTIVATION_QUOTES.length)}
-                        className="flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] text-slate-400 hover:bg-white/10 hover:text-white transition-colors"
-                        title="Đổi câu khác"
-                      >
-                        <FiRefreshCw className="text-[10px]" />
-                        <span>Đổi câu</span>
-                      </button>
-                    </div>
-
-                    <blockquote className="mt-2.5 text-xs font-semibold italic text-slate-200 line-clamp-3 leading-relaxed">
-                      "{MOTIVATION_QUOTES[quoteIndex].text}"
-                    </blockquote>
-                  </div>
-
-                  <p className="mt-3 text-right text-[11px] font-bold text-violet-400">
-                    — {MOTIVATION_QUOTES[quoteIndex].author}
-                  </p>
-                </div>
-              </div>
+            {/* 1. ĐỒNG HỒ LẬT POMODORO TRUNG TÂM (TO, RÕ RÀNG, TÍCH HỢP MỤC TIÊU & CHÂM NGÔN) */}
+            <div className="mx-auto w-full max-w-3xl flex flex-col items-center">
+              <FlipClock
+                isCompact={false}
+                studyGoal={studyNote}
+                onEditGoal={() => setShowNoteDrawer(true)}
+                quote={MOTIVATION_QUOTES[quoteIndex]}
+                onNextQuote={() => setQuoteIndex((prev) => (prev + 1) % MOTIVATION_QUOTES.length)}
+                className="w-full"
+              />
             </div>
 
             {/* 2. PHÒNG TỰ HỌC BẬT CAM (STUDY TOGETHER) ĐẶT NGAY DƯỚI ĐỒNG HỒ */}

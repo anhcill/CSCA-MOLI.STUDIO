@@ -14,6 +14,7 @@ import {
   FiMaximize2,
   FiMinimize2,
   FiX,
+  FiZap,
 } from 'react-icons/fi';
 import { FaQuoteLeft } from 'react-icons/fa';
 
@@ -21,6 +22,10 @@ interface FlipClockProps {
   onSessionComplete?: (mode: 'work' | 'break') => void;
   className?: string;
   isCompact?: boolean;
+  studyGoal?: string;
+  onEditGoal?: () => void;
+  quote?: { text: string; author: string };
+  onNextQuote?: () => void;
 }
 
 // ─── MECHANICAL FLIP DIGIT COMPONENT ──────────────────────────────────────────
@@ -46,21 +51,21 @@ function FlipDigit({ digit, size = 'normal' }: { digit: string; size?: 'normal' 
       ? 'relative flex flex-col h-28 w-18 sm:h-44 sm:w-28 md:h-56 md:w-36 lg:h-64 lg:w-44 select-none font-mono font-black text-4xl sm:text-7xl md:text-8xl lg:text-9xl perspective-500 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.95)] rounded-2xl sm:rounded-3xl overflow-hidden ring-2 ring-white/20 bg-slate-900'
       : size === 'compact'
       ? 'relative flex flex-col h-11 w-7.5 sm:h-13 sm:w-9 select-none font-mono font-black text-lg sm:text-2xl perspective-500 shadow-md rounded-lg overflow-hidden ring-1 ring-white/15 bg-slate-900'
-      : 'relative flex flex-col h-14 w-10 sm:h-20 sm:w-14 md:h-24 md:w-16 select-none font-mono font-black text-2xl sm:text-4xl md:text-5xl perspective-500 shadow-2xl rounded-xl overflow-hidden ring-1 ring-white/15 bg-slate-900';
+      : 'relative flex flex-col h-18 w-12 sm:h-24 sm:w-16 md:h-28 md:w-20 select-none font-mono font-black text-3xl sm:text-5xl md:text-6xl perspective-500 shadow-2xl rounded-2xl overflow-hidden ring-1 ring-white/20 bg-slate-900';
 
   const notchClasses =
     size === 'large'
       ? 'h-3 w-1.5 sm:h-4 sm:w-2 rounded-r-full bg-slate-950 z-30 ring-1 ring-white/20'
       : size === 'compact'
       ? 'h-1.5 w-0.5 rounded-r-full bg-slate-950 z-30 ring-1 ring-white/15'
-      : 'h-2 w-1 rounded-r-full bg-slate-950 z-30 ring-1 ring-white/20';
+      : 'h-2.5 w-1 rounded-r-full bg-slate-950 z-30 ring-1 ring-white/20';
 
   const notchRightClasses =
     size === 'large'
       ? 'h-3 w-1.5 sm:h-4 sm:w-2 rounded-l-full bg-slate-950 z-30 ring-1 ring-white/20'
       : size === 'compact'
       ? 'h-1.5 w-0.5 rounded-l-full bg-slate-950 z-30 ring-1 ring-white/15'
-      : 'h-2 w-1 rounded-l-full bg-slate-950 z-30 ring-1 ring-white/20';
+      : 'h-2.5 w-1 rounded-l-full bg-slate-950 z-30 ring-1 ring-white/20';
 
   return (
     <div className="relative inline-flex flex-col items-center justify-center">
@@ -121,6 +126,10 @@ export default function FlipClock({
   onSessionComplete,
   className = '',
   isCompact = false,
+  studyGoal,
+  onEditGoal,
+  quote,
+  onNextQuote,
 }: FlipClockProps) {
   // Preset options
   const PRESET_DURATIONS = [
@@ -548,6 +557,73 @@ export default function FlipClock({
             <FiRotateCcw className={isCompact ? 'text-sm' : 'text-base'} />
           </button>
         </div>
+
+        {/* Integrated Goal & Quote Bar */}
+        {(studyGoal !== undefined || quote !== undefined) && (
+          <div className="mt-4 pt-3.5 border-t border-white/10 grid grid-cols-1 md:grid-cols-2 gap-3 text-left">
+            {/* Mục tiêu hôm nay */}
+            <div className="rounded-2xl border border-white/10 bg-slate-900/80 p-3 sm:p-3.5 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-amber-400">
+                    <FiZap className="text-xs" />
+                    <span className="text-white">Mục Tiêu Hôm Nay</span>
+                  </div>
+                  {onEditGoal && (
+                    <button
+                      type="button"
+                      onClick={onEditGoal}
+                      className="text-[11px] font-bold text-violet-400 hover:text-violet-300 transition-colors"
+                    >
+                      {studyGoal ? 'Sửa ↗' : '+ Đặt mục tiêu'}
+                    </button>
+                  )}
+                </div>
+                <p className="text-xs text-slate-300 italic line-clamp-2 leading-relaxed">
+                  {studyGoal ? `"${studyGoal}"` : 'Viết ra cam kết buổi học để duy trì kỷ luật và không xao nhãng!'}
+                </p>
+              </div>
+              <div className="mt-2 flex items-center justify-between text-[10px] text-slate-500 border-t border-white/5 pt-1.5">
+                <span className="text-slate-400">🎯 Tự giác kỷ luật</span>
+                {onEditGoal && (
+                  <button type="button" onClick={onEditGoal} className="text-violet-400 hover:underline">
+                    Mở rộng ↗
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Châm ngôn & thành ngữ */}
+            {quote && (
+              <div className="relative overflow-hidden rounded-2xl border border-violet-500/20 bg-gradient-to-br from-violet-950/40 via-slate-900 to-indigo-950/40 p-3 sm:p-3.5 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-violet-400">
+                      Châm Ngôn & Thành Ngữ
+                    </span>
+                    {onNextQuote && (
+                      <button
+                        type="button"
+                        onClick={onNextQuote}
+                        className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] text-slate-400 hover:bg-white/10 hover:text-white transition-colors"
+                        title="Đổi câu khác"
+                      >
+                        <FiRotateCcw className="text-[10px]" />
+                        <span>Đổi câu</span>
+                      </button>
+                    )}
+                  </div>
+                  <blockquote className="text-xs font-semibold italic text-slate-200 line-clamp-2 leading-relaxed">
+                    "{quote.text}"
+                  </blockquote>
+                </div>
+                <p className="mt-2 text-right text-[11px] font-bold text-violet-400 border-t border-white/5 pt-1.5">
+                  — {quote.author}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Footer info */}
         <div className={`${isCompact ? 'mt-2.5 pt-2 text-[10px]' : 'mt-4 pt-3 text-xs'} flex items-center justify-between border-t border-white/10 text-slate-400`}>
