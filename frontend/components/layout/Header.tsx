@@ -362,29 +362,17 @@ export default function Header() {
             <span className={`mr-3 text-xs font-bold ${nationalDayTheme ? 'text-[#ffe7a8]/80' : 'text-gray-400 dark:text-gray-500'}`}>{t('nav.more')}</span>
             {MAIN_NAV_BOTTOM.map((item) => {
               const Icon = item.icon;
-              const isStation = item.id === 'station';
               return (
                 <Link
                   key={item.id}
                   href={item.href}
-                  className={`flex items-center gap-1.5 whitespace-nowrap rounded-xl px-3 py-1.5 text-xs font-bold transition-all duration-200 ${
-                    isStation
-                      ? nationalDayTheme
-                        ? isActive(item.href) ? 'bg-[#ffd568]/20 text-[#fff0b6] shadow-[inset_0_0_0_1px_rgba(255,215,104,0.42)]' : 'border border-amber-300/40 text-amber-200 hover:bg-white/12'
-                        : isActive(item.href) ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400' : 'border border-rose-200/80 bg-rose-50/70 text-rose-600 hover:bg-rose-100/70 hover:text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/20 dark:text-rose-400'
-                      : nationalDayTheme
-                        ? isActive(item.href) ? 'bg-white/18 text-[#fff0ba]' : 'text-white/80 hover:bg-white/12 hover:text-[#ffe49a]'
-                        : isActive(item.href) ? 'bg-violet-50 text-violet-700 dark:bg-violet-900/20 dark:text-violet-400' : 'text-gray-500 hover:bg-gray-50 hover:text-violet-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-violet-400'
+                  className={`flex items-center gap-1.5 whitespace-nowrap rounded-xl px-3 py-1.5 text-xs font-bold transition-all duration-200 ${nationalDayTheme
+                    ? isActive(item.href) ? 'bg-white/18 text-[#fff0ba]' : 'text-white/80 hover:bg-white/12 hover:text-[#ffe49a]'
+                    : isActive(item.href) ? 'bg-violet-50 text-violet-700 dark:bg-violet-900/20 dark:text-violet-400' : 'text-gray-500 hover:bg-gray-50 hover:text-violet-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-violet-400'
                   }`}
                 >
-                  {Icon && <Icon className={`text-sm ${isStation ? 'text-rose-500' : ''}`} />}
-                  <span>{t(item.labelKey)}</span>
-                  {isStation && (
-                    <span className="flex items-center gap-1 rounded bg-rose-500 px-1 py-0.2 text-[9px] font-black uppercase text-white shadow-sm">
-                      <span className="h-1 w-1 rounded-full bg-white animate-ping" />
-                      LIVE
-                    </span>
-                  )}
+                  {Icon && <Icon className="text-sm" />}
+                  {t(item.labelKey)}
                 </Link>
               );
             })}
@@ -463,34 +451,15 @@ export default function Header() {
 
             {[...MAIN_NAV_TOP.slice(1), ...MAIN_NAV_BOTTOM].map((item) => {
               const Icon = item.icon;
-              const isStation = item.id === 'station';
               return (
                 <Link
                   key={item.id}
                   href={item.href}
                   onClick={() => setMobileOpen(false)}
-                  className={`flex items-center gap-3 rounded-2xl p-4 font-bold transition-colors ${
-                    isStation
-                      ? 'border border-rose-200/80 bg-rose-50/70 text-rose-600 dark:border-rose-900/40 dark:bg-rose-950/30 dark:text-rose-400'
-                      : 'text-gray-800 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-800'
-                  }`}
+                  className="flex items-center gap-3 rounded-2xl p-4 font-bold text-gray-800 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-800"
                 >
-                  {Icon && (
-                    <Icon
-                      className={
-                        isStation
-                          ? 'text-rose-500 text-lg'
-                          : 'text-gray-400 dark:text-gray-500'
-                      }
-                    />
-                  )}
+                  {Icon && <Icon className="text-gray-400 dark:text-gray-500" />}
                   <span>{t(item.labelKey)}</span>
-                  {isStation && (
-                    <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-rose-500 px-2 py-0.5 text-[10px] font-black uppercase text-white shadow-sm">
-                      <span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse" />
-                      LIVE
-                    </span>
-                  )}
                 </Link>
               );
             })}
