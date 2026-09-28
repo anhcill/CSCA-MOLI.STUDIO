@@ -670,7 +670,7 @@ export default function VirtualStudyRoom() {
               </div>
 
               {/* Quick study cheer chips */}
-              <div className="flex items-center gap-1.5 overflow-x-auto py-2.5 scrollbar-none">
+              <div className="flex items-center gap-1.5 overflow-x-auto py-2 scrollbar-none no-scrollbar [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                 {ROOM_QUICK_REACTIONS.map((reaction, i) => (
                   <button
                     key={i}
