@@ -347,25 +347,11 @@ export default function TramDongLucPage() {
   }, [selectedCategory, filteredVideos.length, currentIndex]);
 
   const currentVideo = filteredVideos[currentIndex] || filteredVideos[0];
-  const nextVideo = filteredVideos.length > 1 ? filteredVideos[(currentIndex + 1) % filteredVideos.length] : null;
 
-  // Ultra-fast reveal timer: Don't let spinner block video display for more than 700ms
+  // Keep the loading state tied to the active embed. A hidden autoplaying TikTok iframe
+  // competes for network and video decoding resources, which makes the visible video stutter.
   useEffect(() => {
     setIframeLoading(true);
-    const timer = setTimeout(() => {
-      setIframeLoading(false);
-    }, 700);
-    return () => clearTimeout(timer);
-  }, [currentVideo?.id]);
-
-  // Background prefetch next video after 1.2s to make next transition instant
-  const [prefetchNext, setPrefetchNext] = useState<boolean>(false);
-  useEffect(() => {
-    setPrefetchNext(false);
-    const timer = setTimeout(() => {
-      setPrefetchNext(true);
-    }, 1200);
-    return () => clearTimeout(timer);
   }, [currentVideo?.id]);
 
   // ─── TOAST NOTIFICATION HELPER ─────────────────────────────────────────────
@@ -896,17 +882,6 @@ export default function TramDongLucPage() {
                         />
                       )}
 
-                      {/* Background prefetch next video for instant next transition */}
-                      {prefetchNext && nextVideo && nextVideo.id !== currentVideo.id && (
-                        <iframe
-                          key={`prefetch-${nextVideo.id}`}
-                          src={`https://www.tiktok.com/embed/v2/${nextVideo.id}?autoplay=1`}
-                          className="hidden"
-                          tabIndex={-1}
-                          aria-hidden="true"
-                          loading="lazy"
-                        />
-                      )}
                     </div>
 
                     {/* Bottom Navigation Controls (Next / Prev) */}

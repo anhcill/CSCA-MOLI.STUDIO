@@ -287,6 +287,7 @@ function FormulaRepository({
   const [grade, setGrade] = useState<GradeFilter>(ALL_GRADE);
   const [area, setArea] = useState(ALL_AREA);
   const [visibleTopicCount, setVisibleTopicCount] = useState(FORMULA_TOPIC_BATCH_SIZE);
+  const [pendingTopicId, setPendingTopicId] = useState<string | null>(null);
   const deferredSearch = useDeferredValue(search);
   const query = normalizeSearchText(deferredSearch);
 
@@ -311,7 +312,28 @@ function FormulaRepository({
 
   useEffect(() => {
     setVisibleTopicCount(FORMULA_TOPIC_BATCH_SIZE);
+    setPendingTopicId(null);
   }, [area, grade, query, topics]);
+
+  useEffect(() => {
+    if (!pendingTopicId) return;
+
+    const target = document.getElementById(`formula-${pendingTopicId}`);
+    if (!target) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setPendingTopicId(null);
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [pendingTopicId, visibleTopicCount, filteredTopics]);
+
+  const handleTopicJump = (topicId: string, topicIndex: number) => {
+    window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#formula-${topicId}`);
+    setPendingTopicId(topicId);
+    setVisibleTopicCount(current => Math.max(current, topicIndex + 1));
+  };
 
   if (loading) {
     return (
@@ -419,10 +441,14 @@ function FormulaRepository({
             <div className="sticky top-4 rounded-lg border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-900">
               <div className="mb-2 text-xs font-black uppercase tracking-wide text-slate-400 dark:text-slate-500">Chủ đề</div>
               <div className="max-h-[70vh] space-y-1 overflow-y-auto pr-1">
-                {filteredTopics.map(({ topic }) => (
+                {filteredTopics.map(({ topic }, index) => (
                   <a
                     key={topic.id}
                     href={`#formula-${topic.id}`}
+                    onClick={event => {
+                      event.preventDefault();
+                      handleTopicJump(topic.id, index);
+                    }}
                     className="flex items-start gap-2 rounded-lg px-2 py-2 text-xs font-bold leading-5 text-slate-600 transition hover:bg-slate-50 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
                   >
                     <FiChevronRight className="mt-0.5 shrink-0" />
