@@ -533,15 +533,29 @@ export default function ExamPage() {
       return;
     }
 
+    // Request fullscreen synchronously from the button press. Waiting for the
+    // preflight/start API calls first makes browsers reject it as no longer a
+    // user-initiated action.
+    const fullscreenRequest = (() => {
+      if (typeof document === 'undefined' || document.fullscreenElement) {
+        return Promise.resolve(true);
+      }
+      if (!document.documentElement.requestFullscreen) {
+        return Promise.resolve(false);
+      }
+      return document.documentElement.requestFullscreen()
+        .then(() => true)
+        .catch(() => false);
+    })();
+
     try {
       setLoading(true);
 
       const shouldUseTopicPractice = isTopicPracticeRoute || Boolean(options.practice);
       const shouldEnterPdfRoom = Boolean(preflight?.start_time && preflight?.has_exam_pdf && !shouldUseTopicPractice);
-      if (shouldEnterPdfRoom && !document.fullscreenElement) {
-        try {
-          await document.documentElement.requestFullscreen();
-        } catch {
+      if (shouldEnterPdfRoom) {
+        const enteredFullscreen = await fullscreenRequest;
+        if (!enteredFullscreen) {
           alert('Bạn cần cho phép toàn màn hình để vào phòng thi PDF.');
           return;
         }
@@ -777,7 +791,7 @@ export default function ExamPage() {
         return;
       }
       await clearDraft();
-      if (isPdfRoomExam && document.fullscreenElement) {
+      if (document.fullscreenElement) {
         await document.exitFullscreen().catch(() => {});
       }
       // Redirect to result page
