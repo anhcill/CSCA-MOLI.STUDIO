@@ -89,6 +89,31 @@ async function calculateAttemptStats(client, attemptId, examId) {
 }
 
 const ExamAttempt = {
+  // A timed attempt can otherwise remain "in_progress" forever if the learner
+  // closes the tab after its timer reaches zero. Close it before offering a
+  // resume action so the client never starts at 00:00 and immediately submits.
+  async expireOverdueInProgress(userId, examId) {
+    const overdue = await pool.query(
+      `SELECT ea.id
+       FROM exam_attempts ea
+       INNER JOIN exams e ON e.id = ea.exam_id
+       WHERE ea.user_id = $1
+         AND ea.exam_id = $2
+         AND ea.status = 'in_progress'
+         AND COALESCE(e.duration, 0) > 0
+         AND ea.start_time + (e.duration * INTERVAL '1 minute') <= CURRENT_TIMESTAMP
+       ORDER BY ea.start_time ASC, ea.id ASC`,
+      [userId, examId],
+    );
+
+    const expiredAttemptIds = [];
+    for (const attempt of overdue.rows) {
+      await this.submit(attempt.id, userId);
+      expiredAttemptIds.push(attempt.id);
+    }
+    return expiredAttemptIds;
+  },
+
   async getInProgress(userId, examId) {
     const result = await pool.query(
       `SELECT ea.*,

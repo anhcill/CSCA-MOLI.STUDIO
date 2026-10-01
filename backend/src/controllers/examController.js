@@ -347,7 +347,7 @@ const examController = {
         });
       }
 
-      const exam = await Exam.getSummaryForUser(parsedId, req.user.id);
+      let exam = await Exam.getSummaryForUser(parsedId, req.user.id);
       if (!exam) {
         return res.status(404).json({
           success: false,
@@ -358,6 +358,13 @@ const examController = {
       const requiredTier = getRequiredVipTier(exam);
       if (!checkVipContentAccess(req.user, requiredTier, exam.subject_code)) {
         return res.status(403).json(buildVipAccessError(requiredTier));
+      }
+
+      // Do not show a stale timed attempt as resumable. A tab can be closed
+      // before the client-side timer auto-submits, leaving it in_progress.
+      const expiredAttemptIds = await ExamAttempt.expireOverdueInProgress(req.user.id, parsedId);
+      if (expiredAttemptIds.length > 0) {
+        exam = await Exam.getSummaryForUser(parsedId, req.user.id);
       }
 
       res.json({
@@ -470,6 +477,11 @@ const examController = {
       if (!checkVipContentAccess(req.user, requiredTier, exam.subject_code)) {
         return res.status(403).json(buildVipAccessError(requiredTier));
       }
+
+      // Keep the start endpoint safe against a race where a learner reaches
+      // the timeout after the preflight page was loaded but before pressing
+      // “Tiếp tục bài đang làm”.
+      await ExamAttempt.expireOverdueInProgress(userId, parsedId);
 
       if (exam.start_time) {
         if (practiceMode) {
