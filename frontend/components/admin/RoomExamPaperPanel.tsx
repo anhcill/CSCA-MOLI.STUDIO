@@ -41,6 +41,7 @@ export default function RoomExamPaperPanel({
 }) {
   const paperInputRef = useRef<HTMLInputElement>(null);
   const solutionInputRef = useRef<HTMLInputElement>(null);
+  const configRequestIdRef = useRef(0);
   const [config, setConfig] = useState<RoomPaperConfig | null>(null);
   const [questionCount, setQuestionCount] = useState(40);
   const [answers, setAnswers] = useState<Record<number, string>>({});
@@ -76,17 +77,21 @@ export default function RoomExamPaperPanel({
     };
 
   const loadConfig = async (paperLanguage = selectedPaperLanguage) => {
+    const requestId = ++configRequestIdRef.current;
     try {
       setLoading(true);
       const next = await examAdminApi.getRoomPaperConfig(examId, paperLanguage);
+      if (requestId !== configRequestIdRef.current) return;
       setConfig(next);
       onConfigChange?.(next);
       setQuestionCount(next.questionCount || 40);
       setAnswers(Object.fromEntries((next.answers || []).map((item) => [item.questionNumber, item.answerKey])));
     } catch (error: any) {
-      alert(error?.response?.data?.message || 'Không tải được đề PDF và đáp án.');
+      if (requestId === configRequestIdRef.current) {
+        alert(error?.response?.data?.message || 'Không tải được đề PDF và đáp án.');
+      }
     } finally {
-      setLoading(false);
+      if (requestId === configRequestIdRef.current) setLoading(false);
     }
   };
 
@@ -196,6 +201,7 @@ export default function RoomExamPaperPanel({
   };
 
   const saveAnswers = async () => {
+    if (loading) return;
     if (!config?.paper) return alert('Hãy tải file PDF đề thi trước.');
     const missing = Array.from({ length: questionCount }, (_, index) => index + 1)
       .filter((number) => !OPTION_KEYS.includes(answers[number]));
@@ -203,10 +209,11 @@ export default function RoomExamPaperPanel({
       alert(`Chưa chọn đáp án câu ${missing.slice(0, 12).join(', ')}${missing.length > 12 ? '...' : ''}.`);
       return;
     }
-    if (!confirm(`Lưu đáp án cho ${questionCount} câu? Cấu hình câu hỏi cũ của đề sẽ được thay bằng bảng đáp án này.`)) return;
+    if (!confirm(`Lưu đáp án ${languageLabel(selectedPaperLanguage)} cho ${questionCount} câu?${locked ? ' Điểm của những lượt thi đã làm bằng ngôn ngữ này sẽ được chấm lại.' : ''}`)) return;
     try {
       setSaving(true);
       const result = await examAdminApi.saveRoomPaperConfig(examId, {
+        languageMode: selectedPaperLanguage,
         questionCount,
         answers: Array.from({ length: questionCount }, (_, index) => ({
           questionNumber: index + 1,
@@ -223,6 +230,7 @@ export default function RoomExamPaperPanel({
   };
 
   const selectPaperLanguage = (nextLanguage: string) => {
+    if (saving) return;
     setSelectedPaperLanguage(nextLanguage);
     setBulkAnswerMessage('');
     void loadConfig(nextLanguage);
@@ -245,7 +253,7 @@ export default function RoomExamPaperPanel({
             <p className="mt-1 max-w-3xl text-sm text-blue-800 dark:text-blue-200">
               {workspaceCopy.paperDescription}
             </p>
-            <p className="mt-2 text-xs font-black text-blue-700 dark:text-blue-200">Mỗi ngôn ngữ là một phiên bản PDF riêng, dùng chung một bảng đáp án.</p>
+            <p className="mt-2 text-xs font-black text-blue-700 dark:text-blue-200">Mỗi phiên bản PDF có bảng đáp án riêng; số câu của các phiên bản phải giống nhau.</p>
           </div>
           <input
             ref={paperInputRef}
@@ -296,8 +304,8 @@ export default function RoomExamPaperPanel({
       {locked && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold text-amber-800">
           {showSolutionFile
-            ? `Đề đã có ${config?.attemptCount} lượt làm. Bảng đáp án và PDF của ngôn ngữ đã được làm sẽ khóa; bạn vẫn có thể thêm PDF cho ngôn ngữ chưa có người làm hoặc cập nhật lời giải.`
-            : `Đề đã có ${config?.attemptCount} lượt làm. Bảng đáp án và PDF của ngôn ngữ đã được làm sẽ khóa; bạn vẫn có thể thêm PDF cho ngôn ngữ chưa có người làm.`}
+            ? `Đề đã có ${config?.attemptCount} lượt làm. Số câu và PDF đã dùng được khóa. Nếu sửa đáp án, các lượt thi của ngôn ngữ này sẽ được chấm lại; vẫn có thể cập nhật lời giải.`
+            : `Đề đã có ${config?.attemptCount} lượt làm. Số câu và PDF đã dùng được khóa. Nếu sửa đáp án, các lượt thi của ngôn ngữ này sẽ được chấm lại.`}
         </div>
       )}
 
@@ -401,7 +409,6 @@ export default function RoomExamPaperPanel({
               Dán nhanh bảng đáp án
               <textarea
                 value={bulkAnswerText}
-                disabled={locked}
                 onChange={(event) => {
                   setBulkAnswerText(event.target.value);
                   setBulkAnswerMessage('');
@@ -413,7 +420,7 @@ export default function RoomExamPaperPanel({
             <button
               type="button"
               onClick={applyBulkAnswers}
-              disabled={locked || !bulkAnswerText.trim()}
+              disabled={!bulkAnswerText.trim()}
               className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-black text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <FiCheck /> Tự điền đáp án
@@ -435,7 +442,6 @@ export default function RoomExamPaperPanel({
                   <button
                     key={key}
                     type="button"
-                    disabled={locked}
                     onClick={() => setAnswers((current) => ({ ...current, [number]: key }))}
                     className={`rounded-lg border py-2 text-sm font-black transition-colors disabled:cursor-not-allowed ${
                       answers[number] === key
@@ -458,7 +464,7 @@ export default function RoomExamPaperPanel({
           <button
             type="button"
             onClick={saveAnswers}
-            disabled={saving || locked}
+            disabled={saving || loading}
             className="inline-flex items-center justify-center gap-2 rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-black text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {saving ? <FiRefreshCw className="animate-spin" /> : <FiSave />}

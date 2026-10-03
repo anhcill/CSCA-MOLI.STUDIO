@@ -593,7 +593,7 @@ export const examAdminApi = {
 
     saveRoomPaperConfig: async (
         examId: number,
-        data: { questionCount: number; answers: RoomPaperAnswer[] },
+        data: { languageMode: string; questionCount: number; answers: RoomPaperAnswer[] },
     ): Promise<{ message: string; questionCount: number; ready: boolean }> => {
         const response = await axios.put(`/admin/exams/${examId}/room-paper-config`, data);
         return response.data;

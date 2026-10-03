@@ -80,16 +80,30 @@ export default function ExamRoomPage() {
     };
 
     fetchLobbyAndLeaderboard();
-    const interval = setInterval(() => {
-      setNow(Date.now());
-      fetchLobbyAndLeaderboard();
-    }, 30000);
+    const interval = setInterval(fetchLobbyAndLeaderboard, 30000);
+    const clock = setInterval(() => setNow(Date.now()), 1000);
+    const refreshOnFocus = () => setNow(Date.now());
+    document.addEventListener('visibilitychange', refreshOnFocus);
     
     return () => {
       cancelled = true;
       clearInterval(interval);
+      clearInterval(clock);
+      document.removeEventListener('visibilitychange', refreshOnFocus);
     };
   }, []);
+
+  const scheduledExams = Array.from(new Map(
+    [...lobbyData.live, ...lobbyData.upcoming].map((exam) => [exam.id, exam]),
+  ).values());
+  const liveExams = scheduledExams.filter((exam) =>
+    exam.start_time && exam.end_time
+    && now >= new Date(exam.start_time).getTime()
+    && now < new Date(exam.end_time).getTime(),
+  );
+  const upcomingExams = scheduledExams.filter((exam) =>
+    exam.start_time && now < new Date(exam.start_time).getTime(),
+  );
 
   const getTimeRemaining = (endTime?: string | null) => {
     if (!endTime) return "N/A";
@@ -188,8 +202,8 @@ export default function ExamRoomPage() {
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {lobbyData.live.length === 0 && <p className="text-gray-500 col-span-full">Chưa có kỳ thi nào đang diễn ra.</p>}
-            {lobbyData.live.map((exam, idx) => (
+            {liveExams.length === 0 && <p className="text-gray-500 col-span-full">Chưa có kỳ thi nào đang diễn ra.</p>}
+            {liveExams.map((exam, idx) => (
               <div key={exam.id} className="group relative bg-white rounded-[2rem] border border-rose-100 p-6 sm:p-8 shadow-sm hover:shadow-2xl hover:shadow-rose-100/50 transition-all duration-400 focus-within:ring-2 focus-within:ring-rose-500 overflow-hidden">
                 <div className={`absolute top-0 right-0 w-32 h-32 ${colors[idx % colors.length]} text-white opacity-5 rounded-bl-full`} />
                 
@@ -271,8 +285,8 @@ export default function ExamRoomPage() {
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {lobbyData.upcoming.length === 0 && <p className="text-gray-500 col-span-full">Chưa có kỳ thi nào sắp mở.</p>}
-            {lobbyData.upcoming.map(exam => (
+            {upcomingExams.length === 0 && <p className="text-gray-500 col-span-full">Chưa có kỳ thi nào sắp mở.</p>}
+            {upcomingExams.map(exam => (
               <div key={exam.id} className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm hover:shadow-lg transition-all flex flex-col h-full">
                 <span className="inline-flex items-center gap-2 mb-4 w-fit">
                   <span className="px-3 py-1 bg-orange-50 text-orange-600 border border-orange-200 text-xs font-bold rounded-lg uppercase tracking-wider">{exam.subject_name || exam.code || 'Môn học'}</span>

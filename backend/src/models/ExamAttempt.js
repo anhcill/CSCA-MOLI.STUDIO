@@ -282,7 +282,8 @@ const ExamAttempt = {
 
       // Lấy thông tin câu hỏi để xác định loại
       const contextResult = await client.query(
-        `SELECT ea.user_id, ea.status, ea.exam_id, q.question_type, q.points
+        `SELECT ea.user_id, ea.status, ea.exam_id, ea.paper_language_mode,
+                q.question_number, q.question_type, q.points
          FROM exam_attempts ea
          INNER JOIN questions q ON q.exam_id = ea.exam_id AND q.id = $2 AND q.deleted_at IS NULL
          WHERE ea.id = $1
@@ -356,13 +357,26 @@ const ExamAttempt = {
 
       // Multiple-choice: logic cũ
       const answerQuery = `
-        SELECT a.id, a.is_correct
+        SELECT a.id,
+               CASE WHEN e.start_time IS NOT NULL OR ea.paper_language_mode IS NOT NULL
+                 THEN a.answer_key = pdf_key.answer_key
+                 ELSE a.is_correct END AS is_correct,
+               CASE WHEN e.start_time IS NOT NULL OR ea.paper_language_mode IS NOT NULL
+                 THEN pdf_key.answer_key IS NOT NULL ELSE TRUE END AS key_configured
         FROM answers a
+        JOIN exam_attempts ea ON ea.id = $3
+        JOIN exams e ON e.id = ea.exam_id
+        LEFT JOIN exam_pdf_answer_keys pdf_key
+          ON pdf_key.exam_id = ea.exam_id
+         AND pdf_key.language_mode = ea.paper_language_mode
+         AND pdf_key.question_number = $4
         WHERE a.question_id = $1 AND a.answer_key = $2
       `;
       const answerResult = await client.query(answerQuery, [
         questionId,
         selectedAnswerKey,
+        attemptId,
+        context.question_number,
       ]);
 
       if (answerResult.rows.length === 0) {
@@ -370,6 +384,9 @@ const ExamAttempt = {
       }
 
       const selectedAnswer = answerResult.rows[0];
+      if (!selectedAnswer.key_configured) {
+        throw createAttemptError('Phiên bản PDF này chưa có đáp án để chấm. Vui lòng báo quản trị viên.', 409);
+      }
 
       const upsertQuery = `
         INSERT INTO user_answers (
@@ -406,6 +423,50 @@ const ExamAttempt = {
   },
 
   // Nộp bài và tính điểm
+  async regradeRoomPaperLanguage(client, examId, languageMode) {
+    await client.query(
+      `UPDATE user_answers ua
+       SET is_correct = (ua.selected_answer_key = pdf_key.answer_key)
+       FROM exam_attempts ea
+       JOIN questions q ON q.exam_id = ea.exam_id
+       JOIN exam_pdf_answer_keys pdf_key
+         ON pdf_key.exam_id = ea.exam_id
+        AND pdf_key.language_mode = ea.paper_language_mode
+        AND pdf_key.question_number = q.question_number
+       WHERE ua.attempt_id = ea.id
+         AND ua.question_id = q.id
+         AND ea.exam_id = $1
+         AND q.question_type NOT IN ('essay', 'translation', 'reading_passage', 'fill_blank_pool')
+         AND ea.paper_language_mode = $2`,
+      [examId, languageMode],
+    );
+
+    const completed = await client.query(
+      `SELECT id, user_id FROM exam_attempts
+       WHERE exam_id = $1 AND paper_language_mode = $2 AND status = 'completed'
+       FOR UPDATE`,
+      [examId, languageMode],
+    );
+    for (const attempt of completed.rows) {
+      const stats = await calculateAttemptStats(client, attempt.id, examId);
+      await client.query(
+        `UPDATE exam_attempts
+         SET total_score = $1, total_correct = $2, total_incorrect = $3,
+             total_unanswered = $4, total_possible_score = $5,
+             score_percentage = $6, total_pending_grading = $7
+         WHERE id = $8`,
+        [Number(stats.total_score) || 0, Number(stats.total_correct) || 0,
+          Number(stats.total_incorrect) || 0, stats.total_unanswered,
+          Number(stats.total_possible_score) || 0, Number(stats.score_percentage) || 0,
+          Number(stats.total_pending_grading) || 0, attempt.id],
+      );
+    }
+    for (const userId of new Set(completed.rows.map((attempt) => attempt.user_id))) {
+      await this.rebuildUserTopicStats(client, userId);
+    }
+    return completed.rowCount;
+  },
+
   async submit(attemptId, userId = null) {
     const client = await pool.connect();
 
@@ -866,7 +927,13 @@ const ExamAttempt = {
         ua.grading_status,
         ua.grading_feedback,
         ua.grading_result,
-        (SELECT answer_key FROM answers WHERE question_id = q.id AND is_correct = true LIMIT 1) as correct_answer
+        COALESCE(
+          (SELECT ak.answer_key FROM exam_pdf_answer_keys ak
+           WHERE ak.exam_id = q.exam_id
+             AND ak.language_mode = $3
+             AND ak.question_number = q.question_number),
+          (SELECT answer_key FROM answers WHERE question_id = q.id AND is_correct = true LIMIT 1)
+        ) as correct_answer
       FROM questions q
       LEFT JOIN user_answers ua ON q.id = ua.question_id AND ua.attempt_id = $1
       WHERE q.exam_id = $2
@@ -878,6 +945,7 @@ const ExamAttempt = {
     const questionsResult = await pool.query(questionsQuery, [
       attemptId,
       attempt.exam_id,
+      attempt.paper_language_mode,
     ]);
 
     // FIX N+1: Fetch ALL answers for all questions in a single query
@@ -973,7 +1041,7 @@ const ExamAttempt = {
             a.answer_text_en && a.answer_text_en !== a.answer_text
               ? a.answer_text_en
               : null,
-          is_correct: a.is_correct,
+          is_correct: a.answer_key === correctAnswerKey,
         })),
       });
     }

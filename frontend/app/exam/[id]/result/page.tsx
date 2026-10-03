@@ -381,6 +381,13 @@ function ExamResultContent() {
           <p className={`mt-5 text-7xl font-black ${inkResultScore}`}>{score.toFixed(1)}</p>
           <p className={`mt-1 text-xl font-black ${inkResultMuted}`}>/100 điểm</p>
           <p className={`mt-6 text-sm font-semibold ${inkResultMuted}`}>Chi tiết bài thi mở sau khi kỳ thi kết thúc.</p>
+          <button
+            type="button"
+            onClick={() => router.push('/')}
+            className="mt-6 inline-flex items-center justify-center gap-2 rounded-xl bg-[#d52a1e] px-5 py-3 text-sm font-black text-white hover:bg-[#b91f16]"
+          >
+            <FiHome size={17} /> Quay về trang chủ
+          </button>
         </div>
       </InkResultBackground>
     );

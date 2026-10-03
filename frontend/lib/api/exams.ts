@@ -30,6 +30,7 @@ export interface Exam {
   exam_type?: string;
   has_exam_pdf?: boolean;
   paper_languages?: string[];
+  ready_paper_languages?: string[];
   // New: Stats
   pass_rate?: number;
   overall_difficulty?: string;

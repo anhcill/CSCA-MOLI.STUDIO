@@ -20,8 +20,10 @@ type ExamDetail = {
   total_points?: number;
   start_time?: string | null;
   end_time?: string | null;
-  max_participants?: number;
+  max_participants?: number | null;
   is_premium?: boolean;
+  has_used_official_attempt?: boolean;
+  in_progress_attempt?: { id: number } | null;
 };
 
 function formatDateTime(value?: string | null) {
@@ -54,7 +56,8 @@ export default function ExamRoomDetailPage() {
   const endMs = exam?.end_time ? new Date(exam.end_time).getTime() : null;
   const hasStarted = !!startMs && now >= startMs;
   const hasEnded = !!endMs && now > endMs;
-  const canEnter = hasStarted && !hasEnded;
+  const alreadyFinished = Boolean(exam?.has_used_official_attempt && !exam?.in_progress_attempt);
+  const canEnter = hasStarted && !hasEnded && !alreadyFinished;
 
   const loadData = async () => {
     if (!examId) {
@@ -63,7 +66,7 @@ export default function ExamRoomDetailPage() {
     }
     setLoading(true);
     try {
-      const data = await examApi.getExamDetail(examId);
+      const data = await examApi.getExamPreflight(examId);
       setExam(data);
     } catch (error: any) {
       alert(error?.response?.data?.message || 'Không thể tải chi tiết kỳ thi');
@@ -104,8 +107,13 @@ export default function ExamRoomDetailPage() {
   }, [examId, hasEnded]);
 
   useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 30000);
-    return () => clearInterval(timer);
+    const updateNow = () => setNow(Date.now());
+    const timer = setInterval(updateNow, 1000);
+    document.addEventListener('visibilitychange', updateNow);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', updateNow);
+    };
   }, []);
 
   if (loading) {
@@ -171,6 +179,13 @@ export default function ExamRoomDetailPage() {
                 </div>
               )}
 
+              {alreadyFinished && (
+                <div className="flex items-start gap-2 rounded-2xl bg-slate-100 border border-slate-200 p-4 text-sm text-slate-700">
+                  <FiCheckCircle className="mt-0.5 shrink-0" />
+                  Bạn đã sử dụng lượt thi duy nhất của kỳ thi này.
+                </div>
+              )}
+
               <div className="flex flex-col sm:flex-row gap-3">
                 <button
                   onClick={() => router.push(`/exam/${exam.id}`)}
@@ -178,7 +193,7 @@ export default function ExamRoomDetailPage() {
                   className="flex-1 rounded-xl bg-slate-950 px-5 py-3 font-black text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:bg-slate-300"
                 >
                   <span className="inline-flex items-center justify-center gap-2">
-                    <FiCheckCircle /> Vào thi
+                    <FiCheckCircle /> {exam.in_progress_attempt ? 'Tiếp tục làm bài' : 'Vào thi'}
                   </span>
                 </button>
               </div>

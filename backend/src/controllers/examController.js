@@ -512,15 +512,26 @@ const examController = {
 
       }
 
+      const existingAttempt = !practiceMode && (!restart || Boolean(exam.start_time))
+        ? await ExamAttempt.getInProgress(userId, parsedId)
+        : null;
+      const paperLanguageMode = (exam.start_time || pdfWorkspace)
+        ? normalizePdfLanguageMode(
+          existingAttempt?.paper_language_mode || req.body?.paperLanguageMode,
+          normalizePdfLanguageMode(exam.language_mode),
+        )
+        : null;
+
       if (exam.start_time || pdfWorkspace) {
         const db = require("../config/database");
-        const paperLanguageMode = normalizePdfLanguageMode(req.body?.paperLanguageMode, normalizePdfLanguageMode(exam.language_mode));
         const roomPaperResult = await db.query(
           `SELECT COUNT(*)::int AS question_count,
                   COUNT(*) FILTER (
                     WHERE EXISTS (
-                      SELECT 1 FROM answers a
-                      WHERE a.question_id = q.id AND a.is_correct = TRUE
+                      SELECT 1 FROM exam_pdf_answer_keys ak
+                      WHERE ak.exam_id = q.exam_id
+                        AND ak.question_number = q.question_number
+                        AND ak.language_mode = $3
                     )
                   )::int AS answered_count
            FROM questions q
@@ -528,7 +539,7 @@ const examController = {
              AND q.question_number > 0
              AND q.deleted_at IS NULL
              AND q.question_type <> ALL($2::varchar[])`,
-          [parsedId, ['reading_passage', 'fill_blank_pool']],
+          [parsedId, ['reading_passage', 'fill_blank_pool'], paperLanguageMode],
         );
         const roomPaper = roomPaperResult.rows[0] || {};
         if (!exam.has_exam_pdf
@@ -563,16 +574,11 @@ const examController = {
         }
       }
 
-      const existingAttempt = !practiceMode && (!restart || Boolean(exam.start_time))
-        ? await ExamAttempt.getInProgress(userId, parsedId)
-        : null;
       const attempt = await ExamAttempt.start(userId, parsedId, {
         restart,
         practiceMode,
         singleAttempt: Boolean(exam.start_time && !isAdmin),
-        paperLanguageMode: (exam.start_time || pdfWorkspace)
-          ? normalizePdfLanguageMode(req.body?.paperLanguageMode, normalizePdfLanguageMode(exam.language_mode))
-          : null,
+        paperLanguageMode,
       });
       // The exam list is ranked by total attempts. Invalidate all variants of
       // that list as soon as an attempt starts so the ranking is immediately fresh.

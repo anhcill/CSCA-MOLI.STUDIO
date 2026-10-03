@@ -241,8 +241,13 @@ export default function ExamPage() {
 
   useEffect(() => {
     if (!preflight?.start_time || started) return;
-    const timer = window.setInterval(() => setScheduleNow(Date.now()), 15000);
-    return () => window.clearInterval(timer);
+    const updateNow = () => setScheduleNow(Date.now());
+    const timer = window.setInterval(updateNow, 1000);
+    document.addEventListener('visibilitychange', updateNow);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', updateNow);
+    };
   }, [preflight?.start_time, started]);
 
   const {
@@ -487,11 +492,12 @@ export default function ExamPage() {
       const response = await examApi.getExamPreflight(examId);
       setPreflight(response);
       const availablePaperLanguages = Array.isArray(response.paper_languages) ? response.paper_languages : [];
+      const readyPaperLanguages = Array.isArray(response.ready_paper_languages) ? response.ready_paper_languages : [];
       const preferredPaperLanguage = response.in_progress_attempt?.paper_language_mode || response.language_mode || '';
       setPaperLanguageMode(
         availablePaperLanguages.includes(preferredPaperLanguage)
           ? preferredPaperLanguage
-          : availablePaperLanguages[0] || preferredPaperLanguage,
+          : readyPaperLanguages[0] || availablePaperLanguages[0] || preferredPaperLanguage,
       );
       const scheduledExamEnded = Boolean(
         response.start_time
@@ -892,12 +898,13 @@ export default function ExamPage() {
     const canStartOfficialExam = !isOfficialExam || (officialHasStarted && !officialHasEnded);
     const usesPdfLanguageFiles = isTopicPracticeRoute || isOfficialExam;
     const availablePaperLanguages = Array.isArray(preflight.paper_languages) ? preflight.paper_languages : [];
+    const readyPaperLanguages = Array.isArray(preflight.ready_paper_languages) ? preflight.ready_paper_languages : [];
     const inProgressPaperLanguage = inProgress?.paper_language_mode || '';
     const isResumingPdfAttempt = Boolean(usesPdfLanguageFiles && inProgress && inProgressPaperLanguage);
     const selectedPaperLanguageAvailable = !usesPdfLanguageFiles || availablePaperLanguages.includes(paperLanguageMode);
     const languageReady = Boolean(
       usesPdfLanguageFiles
-        ? preflight.has_exam_pdf && selectedPaperLanguageAvailable
+        ? preflight.has_exam_pdf && selectedPaperLanguageAvailable && readyPaperLanguages.includes(paperLanguageMode)
         : examLanguage && explanationLanguage,
     );
     const leaderboardAvailable = !isOfficialExam || Boolean(
@@ -951,9 +958,9 @@ export default function ExamPage() {
                   <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <p className={`flex items-center gap-2 text-sm font-black ${inkResultTitle}`}><span>📄</span> Chọn ngôn ngữ file làm bài</p>
-                      <p className={`mt-1 text-xs font-semibold ${inkResultMuted}`}>{isResumingPdfAttempt ? 'Bạn đang làm dở; tiếp tục đúng phiên bản PDF đã chọn ban đầu.' : 'Chỉ phiên bản PDF đã được quản trị viên đăng mới mở được.'}</p>
+                      <p className={`mt-1 text-xs font-semibold ${inkResultMuted}`}>{isResumingPdfAttempt ? 'Bạn đang làm dở; tiếp tục đúng phiên bản PDF đã chọn ban đầu.' : 'Phiên bản PDF cần có đủ đáp án riêng trước khi mở bài thi.'}</p>
                     </div>
-                    {selectedPaperLanguageAvailable && <span className="inline-flex w-fit items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-xs font-black text-emerald-600 dark:text-emerald-300"><FiCheck size={12} /> Sẵn sàng</span>}
+                    {languageReady && <span className="inline-flex w-fit items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-xs font-black text-emerald-600 dark:text-emerald-300"><FiCheck size={12} /> Sẵn sàng</span>}
                   </div>
                   <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
                     {PDF_FILE_LANGUAGE_OPTIONS.map((option) => {
@@ -971,13 +978,16 @@ export default function ExamPage() {
                         >
                           <span className="text-lg">{option.flag}</span>
                           <p className={`mt-1 font-black ${inkResultTitle}`}>{option.label}</p>
-                          <p className={`mt-1 text-xs font-bold ${available ? 'text-emerald-600 dark:text-emerald-300' : 'text-rose-600 dark:text-rose-300'}`}>{available ? 'Có file để làm' : 'Chưa có file'}</p>
+                          <p className={`mt-1 text-xs font-bold ${readyPaperLanguages.includes(option.mode) ? 'text-emerald-600 dark:text-emerald-300' : 'text-rose-600 dark:text-rose-300'}`}>{readyPaperLanguages.includes(option.mode) ? 'PDF và đáp án đã sẵn sàng' : available ? 'PDF chưa có đáp án' : 'Chưa có file'}</p>
                         </button>
                       );
                     })}
                   </div>
                   {!selectedPaperLanguageAvailable && (
-                    <p className="mt-3 flex items-center gap-1.5 text-sm font-black text-rose-600 dark:text-rose-300"><FiAlertCircle size={16} /> Ngôn ngữ này chưa có file PDF. Hãy chọn phiên bản có trạng thái “Có file để làm”.</p>
+                    <p className="mt-3 flex items-center gap-1.5 text-sm font-black text-rose-600 dark:text-rose-300"><FiAlertCircle size={16} /> Ngôn ngữ này chưa có file PDF. Hãy chọn phiên bản đã sẵn sàng.</p>
+                  )}
+                  {selectedPaperLanguageAvailable && !languageReady && (
+                    <p className="mt-3 flex items-center gap-1.5 text-sm font-black text-rose-600 dark:text-rose-300"><FiAlertCircle size={16} /> Phiên bản PDF này chưa có đủ đáp án. Vui lòng báo quản trị viên.</p>
                   )}
                 </div>
               )}

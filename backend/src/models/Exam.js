@@ -329,6 +329,33 @@ const Exam = {
                   AND sf.file_type = 'pdf'
                   AND sf.file_data IS NOT NULL
               ), '[]'::json) AS paper_languages,
+              COALESCE((
+                SELECT json_agg(DISTINCT sf.language_mode)
+                FROM admin_exam_source_files sf
+                WHERE sf.exam_id = e.id
+                  AND sf.is_exam_paper = TRUE
+                  AND sf.file_type = 'pdf'
+                  AND sf.file_data IS NOT NULL
+                  AND EXISTS (
+                    SELECT 1 FROM questions configured
+                    WHERE configured.exam_id = e.id
+                      AND configured.question_number > 0
+                      AND configured.deleted_at IS NULL
+                  )
+                  AND NOT EXISTS (
+                    SELECT 1 FROM questions missing
+                    WHERE missing.exam_id = e.id
+                      AND missing.question_number > 0
+                      AND missing.deleted_at IS NULL
+                      AND missing.question_type <> ALL(ARRAY['reading_passage', 'fill_blank_pool']::varchar[])
+                      AND NOT EXISTS (
+                        SELECT 1 FROM exam_pdf_answer_keys ak
+                        WHERE ak.exam_id = e.id
+                          AND ak.language_mode = sf.language_mode
+                          AND ak.question_number = missing.question_number
+                      )
+                  )
+              ), '[]'::json) AS ready_paper_languages,
               COUNT(DISTINCT CASE WHEN q.question_number > 0 AND q.deleted_at IS NULL THEN q.id END)::int AS question_count,
               COALESCE(
                 (SELECT COUNT(*) FROM exam_attempts

@@ -937,7 +937,7 @@ const AdminExamController = {
         return res.status(404).json({ message: MISSING_EXAM_MESSAGE });
       }
 
-      const [sourceFiles, answerResult, attemptResult, languageAttemptResult] = await Promise.all([
+      const [sourceFiles, answerResult, attemptResult, languageAttemptResult, languageAnswersResult] = await Promise.all([
         listExamSourceFileRecords(client, examId),
         client.query(
           `SELECT q.id AS question_id,
@@ -966,6 +966,12 @@ const AdminExamController = {
            WHERE exam_id = $1`,
           [examId],
         ),
+        client.query(
+          `SELECT language_mode, question_number, answer_key
+           FROM exam_pdf_answer_keys
+           WHERE exam_id = $1`,
+          [examId],
+        ),
       ]);
 
       // The PDF picker stores one concrete file per language. Old exam metadata
@@ -975,10 +981,13 @@ const AdminExamController = {
       const solutions = sourceFiles.filter((file) => file.isSolutionFile);
       const paper = papers.find((file) => file.languageMode === defaultLanguage) || null;
       const solution = solutions.find((file) => file.languageMode === defaultLanguage) || null;
+      const languageAnswers = new Map(languageAnswersResult.rows
+        .filter((row) => row.language_mode === defaultLanguage)
+        .map((row) => [Number(row.question_number), row.answer_key]));
       const answers = answerResult.rows.map((row) => ({
         questionId: row.question_id,
         questionNumber: Number(row.question_number),
-        answerKey: row.answer_key ? String(row.answer_key).trim() : '',
+        answerKey: languageAnswers.get(Number(row.question_number)) || '',
         points: Number(row.points) || 0,
       }));
 
@@ -994,7 +1003,7 @@ const AdminExamController = {
         answers,
         attemptCount: Number(attemptResult.rows[0]?.count) || 0,
         usedPaperLanguages: (languageAttemptResult.rows[0]?.languages || []).filter(Boolean),
-        ready: papers.length > 0
+        ready: Boolean(paper)
           && answers.length > 0
           && answers.every((item) => ['A', 'B', 'C', 'D'].includes(item.answerKey)),
       });
@@ -1039,7 +1048,7 @@ const AdminExamController = {
       await client.query('SELECT pg_advisory_xact_lock($1::bigint)', [Number.parseInt(examId, 10)]);
 
       const examResult = await client.query(
-        `SELECT id, total_points
+        `SELECT id, total_points, language_mode
          FROM exams
          WHERE id = $1 AND deleted_at IS NULL
          FOR UPDATE`,
@@ -1049,6 +1058,9 @@ const AdminExamController = {
         await client.query('ROLLBACK');
         return res.status(404).json({ message: MISSING_EXAM_MESSAGE });
       }
+      const languageMode = normalizePdfLanguageVariant(
+        req.body?.languageMode || req.body?.language_mode || examResult.rows[0].language_mode,
+      );
 
       const paperResult = await client.query(
         `SELECT 1
@@ -1057,62 +1069,104 @@ const AdminExamController = {
            AND is_exam_paper = TRUE
            AND file_type = 'pdf'
            AND file_data IS NOT NULL
+           AND language_mode = $2
          LIMIT 1`,
-        [examId],
+        [examId, languageMode],
       );
       if (paperResult.rows.length === 0) {
         await client.query('ROLLBACK');
-        return res.status(400).json({ message: 'Hãy tải file PDF đề thi trước khi lưu đáp án.' });
+        return res.status(400).json({ message: 'Hãy tải file PDF của ngôn ngữ đang chọn trước khi lưu đáp án.' });
       }
 
       const attemptResult = await client.query(
         'SELECT COUNT(*)::int AS count FROM exam_attempts WHERE exam_id = $1',
         [examId],
       );
-      if (Number(attemptResult.rows[0]?.count) > 0) {
+      const hasAttempts = Number(attemptResult.rows[0]?.count) > 0;
+      const existingQuestionResult = await client.query(
+        `SELECT id, question_number
+         FROM questions
+         WHERE exam_id = $1 AND question_number > 0 AND deleted_at IS NULL
+           AND question_type <> ALL($2::varchar[])
+         ORDER BY question_number`,
+        [examId, ['reading_passage', 'fill_blank_pool']],
+      );
+      const existingQuestions = new Map(existingQuestionResult.rows
+        .map((row) => [Number(row.question_number), row.id]));
+      if (!hasAttempts && existingQuestions.size !== questionCount) {
+        await client.query(
+          `DELETE FROM exam_pdf_answer_keys WHERE exam_id = $1 AND language_mode <> $2`,
+          [examId, languageMode],
+        );
+      }
+      if (hasAttempts && (existingQuestions.size !== questionCount
+        || Array.from({ length: questionCount }, (_, index) => index + 1)
+          .some((number) => !existingQuestions.has(number)))) {
         await client.query('ROLLBACK');
         return res.status(409).json({
-          message: 'Đề đã có lượt thi nên không thể thay số câu hoặc đáp án.',
+          message: 'Đề đã có lượt thi nên không thể thay số câu. Hãy giữ nguyên số câu khi sửa đáp án từng ngôn ngữ.',
           code: 'ROOM_PAPER_CONFIG_LOCKED',
         });
       }
 
-      await client.query(
-        `UPDATE questions
-         SET deleted_at = CURRENT_TIMESTAMP,
-             deleted_by = $2,
-             delete_reason = 'replaced_by_room_paper_answer_key',
-             deleted_question_number = question_number
-         WHERE exam_id = $1 AND deleted_at IS NULL`,
-        [examId, req.user.id],
-      );
-
       const totalPoints = Math.max(1, Number(examResult.rows[0].total_points) || 100);
       const pointsPerQuestion = Math.floor((totalPoints * 100) / questionCount) / 100;
-      for (let number = 1; number <= questionCount; number += 1) {
-        const questionPoints = number === questionCount
-          ? Math.round((totalPoints - pointsPerQuestion * (questionCount - 1)) * 100) / 100
-          : pointsPerQuestion;
-        const questionResult = await client.query(
-          `INSERT INTO questions
-             (exam_id, question_number, question_type, question_text, points, difficulty)
-           VALUES ($1, $2, 'single_choice', $3, $4, 'medium')
-           RETURNING id`,
-          [examId, number, `Câu ${number} – xem nội dung trong file PDF`, questionPoints],
+      if (!hasAttempts) {
+        await client.query(
+          `UPDATE questions
+           SET deleted_at = CURRENT_TIMESTAMP,
+               deleted_by = $2,
+               delete_reason = 'outside_room_paper_answer_key',
+               deleted_question_number = question_number
+           WHERE exam_id = $1 AND question_number > $3 AND deleted_at IS NULL`,
+          [examId, req.user.id, questionCount],
         );
-        const questionId = questionResult.rows[0].id;
-        const correctKey = answerMap.get(number);
-        for (const key of allowedKeys) {
-          await client.query(
-            `INSERT INTO answers
-               (question_id, answer_key, answer_text, answer_text_cn, answer_text_en, is_correct)
-             VALUES ($1, $2, $3, $3, $3, $4)`,
-            [questionId, key, key, key === correctKey],
+        for (let number = 1; number <= questionCount; number += 1) {
+          const questionPoints = number === questionCount
+            ? Math.round((totalPoints - pointsPerQuestion * (questionCount - 1)) * 100) / 100
+            : pointsPerQuestion;
+          const questionResult = await client.query(
+            `INSERT INTO questions
+               (exam_id, question_number, question_type, question_text, points, difficulty)
+             VALUES ($1, $2, 'single_choice', $3, $4, 'medium')
+             ON CONFLICT (exam_id, question_number) DO UPDATE
+             SET question_type = 'single_choice', question_text = EXCLUDED.question_text,
+                 points = EXCLUDED.points, difficulty = 'medium', deleted_at = NULL,
+                 deleted_by = NULL, delete_reason = NULL, deleted_question_number = NULL
+             RETURNING id`,
+            [examId, number, `Câu ${number} – xem nội dung trong file PDF`, questionPoints],
           );
+          const questionId = questionResult.rows[0].id;
+          await client.query('DELETE FROM answers WHERE question_id = $1', [questionId]);
+          for (const key of allowedKeys) {
+            await client.query(
+              `INSERT INTO answers
+                 (question_id, answer_key, answer_text, answer_text_cn, answer_text_en, is_correct)
+               VALUES ($1, $2, $3, $3, $3, $4)`,
+              [questionId, key, key, key === answerMap.get(number)],
+            );
+          }
         }
+        await syncExamTotals(client, examId);
       }
 
-      await syncExamTotals(client, examId);
+      for (let number = 1; number <= questionCount; number += 1) {
+        await client.query(
+          `INSERT INTO exam_pdf_answer_keys (exam_id, language_mode, question_number, answer_key)
+           VALUES ($1, $2, $3, $4)
+           ON CONFLICT (exam_id, language_mode, question_number) DO UPDATE
+           SET answer_key = EXCLUDED.answer_key, updated_at = CURRENT_TIMESTAMP`,
+          [examId, languageMode, number, answerMap.get(number)],
+        );
+      }
+      await client.query(
+        `DELETE FROM exam_pdf_answer_keys
+         WHERE exam_id = $1 AND language_mode = $2 AND question_number > $3`,
+        [examId, languageMode, questionCount],
+      );
+      const regradedAttemptCount = hasAttempts
+        ? await require('../models/ExamAttempt').regradeRoomPaperLanguage(client, examId, languageMode)
+        : 0;
       await client.query('COMMIT');
       cache.delByPrefix('exams:');
       cache.del('exams:lobby');
@@ -1120,13 +1174,16 @@ const AdminExamController = {
       UserActivity.log(req.user.id, 'admin.update_room_paper_answers', {
         examId,
         questionCount,
+        languageMode,
+        regradedAttemptCount,
         ip: req.ip,
         userAgent: req.headers['user-agent'],
       });
 
       return res.json({
-        message: `Đã lưu đáp án cho ${questionCount} câu.`,
+        message: `Đã lưu đáp án cho ${questionCount} câu${regradedAttemptCount ? ` và chấm lại ${regradedAttemptCount} lượt thi` : ''}.`,
         questionCount,
+        regradedAttemptCount,
         ready: true,
       });
     } catch (error) {
