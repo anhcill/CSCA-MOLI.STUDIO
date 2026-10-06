@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { FiBell, FiBookOpen, FiCheck, FiChevronDown, FiClock, FiX } from 'react-icons/fi';
-import axios from '@/lib/utils/axios';
 import { useAuthStore } from '@/lib/store/authStore';
 import styles from './ExamCountdownNotice.module.css';
 
@@ -136,27 +135,8 @@ function selectNextExamSession(lobby: { live?: LobbyExam[]; upcoming?: LobbyExam
   return { exams, startsAt, endsAt };
 }
 
-function selectLobbyOrOfficialSession(lobby: { live?: LobbyExam[]; upcoming?: LobbyExam[] }, now: number) {
-  const lobbySession = selectNextExamSession(lobby, now);
-  const officialSession = selectNextExamSession({ upcoming: OFFICIAL_EXAM_CALENDAR }, now);
-  if (!lobbySession) return officialSession;
-  if (!officialSession) return lobbySession;
-
-  if (Math.abs(lobbySession.startsAt - officialSession.startsAt) <= SESSION_WINDOW_MS) {
-    const examsBySubject = new Map<string, LobbyExam>();
-    officialSession.exams.forEach((exam) => examsBySubject.set(String(exam.subject_code || exam.id), exam));
-    lobbySession.exams.forEach((exam) => examsBySubject.set(String(exam.subject_code || exam.id), exam));
-    const exams = [...examsBySubject.values()].sort((a, b) => (
-      new Date(a.start_time || 0).getTime() - new Date(b.start_time || 0).getTime()
-    ));
-    return {
-      exams,
-      startsAt: Math.min(lobbySession.startsAt, officialSession.startsAt),
-      endsAt: Math.max(lobbySession.endsAt, officialSession.endsAt),
-    };
-  }
-
-  return lobbySession.startsAt < officialSession.startsAt ? lobbySession : officialSession;
+function selectOfficialSession(now: number) {
+  return selectNextExamSession({ upcoming: OFFICIAL_EXAM_CALENDAR }, now);
 }
 
 function readStorage(key: string) {
@@ -233,17 +213,9 @@ export default function ExamCountdownNotice() {
       const nextFrequency: ReminderFrequency = storedFrequency === 'five_days' ? 'five_days' : 'daily';
       setFrequency(nextFrequency);
 
-      let lobby = {};
-      try {
-        const response = await axios.get('/exams/lobby');
-        lobby = response.data?.data || {};
-      } catch {
-        // The published official calendar below keeps this reminder available offline.
-      }
-
       if (cancelled) return;
       const currentTime = Date.now();
-      const session = selectLobbyOrOfficialSession(lobby, currentTime);
+      const session = selectOfficialSession(currentTime);
       if (!session) return;
       const lastShownAt = Number(readStorage(lastShownKey) || 0);
       if (!shouldShowNotice(nextFrequency, lastShownAt, session.startsAt, currentTime)) return;
@@ -267,15 +239,8 @@ export default function ExamCountdownNotice() {
 
     const refreshSession = async () => {
       if (Date.now() <= sessionEndsAt) return;
-      let lobby = {};
-      try {
-        const response = await axios.get('/exams/lobby');
-        lobby = response.data?.data || {};
-      } catch {
-        // Fall through to the official calendar.
-      }
       if (cancelled) return;
-      const nextSession = selectLobbyOrOfficialSession(lobby, Date.now());
+      const nextSession = selectOfficialSession(Date.now());
       if (!nextSession) {
         closeNotice();
         return;
@@ -382,7 +347,7 @@ export default function ExamCountdownNotice() {
 
           <div className="mx-auto mt-5 max-w-3xl overflow-hidden rounded-2xl border border-[#dfc797] bg-[#fffdf8]/88 shadow-sm backdrop-blur-[2px] sm:mt-7">
             <div className="flex items-center justify-center gap-2 border-b border-[#eadabd] px-3 py-2.5 text-center text-[10px] font-black uppercase tracking-[0.12em] text-[#a4211a] sm:text-xs">
-              <FiClock size={14} /> Lịch thi của bạn · Giờ Bắc Kinh (UTC+8)
+              <FiClock size={14} /> Lịch thi chính thức CSCA · Giờ Bắc Kinh (UTC+8)
             </div>
             <div className="max-h-[230px] divide-y divide-[#eee1c9] overflow-y-auto">
               {exams.map((exam) => {
