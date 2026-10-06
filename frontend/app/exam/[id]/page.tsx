@@ -1328,31 +1328,6 @@ export default function ExamPage() {
                 </div>
               )}
 
-              {!isOfficialExam && !isTopicPracticeRoute && (
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={showPracticeFeedback}
-                  onClick={togglePracticeFeedback}
-                  className="relative z-10 mb-3 flex w-full items-center justify-between gap-4 rounded-2xl border border-[#ead9bd] bg-[#fffaf2]/85 px-4 py-3 text-left shadow-sm transition hover:border-[#c99722] dark:border-slate-700 dark:bg-slate-800/85 dark:hover:border-amber-500"
-                >
-                  <span className="flex min-w-0 items-center gap-3">
-                    <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${showPracticeFeedback ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300' : 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-300'}`}>
-                      {showPracticeFeedback ? <FiEye size={18} /> : <FiEyeOff size={18} />}
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block text-sm font-black text-[#4f3521] dark:text-white">Hiện đáp án sau mỗi câu</span>
-                      <span className="mt-0.5 block text-xs font-medium text-[#8b7866] dark:text-slate-400">
-                        {showPracticeFeedback ? 'Đang bật: xem đúng sai và lời giải ngay.' : 'Đang tắt: chỉ xem đáp án sau khi nộp bài.'}
-                      </span>
-                    </span>
-                  </span>
-                  <span className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${showPracticeFeedback ? 'bg-[#c99722]' : 'bg-slate-300 dark:bg-slate-600'}`}>
-                    <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${showPracticeFeedback ? 'translate-x-6' : 'translate-x-1'}`} />
-                  </span>
-                </button>
-              )}
-
               <div className="relative z-10 flex flex-col gap-3 sm:flex-row lg:flex-col xl:flex-row">
                 {isTopicPracticeRoute ? (
                   <button
@@ -1648,7 +1623,7 @@ export default function ExamPage() {
               }`}
             >
               {showPracticeFeedback ? <FiEye size={17} /> : <FiEyeOff size={17} />}
-              <span className="hidden md:inline">Đáp án: {showPracticeFeedback ? 'Hiện' : 'Ẩn'}</span>
+              <span className="hidden md:inline">Đáp án mỗi câu: {showPracticeFeedback ? 'Hiện' : 'Ẩn'}</span>
             </button>
           )}
           <div className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl font-mono text-base sm:text-2xl font-bold tracking-tight shadow-inner border ${
