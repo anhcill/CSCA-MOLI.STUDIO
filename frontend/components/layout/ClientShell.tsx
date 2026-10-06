@@ -11,6 +11,7 @@ import PWAInstallBanner from '@/components/pwa/PWAInstallBanner';
 import NotificationPermissionPrompt from '@/components/pwa/NotificationPermissionPrompt';
 import UpdateToast from '@/components/pwa/UpdateToast';
 import OnlineClassAnnouncement from '@/components/layout/OnlineClassAnnouncement';
+import ExamCountdownNotice from '@/components/exam/ExamCountdownNotice';
 import { useServiceWorker } from '@/hooks/useServiceWorker';
 import { useAuthStore } from '@/lib/store/authStore';
 import axios from '@/lib/utils/axios';
@@ -149,6 +150,7 @@ export default function ClientShell({ children }: { children: React.ReactNode })
   const showPwaBanner = isAuthenticated && !isAdmin && !isAuth && !isExam && !isGame && !isChat;
   const showOnlineClassAnnouncement = !isAdmin && !isAuth && !isExam && !isGame && !isChat;
   const showNotificationPrompt = isAuthenticated && !isAdmin && !isAuth && !isExam && !isGame && !isChat;
+  const showExamCountdownNotice = isAuthenticated && !isAdmin && !isAuth && !isExam && !isGame && !isChat;
   const showUpdateToast = isAuthenticated && !isChat;
   const moliPetPosition = 'left';
 
@@ -162,6 +164,7 @@ export default function ClientShell({ children }: { children: React.ReactNode })
       {showDailyGift && mounted && <DailyGiftBox />}
       {showNationalDayGreeting && mounted && <NationalDayGreeting />}
       {showOnlineClassAnnouncement && mounted && <OnlineClassAnnouncement />}
+      {showExamCountdownNotice && mounted && <ExamCountdownNotice />}
       {mounted && showNotificationPrompt && <NotificationPermissionPrompt />}
       {mounted && showUpdateToast && (
         <UpdateToast

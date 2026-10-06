@@ -540,7 +540,7 @@ function ExamResultContent() {
       <main className="container mx-auto max-w-[1360px] px-4 py-6">
 
         {/* Tab Navigation */}
-        <div className="mb-6 flex w-fit max-w-full gap-1.5 overflow-x-auto rounded-2xl border border-[#ddc498] bg-[#fffaf2]/80 p-1.5 shadow-[0_10px_32px_rgba(129,77,33,0.10)] backdrop-blur no-print">
+        <div className="mb-6 flex w-fit max-w-full gap-1.5 overflow-x-auto rounded-2xl border-2 border-[#d6b477] bg-[#fff7e8] p-1.5 shadow-[0_12px_34px_rgba(129,77,33,0.22)] no-print dark:border-[#d6b477] dark:bg-[#fff7e8]">
           {[
             { key: 'result', label: '📊 Kết quả', icon: FiBarChart2 },
             { key: 'review', label: '📝 Xem lại bài', icon: FiPrinter },
@@ -554,7 +554,7 @@ function ExamResultContent() {
               className={`flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold transition-all duration-200 ${
                 activeTab === tab.key
                   ? 'bg-gradient-to-r from-[#b9231a] to-[#d52a1e] text-white shadow-lg shadow-red-900/15'
-                  : 'text-[#6f563f] hover:bg-[#f7e8d3] hover:text-[#b9231a] dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-rose-400'
+                  : 'text-[#563822] hover:bg-[#f2dfc2] hover:text-[#a91d16] dark:text-[#563822] dark:hover:bg-[#f2dfc2] dark:hover:text-[#a91d16]'
               }`}>
               <tab.icon size={16} />
               {tab.label}
