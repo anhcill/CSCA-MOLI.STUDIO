@@ -150,7 +150,7 @@ export default function ClientShell({ children }: { children: React.ReactNode })
   const showPwaBanner = isAuthenticated && !isAdmin && !isAuth && !isExam && !isGame && !isChat;
   const showOnlineClassAnnouncement = !isAdmin && !isAuth && !isExam && !isGame && !isChat;
   const showNotificationPrompt = isAuthenticated && !isAdmin && !isAuth && !isExam && !isGame && !isChat;
-  const showExamCountdownNotice = isAuthenticated && !isAdmin && !isAuth && !isExam && !isGame && !isChat;
+  const showExamCountdownNotice = !isAdmin && !isAuth && !isExam && !isGame && !isChat;
   const showUpdateToast = isAuthenticated && !isChat;
   const moliPetPosition = 'left';
 

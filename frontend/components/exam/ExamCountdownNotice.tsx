@@ -32,10 +32,42 @@ interface ExamSession {
   endsAt: number;
 }
 
-const NOTICE_KEY_PREFIX = 'moly:exam-countdown-notice';
+const NOTICE_KEY_PREFIX = 'moly:exam-countdown-notice:v2';
 const DAY_MS = 24 * 60 * 60 * 1000;
 const SESSION_WINDOW_MS = 48 * 60 * 60 * 1000;
 const URGENT_WINDOW_MS = DAY_MS;
+
+const OFFICIAL_SESSION_SEEDS = [
+  { firstDate: '2026-11-14', secondDate: '2026-11-15', chineseAt: '14:00', mathAt: '17:00', physicsAt: '14:00', chemistryAt: '16:30' },
+  { firstDate: '2026-12-19', secondDate: '2026-12-20', chineseAt: '08:00', mathAt: '11:00', physicsAt: '08:00', chemistryAt: '10:30' },
+  { firstDate: '2027-01-23', secondDate: '2027-01-24', chineseAt: '14:00', mathAt: '17:00', physicsAt: '14:00', chemistryAt: '16:30' },
+  { firstDate: '2027-03-13', secondDate: '2027-03-14', chineseAt: '14:00', mathAt: '17:00', physicsAt: '14:00', chemistryAt: '16:30' },
+  { firstDate: '2027-04-24', secondDate: '2027-04-25', chineseAt: '14:00', mathAt: '17:00', physicsAt: '14:00', chemistryAt: '16:30' },
+  { firstDate: '2027-06-26', secondDate: '2027-06-27', chineseAt: '08:00', mathAt: '11:00', physicsAt: '08:00', chemistryAt: '10:30' },
+] as const;
+
+function createOfficialExam(id: number, date: string, time: string, duration: number, subjectName: string, subjectCode: string): LobbyExam {
+  const startsAt = new Date(`${date}T${time}:00+08:00`);
+  return {
+    id,
+    title: `Kỳ thi CSCA · ${subjectName}`,
+    start_time: startsAt.toISOString(),
+    end_time: new Date(startsAt.getTime() + duration * 60_000).toISOString(),
+    duration,
+    subject_name: subjectName,
+    subject_code: subjectCode,
+  };
+}
+
+const OFFICIAL_EXAM_CALENDAR: LobbyExam[] = OFFICIAL_SESSION_SEEDS.flatMap((session, index) => {
+  const idBase = -((index + 1) * 10);
+  return [
+    createOfficialExam(idBase - 1, session.firstDate, session.chineseAt, 90, 'Tiếng Trung chuyên ngành', 'CHINESE'),
+    createOfficialExam(idBase - 2, session.firstDate, session.mathAt, 60, 'Toán', 'MATH'),
+    createOfficialExam(idBase - 3, session.secondDate, session.physicsAt, 60, 'Vật lý', 'PHYSICS'),
+    createOfficialExam(idBase - 4, session.secondDate, session.chemistryAt, 60, 'Hóa học', 'CHEMISTRY'),
+  ];
+});
 
 const SUBJECT_META: Record<string, { icon: string; tone: string }> = {
   MATH: { icon: '📐', tone: 'bg-blue-50 text-blue-700' },
@@ -104,6 +136,45 @@ function selectNextExamSession(lobby: { live?: LobbyExam[]; upcoming?: LobbyExam
   return { exams, startsAt, endsAt };
 }
 
+function selectLobbyOrOfficialSession(lobby: { live?: LobbyExam[]; upcoming?: LobbyExam[] }, now: number) {
+  const lobbySession = selectNextExamSession(lobby, now);
+  const officialSession = selectNextExamSession({ upcoming: OFFICIAL_EXAM_CALENDAR }, now);
+  if (!lobbySession) return officialSession;
+  if (!officialSession) return lobbySession;
+
+  if (Math.abs(lobbySession.startsAt - officialSession.startsAt) <= SESSION_WINDOW_MS) {
+    const examsBySubject = new Map<string, LobbyExam>();
+    officialSession.exams.forEach((exam) => examsBySubject.set(String(exam.subject_code || exam.id), exam));
+    lobbySession.exams.forEach((exam) => examsBySubject.set(String(exam.subject_code || exam.id), exam));
+    const exams = [...examsBySubject.values()].sort((a, b) => (
+      new Date(a.start_time || 0).getTime() - new Date(b.start_time || 0).getTime()
+    ));
+    return {
+      exams,
+      startsAt: Math.min(lobbySession.startsAt, officialSession.startsAt),
+      endsAt: Math.max(lobbySession.endsAt, officialSession.endsAt),
+    };
+  }
+
+  return lobbySession.startsAt < officialSession.startsAt ? lobbySession : officialSession;
+}
+
+function readStorage(key: string) {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeStorage(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // The notice should still work when storage is unavailable.
+  }
+}
+
 function FlipUnit({ value, label, emphasis = false }: { value: number; label: string; emphasis?: boolean }) {
   const displayed = String(value).padStart(2, '0');
   return (
@@ -121,7 +192,7 @@ function FlipUnit({ value, label, emphasis = false }: { value: number; label: st
 }
 export default function ExamCountdownNotice() {
   const router = useRouter();
-  const { user, isAuthenticated } = useAuthStore();
+  const { user } = useAuthStore();
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const [exams, setExams] = useState<LobbyExam[]>([]);
   const [targetAt, setTargetAt] = useState<number | null>(null);
@@ -141,7 +212,6 @@ export default function ExamCountdownNotice() {
   }, []);
 
   useEffect(() => {
-    if (!isAuthenticated || !user?.id) return;
     let cancelled = false;
     let openTimer: number | undefined;
     let retryCount = 0;
@@ -154,31 +224,34 @@ export default function ExamCountdownNotice() {
         openTimer = window.setTimeout(openWhenAvailable, 1500);
         return;
       }
-      localStorage.setItem(lastShownKey, String(Date.now()));
+      writeStorage(lastShownKey, String(Date.now()));
       setOpen(true);
     };
 
     const load = async () => {
+      const storedFrequency = readStorage(frequencyKey);
+      const nextFrequency: ReminderFrequency = storedFrequency === 'five_days' ? 'five_days' : 'daily';
+      setFrequency(nextFrequency);
+
+      let lobby = {};
       try {
-        const storedFrequency = localStorage.getItem(frequencyKey);
-        const nextFrequency: ReminderFrequency = storedFrequency === 'five_days' ? 'five_days' : 'daily';
-        setFrequency(nextFrequency);
-
         const response = await axios.get('/exams/lobby');
-        if (cancelled) return;
-        const currentTime = Date.now();
-        const session = selectNextExamSession(response.data?.data || {}, currentTime);
-        if (!session) return;
-        const lastShownAt = Number(localStorage.getItem(lastShownKey) || 0);
-        if (!shouldShowNotice(nextFrequency, lastShownAt, session.startsAt, currentTime)) return;
-
-        setExams(session.exams);
-        setTargetAt(session.startsAt);
-        setSessionEndsAt(session.endsAt);
-        openTimer = window.setTimeout(openWhenAvailable, 1200);
+        lobby = response.data?.data || {};
       } catch {
-        // This reminder is optional; a lobby/network error must not interrupt the page.
+        // The published official calendar below keeps this reminder available offline.
       }
+
+      if (cancelled) return;
+      const currentTime = Date.now();
+      const session = selectLobbyOrOfficialSession(lobby, currentTime);
+      if (!session) return;
+      const lastShownAt = Number(readStorage(lastShownKey) || 0);
+      if (!shouldShowNotice(nextFrequency, lastShownAt, session.startsAt, currentTime)) return;
+
+      setExams(session.exams);
+      setTargetAt(session.startsAt);
+      setSessionEndsAt(session.endsAt);
+      openTimer = window.setTimeout(openWhenAvailable, 1200);
     };
 
     void load();
@@ -186,7 +259,7 @@ export default function ExamCountdownNotice() {
       cancelled = true;
       if (openTimer) window.clearTimeout(openTimer);
     };
-  }, [frequencyKey, isAuthenticated, lastShownKey, user?.id]);
+  }, [frequencyKey, lastShownKey, user?.id]);
 
   useEffect(() => {
     if (!open || sessionEndsAt === null) return;
@@ -194,21 +267,23 @@ export default function ExamCountdownNotice() {
 
     const refreshSession = async () => {
       if (Date.now() <= sessionEndsAt) return;
+      let lobby = {};
       try {
         const response = await axios.get('/exams/lobby');
-        if (cancelled) return;
-        const nextSession = selectNextExamSession(response.data?.data || {}, Date.now());
-        if (!nextSession) {
-          closeNotice();
-          return;
-        }
-        setExams(nextSession.exams);
-        setTargetAt(nextSession.startsAt);
-        setSessionEndsAt(nextSession.endsAt);
-        setNow(Date.now());
+        lobby = response.data?.data || {};
       } catch {
-        // Keep the current notice visible and retry on the next interval.
+        // Fall through to the official calendar.
       }
+      if (cancelled) return;
+      const nextSession = selectLobbyOrOfficialSession(lobby, Date.now());
+      if (!nextSession) {
+        closeNotice();
+        return;
+      }
+      setExams(nextSession.exams);
+      setTargetAt(nextSession.startsAt);
+      setSessionEndsAt(nextSession.endsAt);
+      setNow(Date.now());
     };
 
     const timer = window.setInterval(() => void refreshSession(), 30_000);
@@ -256,7 +331,7 @@ export default function ExamCountdownNotice() {
     : '';
 
   const saveFrequency = (next: ReminderFrequency) => {
-    localStorage.setItem(frequencyKey, next);
+    writeStorage(frequencyKey, next);
     setFrequency(next);
     closeNotice();
   };
