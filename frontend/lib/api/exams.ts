@@ -191,6 +191,7 @@ const examApi = {
     isResume?: boolean;
     practiceMode?: boolean;
     timeLeftSeconds?: number | null;
+    deadlineAt?: string | null;
   }> {
     const response = await axios.post(`/exams/${examId}/start`, options);
     return response.data.data;
@@ -233,9 +234,9 @@ const examApi = {
   },
 
   // Lấy lịch sử làm bài
-  async getHistory(subjectCode?: string, limit = 10) {
+  async getHistory(subjectCode?: string, limit = 10, type?: 'room' | 'practice') {
     const response = await axios.get('/history', {
-      params: { subjectCode, limit }
+      params: { subjectCode, limit, type }
     });
     return response.data.data;
   },

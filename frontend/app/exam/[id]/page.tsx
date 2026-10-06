@@ -218,6 +218,7 @@ export default function ExamPage() {
   const [flaggedQuestions, setFlaggedQuestions] = useState<Set<number>>(new Set());
   const [navFilter, setNavFilter] = useState<'all' | 'unanswered' | 'answered' | 'flagged'>('all');
   const [timeLeft, setTimeLeft] = useState(0);
+  const [attemptDeadlineAt, setAttemptDeadlineAt] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [vipError, setVipError] = useState<string | null>(null);
@@ -392,7 +393,8 @@ export default function ExamPage() {
         if (shouldRestore) {
           setSelectedAnswers(draft.selectedAnswers);
           if (!practiceMode && Number.isFinite(draft.timeLeftSeconds)) {
-            setTimeLeft(Math.max(0, draft.timeLeftSeconds));
+            // A local draft must never extend the server-issued deadline.
+            setTimeLeft((current) => Math.min(current, Math.max(0, draft.timeLeftSeconds)));
           }
           setOfflineNotice('Đã khôi phục bài làm lưu trên máy.');
         } else {
@@ -451,26 +453,67 @@ export default function ExamPage() {
     loadPreflight();
   }, [examId]);
 
-  // Timer countdown
+  // Use the absolute deadline from the server so background-tab throttling,
+  // reloads, and local drafts can never grant extra exam time.
   useEffect(() => {
     if (!started || !attemptId || practiceMode || submitting) return;
-    if (timeLeft <= 0) {
-      handleSubmit({ force: true });
-      return;
-    }
 
-    const timer = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) {
-          handleSubmit({ force: true }); // Auto-submit when time runs out
+    const updateTimer = () => {
+      if (attemptDeadlineAt !== null) {
+        const next = Math.max(0, Math.ceil((attemptDeadlineAt - Date.now()) / 1000));
+        setTimeLeft(next);
+        if (next === 0) handleSubmit({ force: true });
+        return;
+      }
+
+      setTimeLeft((previous) => {
+        if (previous <= 1) {
+          handleSubmit({ force: true });
           return 0;
         }
-        return prev - 1;
+        return previous - 1;
       });
-    }, 1000);
+    };
 
-    return () => clearInterval(timer);
-  }, [attemptId, practiceMode, started, submitting, timeLeft]);
+    updateTimer();
+    const timer = window.setInterval(updateTimer, 1000);
+    document.addEventListener('visibilitychange', updateTimer);
+    window.addEventListener('focus', updateTimer);
+
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', updateTimer);
+      window.removeEventListener('focus', updateTimer);
+    };
+  }, [attemptDeadlineAt, attemptId, practiceMode, started, submitting]);
+
+  useEffect(() => {
+    if (!started || practiceMode || !exam?.start_time || !examId) return;
+    let cancelled = false;
+
+    const syncScheduledDeadline = async () => {
+      try {
+        const latest = await examApi.getExamPreflight(examId);
+        if (cancelled || !latest.end_time) return;
+        const latestDeadline = new Date(latest.end_time).getTime();
+        if (Number.isFinite(latestDeadline)) setAttemptDeadlineAt(latestDeadline);
+      } catch {
+        // Keep the last server-issued deadline during a temporary network error.
+      }
+    };
+
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') syncScheduledDeadline();
+    };
+    const timer = window.setInterval(syncScheduledDeadline, 30000);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+    };
+  }, [exam?.start_time, examId, practiceMode, started]);
 
   const loadPreflight = async () => {
     if (examId === null || Number.isNaN(examId)) {
@@ -602,6 +645,8 @@ export default function ExamPage() {
       setOfflineNotice(null);
       setQueuedSubmit(false);
       setDraftCheckedAttemptId(null);
+      const parsedDeadline = response.deadlineAt ? new Date(response.deadlineAt).getTime() : NaN;
+      setAttemptDeadlineAt(Number.isFinite(parsedDeadline) ? parsedDeadline : null);
 
       const restoredAnswers: Record<number, number | string> = {};
       for (const answer of response.savedAnswers || []) {
@@ -941,7 +986,7 @@ export default function ExamPage() {
             <div className="grid grid-cols-2 gap-3 p-4 sm:p-5">
               {[
                 { label: 'Số câu', value: totalQuestions || '-' },
-                { label: 'Thời gian', value: `${preflight.duration || 0} phút` },
+                { label: 'Thời lượng đề', value: `${preflight.duration || 0} phút` },
                 { label: 'Mức khó', value: preflight.difficulty_level || preflight.overall_difficulty || '-' },
                 { label: 'Đã làm', value: `${preflight.user_attempt_count || 0} lượt` },
               ].map((item) => (
@@ -951,6 +996,12 @@ export default function ExamPage() {
                 </div>
               ))}
             </div>
+
+            {isOfficialExam && preflight.end_time && (
+              <div className="mx-4 mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold leading-6 text-amber-900 sm:mx-5">
+                Phòng thi đóng lúc <strong>{new Date(preflight.end_time).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</strong>. Nếu vào muộn, thời gian làm bài còn lại sẽ được tính đến đúng giờ đóng phòng, không tính lại đủ {preflight.duration || 0} phút.
+              </div>
+            )}
 
             <div className="border-t border-[#ead9bd]/75 p-4 sm:p-5">
               {usesPdfLanguageFiles && (

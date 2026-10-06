@@ -369,26 +369,78 @@ function ExamResultContent() {
         : 0;
 
     return (
-      <InkResultBackground className="flex items-center justify-center px-4">
-        <button
-          onClick={() => router.back()}
-          className="absolute left-4 top-4 flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold text-[#6f563f] hover:bg-white/70"
-        >
-          <FiArrowLeft size={18} /> Quay lại
-        </button>
-        <div className={`w-full max-w-md rounded-3xl p-8 text-center ${inkResultPanel}`}>
-          <p className={`text-sm font-black uppercase tracking-widest ${inkResultMuted}`}>Điểm của bạn</p>
-          <p className={`mt-5 text-7xl font-black ${inkResultScore}`}>{score.toFixed(1)}</p>
-          <p className={`mt-1 text-xl font-black ${inkResultMuted}`}>/100 điểm</p>
-          <p className={`mt-6 text-sm font-semibold ${inkResultMuted}`}>Chi tiết bài thi mở sau khi kỳ thi kết thúc.</p>
+      <InkResultBackground>
+        <main className="mx-auto flex min-h-screen w-full max-w-4xl flex-col justify-center px-4 py-8 sm:px-6">
           <button
             type="button"
-            onClick={() => router.push('/')}
-            className="mt-6 inline-flex items-center justify-center gap-2 rounded-xl bg-[#d52a1e] px-5 py-3 text-sm font-black text-white hover:bg-[#b91f16]"
+            onClick={() => router.back()}
+            className="mb-4 inline-flex w-fit items-center gap-2 rounded-xl border border-[#dfc8a5] bg-[#fffaf2]/80 px-4 py-2 text-sm font-bold text-[#6f563f] shadow-sm backdrop-blur hover:border-[#c99a50] hover:text-[#b9231a]"
           >
-            <FiHome size={17} /> Quay về trang chủ
+            <FiArrowLeft size={18} /> Quay lại
           </button>
-        </div>
+
+          <section className={`relative overflow-hidden rounded-[32px] ${inkResultPanel}`}>
+            <div className="h-2 bg-gradient-to-r from-[#7d1712] via-[#d52a1e] to-[#c99722]" />
+            <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full border-[32px] border-[#d52a1e]/[0.06]" />
+            <div className="pointer-events-none absolute -bottom-20 -left-20 h-56 w-56 rounded-full border-[38px] border-[#c99722]/[0.07]" />
+
+            <div className="relative p-6 sm:p-9 lg:p-11">
+              <div className="flex items-start gap-4 border-b border-[#ead9bd] pb-6">
+                <div className="flex h-14 w-12 shrink-0 items-center justify-center rounded-sm bg-[#c91e16] text-xs font-black leading-none text-white shadow-[0_5px_0_rgba(151,30,23,0.14)]">
+                  <span className="[writing-mode:vertical-rl]">考试成绩</span>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-black uppercase tracking-[0.24em] text-[#b77b1f]">Kết quả phòng thi</p>
+                  <h1 className={`mt-2 text-2xl font-black leading-tight sm:text-3xl ${inkResultTitle}`}>{result.exam_title}</h1>
+                  <p className={`mt-2 text-sm font-semibold ${inkResultMuted}`}>{result.subject_name || 'CSCA'} · Bài đã được ghi nhận</p>
+                </div>
+              </div>
+
+              <div className="grid gap-7 py-7 md:grid-cols-[0.9fr_1.1fr] md:items-center">
+                <div className="text-center md:border-r md:border-[#ead9bd] md:pr-8">
+                  <p className="text-xs font-black uppercase tracking-[0.22em] text-[#9d8a77]">Điểm của bạn</p>
+                  <InkScoreMark value={score.toFixed(1)} />
+                  <p className="text-lg font-black text-[#b9231a]">/100 điểm</p>
+                  <div className="mx-auto mt-4 h-1.5 max-w-[220px] overflow-hidden rounded-full bg-[#eadfce]">
+                    <div className="h-full rounded-full bg-gradient-to-r from-[#c99722] to-[#d52a1e]" style={{ width: `${score}%` }} />
+                  </div>
+                </div>
+
+                <div className="rounded-3xl border border-[#e5cc9f] bg-[#fff7e9]/80 p-5 sm:p-6">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#d52a1e] text-white shadow-md shadow-red-900/10">
+                      <FiClock size={18} />
+                    </div>
+                    <div>
+                      <h2 className="font-black text-[#4f3521]">Đã nộp bài thành công</h2>
+                      <p className="mt-1 text-sm font-medium leading-6 text-[#7d6957]">
+                        Điểm đã được lưu. Đề, đáp án và phần giải thích sẽ mở sau khi phòng thi kết thúc để đảm bảo công bằng.
+                      </p>
+                    </div>
+                  </div>
+                  {result.exam_end_time && (
+                    <div className="mt-4 rounded-2xl border border-dashed border-[#d8b87f] bg-white/60 px-4 py-3 text-sm text-[#6f563f]">
+                      <span className="font-black">Mở xem chi tiết:</span>{' '}
+                      {new Date(result.exam_end_time).toLocaleString('vi-VN')}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid gap-3 border-t border-[#ead9bd] pt-6 sm:grid-cols-3">
+                <button type="button" onClick={() => router.push('/exam-room')} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-[#d5b477] bg-[#fff8ec] px-4 py-3 text-sm font-black text-[#6f563f] transition hover:border-[#c99722] hover:text-[#b9231a]">
+                  <FiAward size={17} /> Sảnh phòng thi
+                </button>
+                <button type="button" onClick={() => router.push('/lich-su?type=room')} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-[#d5b477] bg-[#fff8ec] px-4 py-3 text-sm font-black text-[#6f563f] transition hover:border-[#c99722] hover:text-[#b9231a]">
+                  <FiClock size={17} /> Lịch sử thi
+                </button>
+                <button type="button" onClick={() => router.push('/')} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#bd2118] to-[#d52a1e] px-4 py-3 text-sm font-black text-white shadow-lg shadow-red-900/15 transition hover:from-[#a91d16] hover:to-[#c3261c]">
+                  <FiHome size={17} /> Về trang chủ
+                </button>
+              </div>
+            </div>
+          </section>
+        </main>
       </InkResultBackground>
     );
   }
@@ -417,6 +469,7 @@ function ExamResultContent() {
   const accuracy = Math.round(score100);
 
   const gradeLabel = accuracy >= 85 ? 'Xuất sắc!' : accuracy >= 60 ? 'Đạt yêu cầu' : accuracy >= 40 ? 'Cần cố gắng' : 'Chưa đạt';
+  const gradeChineseLabel = accuracy >= 85 ? '成绩优异' : accuracy >= 60 ? '顺利通过' : accuracy >= 40 ? '继续努力' : '再接再厉';
 
   // Pie chart data
   const pieData = [
@@ -447,14 +500,20 @@ function ExamResultContent() {
           @page { size: A4; margin: 1.5cm; }
         }
       `}</style>
-      {/* Minimal Header - chỉ nút quay lại */}
-      <div className="sticky top-0 z-[60] bg-[#fffaf2]/90 backdrop-blur-md border-b border-[#ead9bd]/80 px-4 py-3 flex items-center gap-3 no-print dark:bg-gray-900/95 dark:border-gray-800">
+      <div className="sticky top-0 z-[60] flex items-center gap-3 border-b border-[#d9bd8c]/80 bg-[#fffaf2]/92 px-4 py-3 backdrop-blur-md no-print dark:border-gray-800 dark:bg-gray-900/95">
         <button
           onClick={() => router.back()}
-          className="flex items-center gap-2 text-gray-600 hover:text-purple-650 dark:text-gray-300 dark:hover:text-purple-400 transition-colors font-medium text-sm"
+          className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold text-[#6f563f] transition-colors hover:bg-[#f7e8d3] hover:text-[#b9231a] dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-rose-400"
         >
           <FiArrowLeft size={18} /> Quay lại
         </button>
+        <div className="hidden items-center gap-3 sm:flex">
+          <span className="flex h-8 w-8 items-center justify-center rounded-sm bg-[#c91e16] text-[10px] font-black text-white shadow-sm">榜</span>
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#b77b1f]">考试结果</p>
+            <p className="text-xs font-black text-[#4f3521] dark:text-slate-100">Kết quả bài thi</p>
+          </div>
+        </div>
         <div className="flex-1" />
         {result?.allow_download && (
           <a
@@ -478,10 +537,10 @@ function ExamResultContent() {
           </button>
         )}
       </div>
-      <main className="container mx-auto px-4 py-6 max-w-[1360px]">
+      <main className="container mx-auto max-w-[1360px] px-4 py-6">
 
         {/* Tab Navigation */}
-        <div className="flex gap-2 mb-6 no-print">
+        <div className="mb-6 flex w-fit max-w-full gap-1.5 overflow-x-auto rounded-2xl border border-[#ddc498] bg-[#fffaf2]/80 p-1.5 shadow-[0_10px_32px_rgba(129,77,33,0.10)] backdrop-blur no-print">
           {[
             { key: 'result', label: '📊 Kết quả', icon: FiBarChart2 },
             { key: 'review', label: '📝 Xem lại bài', icon: FiPrinter },
@@ -492,10 +551,10 @@ function ExamResultContent() {
                 if (tab.key === 'chat') openChatTab();
                 else setActiveTab(tab.key as any);
               }}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all duration-200 ${
+              className={`flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold transition-all duration-200 ${
                 activeTab === tab.key
-                  ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/20'
-                  : 'bg-[#fffaf2]/75 text-[#6f563f] border border-[#ead9bd]/80 hover:bg-[#fff8ec] hover:text-[#d52a1e] dark:bg-gray-900 dark:text-gray-300 dark:border-gray-800 dark:hover:bg-gray-800 dark:hover:text-purple-400'
+                  ? 'bg-gradient-to-r from-[#b9231a] to-[#d52a1e] text-white shadow-lg shadow-red-900/15'
+                  : 'text-[#6f563f] hover:bg-[#f7e8d3] hover:text-[#b9231a] dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-rose-400'
               }`}>
               <tab.icon size={16} />
               {tab.label}
@@ -504,22 +563,23 @@ function ExamResultContent() {
         </div>
 
         {result.has_solution_file && (
-          <section className="mb-6 overflow-hidden rounded-3xl border-2 border-emerald-300 bg-gradient-to-br from-emerald-50 via-white to-teal-50 p-5 shadow-[0_18px_45px_rgba(5,150,105,0.16)] dark:border-emerald-500/45 dark:from-emerald-950/60 dark:via-slate-950 dark:to-teal-950/45 dark:shadow-none sm:p-7">
+          <section className="relative mb-6 overflow-hidden rounded-3xl border-2 border-[#d6b477] bg-gradient-to-br from-[#fff0df] via-[#fffaf2] to-[#f7ead1] p-5 shadow-[0_18px_45px_rgba(129,77,33,0.15)] dark:border-amber-700/50 dark:from-amber-950/45 dark:via-slate-950 dark:to-red-950/30 dark:shadow-none sm:p-7">
+            <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full border-[20px] border-[#d52a1e]/[0.06]" />
             <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex items-start gap-4">
-                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-emerald-600 text-white shadow-lg shadow-emerald-600/25 sm:h-16 sm:w-16">
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#a91d16] to-[#d52a1e] text-white shadow-lg shadow-red-900/20 sm:h-16 sm:w-16">
                   <FiBookOpen size={30} />
                 </div>
                 <div>
-                  <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-300">Đã có file lời giải</p>
-                  <h2 className="mt-1 text-2xl font-black tracking-tight text-slate-950 dark:text-white sm:text-3xl">Đối chiếu đề và lời giải PDF</h2>
+                  <p className="text-xs font-black uppercase tracking-[0.18em] text-[#b77b1f] dark:text-amber-300">参考答案 · Đã có lời giải</p>
+                  <h2 className="mt-1 text-2xl font-black tracking-tight text-[#4f3521] dark:text-white sm:text-3xl">Đối chiếu đề và lời giải PDF</h2>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={openSolutionComparison}
                 disabled={openingSolution}
-                className="inline-flex min-h-14 shrink-0 items-center justify-center gap-3 rounded-2xl bg-emerald-600 px-6 py-4 text-base font-black text-white shadow-lg shadow-emerald-600/25 transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex min-h-14 shrink-0 items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-[#b9231a] to-[#d52a1e] px-6 py-4 text-base font-black text-white shadow-lg shadow-red-900/20 transition hover:from-[#a51e17] hover:to-[#c4261c] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {openingSolution ? <FiRefreshCw className="animate-spin" size={20} /> : <FiFileText size={20} />}
                 {openingSolution ? 'Đang tải hai file...' : 'Xem lời giải ngay'}
@@ -533,25 +593,36 @@ function ExamResultContent() {
           <div className="space-y-5">
 
             {/* Top Section: Score + Pie + Guidance */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+            <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.08fr_0.92fr_1fr]">
 
               {/* Left: Score Card */}
-              <div className={`rounded-[28px] p-6 transition-all hover:shadow-[0_28px_80px_rgba(129,77,33,0.18)] ${inkResultPanel}`}>
-                <div className="text-center mb-4">
-                  <p className={`text-xs font-bold uppercase tracking-wider mb-2 ${inkResultMuted}`}>{result.exam_title}</p>
+              <div className={`relative overflow-hidden rounded-[28px] border-2 border-[#d6b477] p-6 transition-all hover:shadow-[0_28px_80px_rgba(129,77,33,0.20)] ${inkResultPanel}`}>
+                <div className="pointer-events-none absolute -right-14 -top-14 h-36 w-36 rounded-full border-[24px] border-[#d52a1e]/[0.05]" />
+                <div className="pointer-events-none absolute left-5 top-5 h-5 w-5 border-l-2 border-t-2 border-[#c99722]/60" />
+                <div className="pointer-events-none absolute bottom-5 right-5 h-5 w-5 border-b-2 border-r-2 border-[#c99722]/60" />
+                <div className="relative mb-4 text-center">
+                  <div className="mx-auto mb-3 flex w-fit items-center gap-2 rounded-full border border-[#d8b87f] bg-[#fff7e9]/85 px-3 py-1.5">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-sm bg-[#c91e16] text-[9px] font-black text-white">考</span>
+                    <span className="text-[11px] font-black uppercase tracking-[0.18em] text-[#9a681c]">考试成绩 · Kết quả</span>
+                  </div>
+                  <p className={`mx-auto line-clamp-2 max-w-sm text-sm font-black leading-5 ${inkResultTitle}`}>{result.exam_title}</p>
                   <InkScoreMark value={score100.toFixed(1)} />
                   <p className={`text-lg font-black sm:text-xl ${inkResultScore}`}>/100 điểm</p>
+                  <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+                    <span className="rounded-full bg-[#d52a1e] px-3 py-1.5 text-xs font-black text-white shadow-sm">{gradeChineseLabel}</span>
+                    <span className="rounded-full border border-[#d8b87f] bg-[#fff7e9] px-3 py-1.5 text-xs font-black text-[#9a681c]">{gradeLabel}</span>
+                  </div>
                   <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-[#ead9bd]/80 bg-[#f7efe4]/75 px-4 py-2 text-sm font-black text-[#6f563f]">
                     <span>Thang 10</span>
                     <span className={inkResultScore}>{score10.toFixed(2)}/10</span>
                   </div>
                 </div>
-                <div className="w-full bg-[#e8ddd1]/85 rounded-full h-3 overflow-hidden mb-3">
-                  <div className="h-full bg-[#d52a1e] rounded-full transition-all duration-700"
+                <div className="mb-3 h-3 w-full overflow-hidden rounded-full border border-[#ddc498]/70 bg-[#e8ddd1]/85">
+                  <div className="h-full rounded-full bg-gradient-to-r from-[#c99722] via-[#dc6e2c] to-[#d52a1e] transition-all duration-700"
                     style={{ width: `${accuracy}%` }} />
                 </div>
-                <p className={`text-center text-sm font-bold ${inkResultScore}`}>
-                  {accuracy}% {gradeLabel}
+                <p className={`text-center text-sm font-bold ${inkResultMuted}`}>
+                  Hoàn thành <span className={inkResultScore}>{accuracy}%</span> tổng điểm
                 </p>
                 <div className={`mt-4 flex items-center justify-center gap-2 text-xs ${inkResultMuted}`}>
                   <FiClock size={12} />
@@ -559,9 +630,9 @@ function ExamResultContent() {
                 </div>
                 <div className="mt-5 grid grid-cols-3 gap-2">
                   {[
-                    { label: 'Đúng', value: totalCorrect, tone: 'bg-emerald-50/70 text-emerald-700 border-emerald-200/70' },
-                    { label: 'Sai', value: totalIncorrect, tone: 'bg-rose-50/72 text-rose-700 border-rose-200/70' },
-                    { label: 'Bỏ qua', value: totalUnanswered, tone: 'bg-stone-100/70 text-stone-700 border-stone-200/75' },
+                    { label: 'Đúng', value: totalCorrect, tone: 'bg-[#f3f7ea]/80 text-[#53752e] border-[#cfdbb9]' },
+                    { label: 'Sai', value: totalIncorrect, tone: 'bg-[#fff0eb]/80 text-[#b9231a] border-[#efc3b8]' },
+                    { label: 'Bỏ qua', value: totalUnanswered, tone: 'bg-[#f4eee5]/80 text-[#786653] border-[#dfd0bd]' },
                   ].map((item) => (
                     <div key={item.label} className={`rounded-2xl border px-3 py-2 text-center ${item.tone}`}>
                       <p className="text-lg font-black leading-none">{item.value}</p>
@@ -584,8 +655,11 @@ function ExamResultContent() {
               </div>
 
               {/* Middle: Pie Chart */}
-              <div className={`rounded-[28px] p-6 flex flex-col items-center justify-start transition-all hover:shadow-[0_20px_60px_rgba(129,77,33,0.14)] ${inkResultSoftPanel}`}>
-                <p className={`text-xs font-bold uppercase tracking-wider mb-3 ${inkResultMuted}`}>Phân bố đáp án</p>
+              <div className={`flex flex-col items-center justify-start rounded-[28px] p-6 transition-all hover:shadow-[0_20px_60px_rgba(129,77,33,0.14)] ${inkResultSoftPanel}`}>
+                <div className="mb-3 text-center">
+                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#b77b1f]">答题概览</p>
+                  <p className={`mt-1 text-xs font-bold uppercase tracking-wider ${inkResultMuted}`}>Phân bố đáp án</p>
+                </div>
                 <div className="relative" style={{ width: '160px', height: '160px' }}>
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
@@ -638,100 +712,112 @@ function ExamResultContent() {
 
               {/* Right: Guidance Cards */}
               <div className="space-y-3">
-                <p className={`text-xs font-bold uppercase tracking-wider px-1 ${inkResultMuted}`}>Bạn muốn làm gì tiếp?</p>
+                <div className="flex items-center justify-between px-1">
+                  <p className={`text-xs font-bold uppercase tracking-wider ${inkResultMuted}`}>Bước tiếp theo</p>
+                  <span className="text-xs font-black tracking-[0.18em] text-[#b77b1f]">下一步</span>
+                </div>
 
                 <button
                   onClick={() => setActiveTab('review')}
-                  className={`w-full rounded-2xl p-4 text-left transition-all duration-200 group hover:border-[#d9b784] hover:shadow-md ${inkResultButtonPanel}`}>
+                  className={`group w-full rounded-2xl p-4 text-left transition-all duration-200 hover:border-[#c99722] hover:shadow-md ${inkResultButtonPanel}`}>
                   <div className="flex items-center gap-3.5">
-                    <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-sky-605 rounded-xl flex items-center justify-center shrink-0 shadow-md shadow-blue-500/20 group-hover:scale-105 transition-transform duration-205">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#9f1d16] to-[#d52a1e] shadow-md shadow-red-900/15 transition-transform duration-200 group-hover:scale-105">
                       <FiBookOpen className="text-white" size={16} />
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-bold text-gray-950 dark:text-white text-sm group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">Xem lại bài</p>
-                      <p className="text-xs text-gray-400 dark:text-gray-505 mt-0.5 truncate">Kiểm tra đáp án, đọc giải thích từng câu</p>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-black text-[#4f3521] transition-colors group-hover:text-[#b9231a] dark:text-white">Xem lại bài</p>
+                      <p className={`mt-0.5 truncate text-xs ${inkResultMuted}`}>Kiểm tra đáp án và giải thích từng câu</p>
                     </div>
-                    <span className="text-blue-400 dark:text-blue-505 text-sm font-bold group-hover:translate-x-1 transition-transform duration-200">→</span>
+                    <span className="text-sm font-bold text-[#c99722] transition-transform duration-200 group-hover:translate-x-1">→</span>
                   </div>
                 </button>
 
                 {!result.is_room_exam && <button
                   onClick={openChatTab}
-                  className={`w-full rounded-2xl p-4 text-left transition-all duration-200 group hover:border-[#d9b784] hover:shadow-md ${inkResultButtonPanel}`}>
+                  className={`group w-full rounded-2xl p-4 text-left transition-all duration-200 hover:border-[#c99722] hover:shadow-md ${inkResultButtonPanel}`}>
                   <div className="flex items-center gap-3.5">
-                    <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-605 rounded-xl flex items-center justify-center shrink-0 shadow-md shadow-purple-500/20 group-hover:scale-105 transition-transform duration-205">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#665347] to-[#92745d] shadow-md shadow-stone-900/10 transition-transform duration-200 group-hover:scale-105">
                       <FiCpu className="text-white" size={16} />
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-bold text-gray-955 dark:text-white text-sm group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors">Hỏi AI</p>
-                      <p className="text-xs text-gray-400 dark:text-gray-505 mt-0.5 truncate">Nhờ AI giải thích, hỏi mẹo làm bài</p>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-black text-[#4f3521] transition-colors group-hover:text-[#b9231a] dark:text-white">Hỏi AI</p>
+                      <p className={`mt-0.5 truncate text-xs ${inkResultMuted}`}>Nhờ AI giải thích và gợi ý cách làm</p>
                     </div>
-                    <span className="text-purple-400 dark:text-purple-505 text-sm font-bold group-hover:translate-x-1 transition-transform duration-200">→</span>
+                    <span className="text-sm font-bold text-[#c99722] transition-transform duration-200 group-hover:translate-x-1">→</span>
+                  </div>
+                </button>}
+
+                {result.is_room_exam && <button
+                  onClick={() => router.push('/lich-su?type=room')}
+                  className="group w-full rounded-2xl border border-[#d5b477] bg-gradient-to-r from-[#fff4df]/95 to-[#fffaf2]/90 p-4 text-left shadow-[0_10px_28px_rgba(154,104,28,0.10)] transition-all duration-200 hover:border-[#c99722] hover:shadow-md dark:border-amber-800/60 dark:from-amber-950/35 dark:to-slate-900"
+                >
+                  <div className="flex items-center gap-3.5">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#b77b1f] to-[#d5a03b] text-white shadow-md shadow-amber-900/15 transition-transform duration-200 group-hover:scale-105">
+                      <FiClock size={16} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-black text-[#6f451b] transition-colors group-hover:text-[#b9231a] dark:text-amber-100">Lịch sử thi của tôi</p>
+                      <p className="mt-0.5 truncate text-xs text-[#9a7956] dark:text-amber-200/70">Tìm lại các kỳ thi đã tham gia</p>
+                    </div>
+                    <span className="text-sm font-bold text-[#c99722] transition-transform duration-200 group-hover:translate-x-1">→</span>
                   </div>
                 </button>}
 
                 <button
-                  onClick={() => router.push('/')}
-                  className={`w-full rounded-2xl p-4 text-left transition-all duration-200 group hover:border-[#d9b784] hover:shadow-md ${inkResultButtonPanel}`}>
+                  onClick={() => router.push(result.is_room_exam ? '/exam-room' : '/')}
+                  className={`group w-full rounded-2xl p-4 text-left transition-all duration-200 hover:border-[#c99722] hover:shadow-md ${inkResultButtonPanel}`}>
                   <div className="flex items-center gap-3.5">
-                    <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-605 rounded-xl flex items-center justify-center shrink-0 shadow-md shadow-emerald-500/20 group-hover:scale-105 transition-transform duration-205">
-                      <FiCheckCircle className="text-white" size={16} />
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#56734a] to-[#789264] shadow-md shadow-green-900/15 transition-transform duration-200 group-hover:scale-105">
+                      {result.is_room_exam ? <FiAward className="text-white" size={16} /> : <FiCheckCircle className="text-white" size={16} />}
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-bold text-gray-955 dark:text-white text-sm group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">Làm bài mới</p>
-                      <p className="text-xs text-gray-400 dark:text-gray-505 mt-0.5 truncate">Tiếp tục luyện tập với đề khác</p>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-black text-[#4f3521] transition-colors group-hover:text-[#b9231a] dark:text-white">{result.is_room_exam ? 'Về sảnh phòng thi' : 'Làm bài mới'}</p>
+                      <p className={`mt-0.5 truncate text-xs ${inkResultMuted}`}>{result.is_room_exam ? 'Xem lịch thi và bảng xếp hạng' : 'Tiếp tục luyện tập với đề khác'}</p>
                     </div>
-                    <span className="text-emerald-400 dark:text-emerald-505 text-sm font-bold group-hover:translate-x-1 transition-transform duration-200">→</span>
+                    <span className="text-sm font-bold text-[#c99722] transition-transform duration-200 group-hover:translate-x-1">→</span>
                   </div>
                 </button>
 
-                <button
+                {!result.is_room_exam && <button
                   onClick={handleCreateWrongPractice}
                   disabled={actionLoading === 'wrong'}
-                  className={`w-full rounded-2xl p-4 text-left transition-all duration-200 group hover:border-[#d9b784] hover:shadow-md disabled:opacity-60 ${inkResultButtonPanel}`}>
+                  className={`group w-full rounded-2xl p-4 text-left transition-all duration-200 hover:border-[#c99722] hover:shadow-md disabled:opacity-60 ${inkResultButtonPanel}`}>
                   <div className="flex items-center gap-3.5">
-                    <div className="w-10 h-10 bg-gradient-to-br from-red-500 to-rose-605 rounded-xl flex items-center justify-center shrink-0 shadow-md shadow-red-500/20 group-hover:scale-105 transition-transform duration-205">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#c7522f] to-[#d97943] shadow-md shadow-orange-900/15 transition-transform duration-200 group-hover:scale-105">
                       <FiRotateCw className="text-white" size={16} />
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-bold text-gray-955 dark:text-white text-sm group-hover:text-red-600 dark:group-hover:text-red-400 transition-colors">Luyện lại 20 câu sai</p>
-                      <p className="text-xs text-gray-400 dark:text-gray-505 mt-0.5 truncate">Tạo bộ luyện từ các câu bạn hay sai gần đây</p>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-black text-[#4f3521] transition-colors group-hover:text-[#b9231a] dark:text-white">Luyện lại 20 câu sai</p>
+                      <p className={`mt-0.5 truncate text-xs ${inkResultMuted}`}>Tạo bộ luyện từ các câu thường sai</p>
                     </div>
-                    <span className="text-red-400 dark:text-red-505 text-sm font-bold group-hover:translate-x-1 transition-transform duration-200">→</span>
+                    <span className="text-sm font-bold text-[#c99722] transition-transform duration-200 group-hover:translate-x-1">→</span>
                   </div>
-                </button>
+                </button>}
 
-                <button
+                {!result.is_room_exam && <button
                   onClick={handleCreateWeakTopicPractice}
                   disabled={actionLoading === 'weak-topic'}
-                  className={`w-full rounded-2xl p-4 text-left transition-all duration-200 group hover:border-[#d9b784] hover:shadow-md disabled:opacity-60 ${inkResultButtonPanel}`}>
+                  className={`group w-full rounded-2xl p-4 text-left transition-all duration-200 hover:border-[#c99722] hover:shadow-md disabled:opacity-60 ${inkResultButtonPanel}`}>
                   <div className="flex items-center gap-3.5">
-                    <div className="w-10 h-10 bg-gradient-to-br from-amber-500 to-yellow-605 rounded-xl flex items-center justify-center shrink-0 shadow-md shadow-amber-500/20 group-hover:scale-105 transition-transform duration-205">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#b77b1f] to-[#d5a03b] shadow-md shadow-amber-900/15 transition-transform duration-200 group-hover:scale-105">
                       <FiBarChart2 className="text-white" size={16} />
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-bold text-gray-955 dark:text-white text-sm group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors">Luyện chủ đề yếu</p>
-                      <p className="text-xs text-gray-400 dark:text-gray-550 mt-0.5 truncate">Tập trung vào nhóm kiến thức sai nhiều</p>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-black text-[#4f3521] transition-colors group-hover:text-[#b9231a] dark:text-white">Luyện chủ đề yếu</p>
+                      <p className={`mt-0.5 truncate text-xs ${inkResultMuted}`}>Tập trung vào nhóm kiến thức sai nhiều</p>
                     </div>
-                    <span className="text-amber-400 dark:text-amber-505 text-sm font-bold group-hover:translate-x-1 transition-transform duration-200">→</span>
+                    <span className="text-sm font-bold text-[#c99722] transition-transform duration-200 group-hover:translate-x-1">→</span>
                   </div>
-                </button>
+                </button>}
 
                 {/* Quick Links */}
-                <div className="pt-2 border-t border-[#ead9bd]/70">
-                  <p className={`text-xs font-bold uppercase tracking-wide mb-2 px-1 ${inkResultMuted}`}>Xem thêm</p>
-                  <div className="flex flex-col gap-1.5">
-                    <button
-                      onClick={() => router.push('/lich-su')}
-                      className="text-xs text-gray-500 hover:text-indigo-600 transition-colors flex items-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-indigo-50 dark:text-gray-400 dark:hover:bg-indigo-950/20 dark:hover:text-indigo-400 text-left">
-                      📋 Lịch sử làm bài
-                    </button>
-                    <button
-                      onClick={() => router.push('/lich-su/thong-ke')}
-                      className="text-xs text-gray-500 hover:text-indigo-600 transition-colors flex items-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-indigo-50 dark:text-gray-400 dark:hover:bg-indigo-950/20 dark:hover:text-indigo-400 text-left">
-                      📊 Thống kê chi tiết
-                    </button>
-                  </div>
+                <div className="border-t border-[#ead9bd]/70 pt-2">
+                  <button
+                    onClick={() => router.push(result.is_room_exam ? '/' : '/lich-su')}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-[#7d6957] transition hover:bg-[#f7e8d3] hover:text-[#b9231a] dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-rose-400"
+                  >
+                    {result.is_room_exam ? <><FiHome size={14} /> Về trang chủ</> : <><FiClock size={14} /> Xem lịch sử làm bài</>}
+                  </button>
                 </div>
               </div>
             </div>

@@ -42,6 +42,7 @@ export default function ExamRoomPage() {
   const [leaderboard, setLeaderboard] = useState<OfficialExamLeaderboardEntry[]>([]);
   const [leaderboardLoading, setLeaderboardLoading] = useState(true);
 
+  const liveExamsRef = useRef<HTMLElement>(null);
   const upcomingExamsRef = useRef<HTMLElement>(null);
   const latestLeaderboardRef = useRef<HTMLElement>(null);
 
@@ -128,6 +129,10 @@ export default function ExamRoomPage() {
     upcomingExamsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
+  const scrollToLiveExams = () => {
+    liveExamsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   const scrollToLatestLeaderboard = () => {
     latestLeaderboardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
@@ -190,8 +195,20 @@ export default function ExamRoomPage() {
           </div>
         </div>
 
+        <nav aria-label="Điều hướng phòng thi" className="-mt-6 flex flex-wrap items-center gap-2 rounded-2xl border border-gray-100 bg-white p-2 shadow-sm">
+          <button type="button" onClick={scrollToLiveExams} className="min-h-10 rounded-xl bg-rose-600 px-4 py-2 text-sm font-black text-white shadow-sm transition hover:bg-rose-700">
+            Đang diễn ra
+          </button>
+          <button type="button" onClick={scrollToUpcomingExams} className="min-h-10 rounded-xl px-4 py-2 text-sm font-black text-gray-600 transition hover:bg-orange-50 hover:text-orange-700">
+            Sắp tới
+          </button>
+          <Link href="/lich-su?type=room" className="inline-flex min-h-10 items-center rounded-xl px-4 py-2 text-sm font-black text-gray-600 transition hover:bg-indigo-50 hover:text-indigo-700">
+            Lịch sử của tôi
+          </Link>
+        </nav>
+
         {/* ── LIVE EXAMS ────────────────────────────────────────── */}
-        <section>
+        <section ref={liveExamsRef} className="scroll-mt-24">
           <div className="flex items-center justify-between mb-6">
              <div className="flex items-center gap-3">
                <div className="p-2.5 rounded-xl bg-rose-100 text-rose-600">

@@ -322,6 +322,7 @@ export interface RoomExamSchedule {
     id: number;
     title: string;
     status: string;
+    duration: number;
     start_time: string | null;
     end_time: string | null;
     max_participants: number;

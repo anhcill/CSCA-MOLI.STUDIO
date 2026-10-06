@@ -5,6 +5,7 @@ const { cache, TTL } = require("../config/cache");
 const { checkVipContentAccess } = require("../middleware/authMiddleware");
 const insightService = require("../services/insightService");
 const { pool } = require("../config/database");
+const { getAttemptDeadline, getTimeLeftSeconds } = require("../utils/examTiming");
 
 function sanitizeQuestionForAttempt(question) {
   const {
@@ -586,12 +587,16 @@ const examController = {
       const savedAnswers = existingAttempt
         ? await ExamAttempt.getSavedAnswers(attempt.id)
         : [];
-      const elapsedSeconds = attempt.start_time
-        ? Math.max(0, Math.floor((Date.now() - new Date(attempt.start_time).getTime()) / 1000))
-        : 0;
+      const timing = {
+        examStartTime: exam.start_time,
+        examEndTime: exam.end_time,
+        attemptStartTime: attempt.start_time,
+        durationMinutes: exam.duration,
+      };
+      const deadline = practiceMode ? null : getAttemptDeadline(timing);
       const timeLeftSeconds = practiceMode
         ? null
-        : Math.max(0, (Number(exam.duration) || 0) * 60 - elapsedSeconds);
+        : getTimeLeftSeconds(timing);
 
       // Log hành vi bắt đầu thi
       UserActivity.log(userId, 'exam_start', {
@@ -642,6 +647,7 @@ const examController = {
           practiceMode,
           pdfWorkspace,
           timeLeftSeconds,
+          deadlineAt: deadline === null ? null : new Date(deadline).toISOString(),
         },
       });
     } catch (error) {
@@ -881,12 +887,15 @@ const examController = {
     try {
       const userId = req.user.id;
       const { subjectCode } = req.query;
-      const limit = parseInt(req.query.limit) || 10;
+      const requestedType = String(req.query.type || '').toLowerCase();
+      const historyType = ['room', 'practice'].includes(requestedType) ? requestedType : null;
+      const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 10));
 
       const history = await ExamAttempt.getUserHistory(
         userId,
         subjectCode,
-        limit
+        limit,
+        historyType,
       );
 
       res.json({
@@ -927,7 +936,7 @@ const examController = {
       console.error("Delete history attempt error:", error);
       res.status(error.statusCode || 500).json({
         success: false,
-        message: error.statusCode === 404 ? "Khong tim thay lich su thi" : "Loi khi xoa lich su thi",
+        message: error.statusCode ? error.message : "Loi khi xoa lich su thi",
         error: error.message,
       });
     }

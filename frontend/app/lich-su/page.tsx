@@ -30,6 +30,7 @@ interface HistoryItem {
   submitted_at?: string | null;
   submit_time?: string | null;
   attempt_number: number;
+  is_room_exam?: boolean;
   review_locked?: boolean;
   exam_end_time?: string | null;
 }
@@ -129,6 +130,8 @@ export default function LichSuPage() {
   const { t, format } = useLanguage();
   const searchParams = useSearchParams();
   const subjectParam = searchParams.get('subject');
+  const rawTypeParam = searchParams.get('type');
+  const historyType = rawTypeParam === 'room' || rawTypeParam === 'practice' ? rawTypeParam : 'all';
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [filtered, setFiltered] = useState<HistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -140,7 +143,7 @@ export default function LichSuPage() {
   useEffect(() => {
     if (isAuthenticated) loadHistory();
     else setLoading(false);
-  }, [isAuthenticated]);
+  }, [isAuthenticated, subjectParam, historyType]);
 
   useEffect(() => {
     setFiltered(history);
@@ -154,7 +157,11 @@ export default function LichSuPage() {
       const subjectCode = subjectParam
         ? (SUBJECT_SLUG_TO_CODE[subjectParam] || subjectParam.toUpperCase())
         : undefined;
-      const data = await examApi.getHistory(subjectCode, 100);
+      const data = await examApi.getHistory(
+        subjectCode,
+        100,
+        historyType === 'all' ? undefined : historyType,
+      );
       setHistory(data || []);
     } catch (e) {
       console.error(e);
@@ -175,6 +182,14 @@ export default function LichSuPage() {
   const totalPages = Math.ceil(displayFiltered.length / PER_PAGE);
   const paged = displayFiltered.slice((page - 1) * PER_PAGE, page * PER_PAGE);
   const subjects = ['ALL', ...Array.from(new Set(history.map(h => h.subject_code).filter(Boolean)))];
+
+  const updateFilter = (key: 'type' | 'subject', value?: string) => {
+    const url = new URL(window.location.href);
+    if (value) url.searchParams.set(key, value);
+    else url.searchParams.delete(key);
+    const query = url.searchParams.toString();
+    router.push(query ? `${url.pathname}?${query}` : url.pathname);
+  };
 
   const handleDeleteAttempt = async (item: HistoryItem) => {
     if (deletingAttemptId) return;
@@ -273,7 +288,30 @@ export default function LichSuPage() {
         <StatCard icon={FiCheckCircle} label={t('history.passedAttempts')} value={displayFiltered.filter(attemptPassed).length} color="bg-emerald-500" />
       </div>
 
-      {/* Filter tabs */}
+      {/* Primary history type: subject remains a secondary filter below. */}
+      <div className="rounded-2xl border border-gray-100 bg-white p-2 shadow-sm">
+        <div className="flex flex-wrap gap-2">
+          {[
+            { value: 'all', label: 'Tất cả', icon: '📋' },
+            { value: 'room', label: 'Phòng thi', icon: '🏢' },
+            { value: 'practice', label: 'Luyện tập', icon: '📚' },
+          ].map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => updateFilter('type', option.value === 'all' ? undefined : option.value)}
+              className={`min-h-10 rounded-xl px-4 py-2 text-sm font-black transition-all ${historyType === option.value
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'text-gray-600 hover:bg-indigo-50 hover:text-indigo-700'
+              }`}
+            >
+              {option.icon} {option.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Secondary subject filter */}
       {!subjectParam && (
         <div className="flex flex-wrap gap-2">
           {subjects.map(s => {
@@ -283,10 +321,7 @@ export default function LichSuPage() {
               <button
                 key={s}
                 onClick={() => {
-                  const url = new URL(window.location.href);
-                  if (s === 'ALL') url.searchParams.delete('subject');
-                  else url.searchParams.set('subject', s);
-                  window.location.href = url.toString();
+                  updateFilter('subject', s === 'ALL' ? undefined : s);
                 }}
                 className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all ${isActive
                     ? 'border-indigo-600 bg-indigo-600 text-white shadow-sm'
@@ -356,9 +391,12 @@ export default function LichSuPage() {
                 >
                   <div className="col-span-4 min-w-0">
                     <p className="truncate text-sm font-semibold leading-snug text-gray-900">{item.exam_title || `Đề #${item.exam_id}`}</p>
-                    <div className="mt-1 flex items-center gap-2">
+                    <div className="mt-1 flex flex-wrap items-center gap-2">
                       <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${meta.bg} ${meta.color}`}>
                         {meta.emoji} {item.subject_name || item.subject_code}
+                      </span>
+                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${item.is_room_exam ? 'bg-rose-50 text-rose-700' : 'bg-sky-50 text-sky-700'}`}>
+                        {item.is_room_exam ? 'Phòng thi' : 'Luyện tập'}
                       </span>
                       <span className="flex items-center gap-1 text-[11px] text-gray-400">
                         <FiClock size={10} /> {timeAgo(item.submitted_at || item.submit_time || '', t, format)}
@@ -403,24 +441,28 @@ export default function LichSuPage() {
                   </div>
 
                   <div className="col-span-1 flex justify-center">
-                    <button
-                      type="button"
-                      onClick={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        setDeleteTarget(item);
-                      }}
-                      disabled={deletingAttemptId === item.id}
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-rose-500 transition-colors hover:bg-rose-50 hover:text-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
-                      aria-label="Xóa lịch sử thi"
-                      title="Xóa lịch sử thi"
-                    >
-                      {deletingAttemptId === item.id ? (
-                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-rose-200 border-t-rose-600" />
-                      ) : (
-                        <FiTrash2 size={16} />
-                      )}
-                    </button>
+                    {item.is_room_exam ? (
+                      <span className="text-xs font-bold text-gray-300" title="Lịch sử phòng thi được giữ lại để bảo đảm giới hạn một lượt thi">—</span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          setDeleteTarget(item);
+                        }}
+                        disabled={deletingAttemptId === item.id}
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-rose-500 transition-colors hover:bg-rose-50 hover:text-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
+                        aria-label="Xóa lịch sử thi"
+                        title="Xóa lịch sử thi"
+                      >
+                        {deletingAttemptId === item.id ? (
+                          <span className="h-4 w-4 animate-spin rounded-full border-2 border-rose-200 border-t-rose-600" />
+                        ) : (
+                          <FiTrash2 size={16} />
+                        )}
+                      </button>
+                    )}
                   </div>
                 </div>
               );

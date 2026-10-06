@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { FiCalendar, FiRefreshCw, FiSave, FiUsers } from 'react-icons/fi';
+import { FiCalendar, FiClock, FiRefreshCw, FiSave, FiUsers } from 'react-icons/fi';
 import { examAdminApi, RoomExamSchedule } from '@/lib/api/examAdmin';
 
 function toLocalValue(value?: string | null) {
@@ -73,22 +73,41 @@ export default function RoomExamSchedulePanel({
     return <div className="flex min-h-52 items-center justify-center rounded-2xl border bg-white"><FiRefreshCw className="animate-spin text-violet-600" size={26} /></div>;
   }
 
+  const scheduledWindowMinutes = startTime && endTime
+    ? Math.max(0, Math.round((new Date(endTime).getTime() - new Date(startTime).getTime()) / 60000))
+    : 0;
+
   return (
     <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <div className="mb-5">
         <h2 className="flex items-center gap-2 text-lg font-black text-gray-900 dark:text-white"><FiCalendar className="text-violet-600" /> Lịch và giới hạn đăng ký</h2>
-        <p className="mt-1 text-sm text-gray-500">Sau khi mở đăng ký, kỳ thi sẽ hiện tại trang Phòng thi của user cho đến giờ bắt đầu.</p>
+        <p className="mt-1 text-sm text-gray-500">Cài riêng thời lượng của đề và khung giờ mở phòng. Mọi thí sinh đều bị dừng tại cùng giờ kết thúc.</p>
       </div>
 
       {error && <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">{error}</div>}
 
+      <div className="mb-4 grid gap-3 sm:grid-cols-2">
+        <div className="rounded-xl border border-violet-100 bg-violet-50 px-4 py-3">
+          <p className="flex items-center gap-1 text-xs font-bold uppercase tracking-wide text-violet-600"><FiClock /> Thời lượng đề</p>
+          <p className="mt-1 text-lg font-black text-violet-950">{schedule?.duration || 0} phút</p>
+        </div>
+        <div className={`rounded-xl border px-4 py-3 ${scheduledWindowMinutes && scheduledWindowMinutes !== Number(schedule?.duration || 0) ? 'border-amber-200 bg-amber-50' : 'border-emerald-100 bg-emerald-50'}`}>
+          <p className={`text-xs font-bold uppercase tracking-wide ${scheduledWindowMinutes && scheduledWindowMinutes !== Number(schedule?.duration || 0) ? 'text-amber-700' : 'text-emerald-700'}`}>Khung giờ phòng thi</p>
+          <p className="mt-1 text-lg font-black text-gray-950">{scheduledWindowMinutes ? `${scheduledWindowMinutes} phút` : 'Chưa đặt'}</p>
+        </div>
+      </div>
+
+      <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold leading-6 text-amber-900">
+        Học sinh vào muộn sẽ chỉ còn thời gian đến mốc <strong>Thời gian kết thúc</strong>. Ví dụ phòng 08:00–09:00, vào lúc 08:10 thì còn 50 phút.
+      </div>
+
       <div className="grid gap-4 md:grid-cols-2">
         <label className="text-sm font-bold text-gray-700 dark:text-slate-200">
-          Bắt đầu thi *
+          Thời gian bắt đầu *
           <input type="datetime-local" value={startTime} onChange={(event) => setStartTime(event.target.value)} className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2.5 outline-none focus:ring-2 focus:ring-violet-500" />
         </label>
         <label className="text-sm font-bold text-gray-700 dark:text-slate-200">
-          Kết thúc thi *
+          Thời gian kết thúc *
           <input type="datetime-local" value={endTime} onChange={(event) => setEndTime(event.target.value)} className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2.5 outline-none focus:ring-2 focus:ring-violet-500" />
         </label>
         <label className="text-sm font-bold text-gray-700 dark:text-slate-200">

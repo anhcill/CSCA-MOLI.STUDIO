@@ -4366,7 +4366,7 @@ const AdminExamController = {
     try {
       const { examId } = req.params;
       const result = await pool.query(
-        `SELECT id, title, status, start_time, end_time, max_participants,
+        `SELECT id, title, status, duration, start_time, end_time, max_participants,
                 (SELECT json_agg(l ORDER BY l.changed_at DESC) FROM (
                   SELECT changed_by_name, old_start_time, old_end_time, new_start_time, new_end_time, reason, changed_at
                   FROM exam_schedule_logs WHERE exam_id = $1 ORDER BY changed_at DESC LIMIT 10

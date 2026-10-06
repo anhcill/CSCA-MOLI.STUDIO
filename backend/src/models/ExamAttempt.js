@@ -100,8 +100,12 @@ const ExamAttempt = {
        WHERE ea.user_id = $1
          AND ea.exam_id = $2
          AND ea.status = 'in_progress'
-         AND COALESCE(e.duration, 0) > 0
-         AND ea.start_time + (e.duration * INTERVAL '1 minute') <= CURRENT_TIMESTAMP
+         AND CASE
+           WHEN e.start_time IS NOT NULL AND e.end_time IS NOT NULL
+             THEN e.end_time <= CURRENT_TIMESTAMP
+           ELSE COALESCE(e.duration, 0) > 0
+             AND ea.start_time + (e.duration * INTERVAL '1 minute') <= CURRENT_TIMESTAMP
+         END
        ORDER BY ea.start_time ASC, ea.id ASC`,
       [userId, examId],
     );
@@ -283,8 +287,10 @@ const ExamAttempt = {
       // Lấy thông tin câu hỏi để xác định loại
       const contextResult = await client.query(
         `SELECT ea.user_id, ea.status, ea.exam_id, ea.paper_language_mode,
+                e.start_time AS exam_start_time, e.end_time AS exam_end_time,
                 q.question_number, q.question_type, q.points
          FROM exam_attempts ea
+         INNER JOIN exams e ON e.id = ea.exam_id
          INNER JOIN questions q ON q.exam_id = ea.exam_id AND q.id = $2 AND q.deleted_at IS NULL
          WHERE ea.id = $1
          FOR UPDATE OF ea`,
@@ -300,6 +306,16 @@ const ExamAttempt = {
       }
       if (!["in_progress", "practice"].includes(context.status)) {
         throw createAttemptError("Attempt is not editable", 409);
+      }
+      if (
+        context.status === 'in_progress'
+        && context.exam_start_time
+        && context.exam_end_time
+        && new Date(context.exam_end_time).getTime() <= Date.now()
+      ) {
+        const error = createAttemptError("Kỳ thi đã hết giờ; đáp án không thể thay đổi.", 409);
+        error.appCode = 'EXAM_ENDED';
+        throw error;
       }
 
       // Nếu là câu tự luận hoặc dịch thuật → lưu essay_answer, không check đáp án
@@ -691,16 +707,20 @@ const ExamAttempt = {
       await client.query("BEGIN");
 
       const attemptResult = await client.query(
-        `SELECT id, exam_id, user_id
-         FROM exam_attempts
-         WHERE id = $1 AND user_id = $2
-         FOR UPDATE`,
+        `SELECT ea.id, ea.exam_id, ea.user_id, e.start_time AS exam_start_time
+         FROM exam_attempts ea
+         INNER JOIN exams e ON e.id = ea.exam_id
+         WHERE ea.id = $1 AND ea.user_id = $2
+         FOR UPDATE OF ea`,
         [attemptId, userId],
       );
 
       const attempt = attemptResult.rows[0];
       if (!attempt) {
         throw createAttemptError("Attempt not found", 404);
+      }
+      if (attempt.exam_start_time) {
+        throw createAttemptError("Không thể xóa lịch sử của kỳ thi chính thức.", 403);
       }
 
       await client.query(`DELETE FROM ai_insights WHERE attempt_id = $1 AND user_id = $2`, [attemptId, userId]);
@@ -738,7 +758,7 @@ const ExamAttempt = {
     }
   },
 
-  async getUserHistory(userId, subjectCode = null, limit = 10) {
+  async getUserHistory(userId, subjectCode = null, limit = 10, historyType = null) {
     let query = `
       SELECT
         ea.*,
@@ -750,6 +770,7 @@ const ExamAttempt = {
         e.vip_tier,
         e.total_questions,
         e.end_time AS exam_end_time,
+        (e.start_time IS NOT NULL) AS is_room_exam,
         (e.start_time IS NOT NULL AND (e.end_time IS NULL OR e.end_time > CURRENT_TIMESTAMP)) AS review_locked,
         COALESCE(ea.total_possible_score, e.total_points, 0) AS total_possible_score,
         COALESCE(ea.score_percentage,
@@ -769,23 +790,23 @@ const ExamAttempt = {
       INNER JOIN subjects s ON e.subject_id = s.id
       WHERE ea.user_id = $1
         AND ea.status = 'completed'
-        AND (
-          e.start_time IS NULL
-          OR (e.end_time IS NOT NULL AND e.end_time <= CURRENT_TIMESTAMP)
-        )
     `;
 
     const params = [userId];
 
     if (subjectCode) {
-      query += ` AND s.code = $2`;
       params.push(subjectCode);
-      query += ` ORDER BY ea.submit_time DESC LIMIT $3`;
-      params.push(limit);
-    } else {
-      query += ` ORDER BY ea.submit_time DESC LIMIT $2`;
-      params.push(limit);
+      query += ` AND s.code = $${params.length}`;
     }
+
+    if (historyType === 'room') {
+      query += ` AND e.start_time IS NOT NULL`;
+    } else if (historyType === 'practice') {
+      query += ` AND e.start_time IS NULL`;
+    }
+
+    params.push(limit);
+    query += ` ORDER BY ea.submit_time DESC LIMIT $${params.length}`;
 
     const result = await pool.query(query, params);
     return result.rows.map((row) => row.review_locked

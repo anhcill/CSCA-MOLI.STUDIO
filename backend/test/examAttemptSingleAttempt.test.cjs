@@ -50,3 +50,46 @@ test('official exam resumes its existing in-progress attempt', async () => {
     pool.connect = originalConnect;
   }
 });
+
+test('official exam history cannot be deleted to bypass the one-attempt limit', async () => {
+  const originalConnect = pool.connect;
+  const statements = [];
+  pool.connect = async () => ({
+    query: async (sql) => {
+      statements.push(sql);
+      if (sql.includes('SELECT ea.id, ea.exam_id')) {
+        return { rows: [{ id: 43, exam_id: 223, user_id: 7, exam_start_time: new Date() }] };
+      }
+      return { rows: [] };
+    },
+    release() {},
+  });
+
+  try {
+    await assert.rejects(
+      ExamAttempt.deleteHistoryAttempt(43, 7),
+      (error) => error.statusCode === 403,
+    );
+    assert.equal(statements.some((sql) => sql.includes('DELETE FROM exam_attempts')), false);
+  } finally {
+    pool.connect = originalConnect;
+  }
+});
+
+test('room history filter keeps completed official attempts visible while review is locked', async () => {
+  const originalQuery = pool.query;
+  let captured;
+  pool.query = async (sql, params) => {
+    captured = { sql, params };
+    return { rows: [] };
+  };
+
+  try {
+    await ExamAttempt.getUserHistory(7, 'MATH', 100, 'room');
+    assert.deepEqual(captured.params, [7, 'MATH', 100]);
+    assert.match(captured.sql, /e\.start_time IS NOT NULL/);
+    assert.doesNotMatch(captured.sql, /e\.end_time <= CURRENT_TIMESTAMP/);
+  } finally {
+    pool.query = originalQuery;
+  }
+});
