@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { FiBell, FiBookOpen, FiCheck, FiChevronDown, FiClock, FiX } from 'react-icons/fi';
+import { LuAtom, LuCalculator, LuFlaskConical, LuLanguages } from 'react-icons/lu';
+import type { IconType } from 'react-icons';
 import { useAuthStore } from '@/lib/store/authStore';
 import styles from './ExamCountdownNotice.module.css';
 
@@ -68,13 +70,13 @@ const OFFICIAL_EXAM_CALENDAR: LobbyExam[] = OFFICIAL_SESSION_SEEDS.flatMap((sess
   ];
 });
 
-const SUBJECT_META: Record<string, { icon: string; tone: string }> = {
-  MATH: { icon: '📐', tone: 'bg-blue-50 text-blue-700' },
-  PHYSICS: { icon: '⚛', tone: 'bg-emerald-50 text-emerald-700' },
-  CHEMISTRY: { icon: '⚗', tone: 'bg-violet-50 text-violet-700' },
-  CHINESE: { icon: '书', tone: 'bg-rose-50 text-rose-700' },
-  CHINESE_SOC: { icon: '书', tone: 'bg-rose-50 text-rose-700' },
-  CHINESE_SCI: { icon: '书', tone: 'bg-rose-50 text-rose-700' },
+const SUBJECT_META: Record<string, { icon: IconType; tone: string }> = {
+  MATH: { icon: LuCalculator, tone: 'border-blue-200 bg-blue-50 text-blue-700' },
+  PHYSICS: { icon: LuAtom, tone: 'border-emerald-200 bg-emerald-50 text-emerald-700' },
+  CHEMISTRY: { icon: LuFlaskConical, tone: 'border-violet-200 bg-violet-50 text-violet-700' },
+  CHINESE: { icon: LuLanguages, tone: 'border-rose-200 bg-rose-50 text-rose-700' },
+  CHINESE_SOC: { icon: LuLanguages, tone: 'border-rose-200 bg-rose-50 text-rose-700' },
+  CHINESE_SCI: { icon: LuLanguages, tone: 'border-rose-200 bg-rose-50 text-rose-700' },
 };
 
 function getVietnamDayKey(timestamp = Date.now()) {
@@ -159,8 +161,8 @@ function FlipUnit({ value, label, emphasis = false }: { value: number; label: st
   const displayed = String(value).padStart(2, '0');
   return (
     <div className="min-w-0 text-center">
-      <div className={`${styles.flipCard} ${emphasis ? styles.dayCard : ''} px-2 py-3 sm:px-4 sm:py-4`}>
-        <span key={displayed} className={`${styles.flipValue} relative z-[3] text-4xl font-black leading-none text-[#fff1d6] sm:text-6xl`}>
+      <div className={`${styles.flipCard} ${emphasis ? styles.dayCard : ''} px-2 py-2.5 sm:px-4 sm:py-3`}>
+        <span key={displayed} className={`${styles.flipValue} relative z-[3] text-3xl font-black leading-none text-[#fff1d6] sm:text-5xl`}>
           {displayed}
         </span>
       </div>
@@ -315,7 +317,7 @@ export default function ExamCountdownNotice() {
         aria-modal="true"
         aria-labelledby="exam-countdown-title"
         aria-describedby="exam-countdown-description"
-        className={`${styles.noticeBackground} relative my-auto w-full max-w-5xl overflow-hidden rounded-[26px] border border-[#d9b975] shadow-[0_32px_100px_rgba(20,12,5,0.48)]`}
+        className={`${styles.noticeBackground} relative my-auto w-full max-w-4xl overflow-hidden rounded-[22px] border border-[#d9b975] shadow-[0_28px_85px_rgba(20,12,5,0.46)]`}
       >
         <button
           ref={closeButtonRef}
@@ -327,10 +329,10 @@ export default function ExamCountdownNotice() {
           <FiX size={21} />
         </button>
 
-        <div className="relative z-10 px-4 pb-5 pt-20 sm:px-8 sm:pb-8 sm:pt-24 lg:px-16">
-          <header className="mx-auto max-w-3xl text-center">
+        <div className="relative z-10 px-4 pb-4 pt-16 sm:px-7 sm:pb-6 sm:pt-20 lg:px-12">
+          <header className="mx-auto max-w-2xl text-center">
             <p className="text-[11px] font-black uppercase tracking-[0.28em] text-[#b9231a]">Kỳ thi gần nhất</p>
-            <h2 id="exam-countdown-title" className="mt-1 font-serif text-2xl font-black tracking-tight text-[#8f1e18] sm:text-4xl">
+            <h2 id="exam-countdown-title" className="mt-1 font-serif text-2xl font-black tracking-tight text-[#8f1e18] sm:text-3xl">
               KỲ THI CSCA {examMonth}
             </h2>
             <p id="exam-countdown-description" className="mt-1 text-sm font-semibold text-[#5f554b] sm:text-base">
@@ -338,28 +340,29 @@ export default function ExamCountdownNotice() {
             </p>
           </header>
 
-          <div className="mx-auto mt-4 grid max-w-3xl grid-cols-4 gap-2 sm:mt-6 sm:gap-4">
+          <div className="mx-auto mt-3 grid max-w-2xl grid-cols-4 gap-2 sm:mt-4 sm:gap-3">
             <FlipUnit value={countdown.days} label="NGÀY" emphasis />
             <FlipUnit value={countdown.hours} label="GIỜ" />
             <FlipUnit value={countdown.minutes} label="PHÚT" />
             <FlipUnit value={countdown.seconds} label="GIÂY" />
           </div>
 
-          <div className="mx-auto mt-5 max-w-3xl overflow-hidden rounded-2xl border border-[#dfc797] bg-[#fffdf8]/88 shadow-sm backdrop-blur-[2px] sm:mt-7">
+          <div className="mx-auto mt-4 max-w-2xl overflow-hidden rounded-2xl border border-[#dfc797] bg-[#fffdf8]/92 shadow-sm backdrop-blur-[2px] sm:mt-5">
             <div className="flex items-center justify-center gap-2 border-b border-[#eadabd] px-3 py-2.5 text-center text-[10px] font-black uppercase tracking-[0.12em] text-[#a4211a] sm:text-xs">
               <FiClock size={14} /> Lịch thi chính thức CSCA · Giờ Bắc Kinh (UTC+8)
             </div>
-            <div className="max-h-[230px] divide-y divide-[#eee1c9] overflow-y-auto">
+            <div className="max-h-[200px] divide-y divide-[#eee1c9] overflow-y-auto">
               {exams.map((exam) => {
-                const meta = SUBJECT_META[String(exam.subject_code || '').toUpperCase()] || { icon: '✦', tone: 'bg-amber-50 text-amber-700' };
+                const meta = SUBJECT_META[String(exam.subject_code || '').toUpperCase()] || { icon: FiBookOpen, tone: 'border-amber-200 bg-amber-50 text-amber-700' };
+                const SubjectIcon = meta.icon;
                 const date = formatInTimeZone(exam.start_time as string, { day: '2-digit', month: '2-digit', timeZone: 'Asia/Shanghai' });
                 const start = formatInTimeZone(exam.start_time as string, { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Shanghai' });
                 const end = formatInTimeZone(exam.end_time as string, { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Shanghai' });
                 const actualMinutes = Math.max(1, Math.round((new Date(exam.end_time as string).getTime() - new Date(exam.start_time as string).getTime()) / 60000));
                 const duration = Number(exam.duration) > 0 ? Number(exam.duration) : actualMinutes;
                 return (
-                  <div key={exam.id} className="grid grid-cols-[auto_42px_minmax(0,1fr)] items-center gap-2 px-3 py-2.5 text-xs sm:grid-cols-[auto_56px_minmax(0,1fr)_120px_72px] sm:gap-3 sm:px-5 sm:text-sm">
-                    <span className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-black ${meta.tone}`}>{meta.icon}</span>
+                  <div key={exam.id} className="grid grid-cols-[auto_42px_minmax(0,1fr)] items-center gap-2 px-3 py-2 text-xs sm:grid-cols-[auto_54px_minmax(0,1fr)_112px_66px] sm:gap-2.5 sm:px-4 sm:text-[13px]">
+                    <span className={`flex h-7 w-7 items-center justify-center rounded-lg border ${meta.tone}`}><SubjectIcon size={15} strokeWidth={2.1} /></span>
                     <span className="font-bold tabular-nums text-[#65584c]">{date}</span>
                     <span className="truncate font-black text-[#312b27]">{exam.subject_name || exam.title}</span>
                     <span className="col-start-3 inline-flex items-center gap-1 font-bold tabular-nums text-[#65584c] sm:col-start-auto"><FiClock size={13} /> {start}–{end}</span>
@@ -373,18 +376,18 @@ export default function ExamCountdownNotice() {
             </p>
           </div>
 
-          <p className="mx-auto mt-4 max-w-2xl text-center font-serif text-sm italic text-[#51463d] sm:text-base">
-            Mỗi ngày tiến thêm một chút, ngày thi sẽ bớt áp lực hơn.
+          <p className="mx-auto mt-3 max-w-xl text-center text-sm font-semibold text-[#51463d]">
+            Mỗi ngày tiến bộ một chút, kỳ thi sẽ bớt áp lực hơn.
           </p>
 
-          <div className="mx-auto mt-4 flex max-w-2xl flex-col gap-2.5 sm:flex-row sm:gap-3">
+          <div className="mx-auto mt-3 flex max-w-xl flex-col gap-2.5 sm:flex-row sm:gap-3">
             <button
               type="button"
               onClick={() => {
                 closeNotice();
                 router.push('/lo-trinh');
               }}
-              className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-[#bd2118] px-5 py-3 text-sm font-black text-white shadow-lg shadow-red-950/15 transition hover:bg-[#a91d16] active:scale-[0.99]"
+              className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-[#bd2118] px-5 py-2.5 text-sm font-black text-white shadow-lg shadow-red-950/15 transition hover:bg-[#a91d16] active:scale-[0.99]"
             >
               <FiBookOpen size={17} /> Bắt đầu ôn tập
             </button>
@@ -395,13 +398,17 @@ export default function ExamCountdownNotice() {
                 aria-haspopup="menu"
                 aria-expanded={frequencyMenuOpen}
                 onClick={() => setFrequencyMenuOpen((current) => !current)}
-                className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-[#c79a45] bg-[#fffaf0]/92 px-5 py-3 text-sm font-black text-[#8d5e19] shadow-sm transition hover:bg-white active:scale-[0.99]"
+                className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-[#c79a45] bg-[#fffaf0]/95 px-5 py-2.5 text-sm font-black text-[#8d5e19] shadow-sm transition hover:bg-white active:scale-[0.99]"
               >
                 <FiBell size={17} /> {frequency === 'daily' ? 'Nhắc hằng ngày' : 'Nhắc mỗi 5 ngày'} <FiChevronDown size={15} />
               </button>
 
               {frequencyMenuOpen && (
-                <div role="menu" className="absolute bottom-[calc(100%+8px)] left-0 right-0 z-30 overflow-hidden rounded-xl border border-[#dcc69e] bg-white p-1.5 shadow-xl">
+                <div
+                  role="menu"
+                  className="absolute bottom-[calc(100%+8px)] left-0 right-0 z-30 overflow-hidden rounded-xl border-2 border-[#d6b477] !bg-[#fffaf1] p-1.5 shadow-[0_16px_38px_rgba(82,50,24,0.24)] dark:!bg-[#fffaf1]"
+                  style={{ backgroundColor: '#fffaf1', color: '#4f3521' }}
+                >
                   {([
                     ['daily', 'Nhắc hằng ngày'],
                     ['five_days', 'Nhắc mỗi 5 ngày'],
@@ -411,7 +418,7 @@ export default function ExamCountdownNotice() {
                       type="button"
                       role="menuitem"
                       onClick={() => saveFrequency(value)}
-                      className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm font-bold text-[#51463d] transition hover:bg-[#fff4df]"
+                      className={`flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm font-bold !text-[#4f3521] transition hover:!bg-[#f4e2c4] dark:!text-[#4f3521] ${frequency === value ? '!bg-[#f8ead2]' : '!bg-transparent'}`}
                     >
                       {label}
                       {frequency === value && <FiCheck className="text-[#b9231a]" size={16} />}
@@ -422,7 +429,7 @@ export default function ExamCountdownNotice() {
             </div>
           </div>
 
-          <p className="mt-3 text-center text-[10px] font-semibold text-[#827467] sm:text-xs">
+          <p className="mt-2 text-center text-[10px] font-semibold text-[#827467] sm:text-xs">
             Trong 24 giờ trước kỳ thi, hệ thống luôn ưu tiên nhắc bạn mỗi ngày.
           </p>
         </div>
