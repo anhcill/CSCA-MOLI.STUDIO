@@ -120,7 +120,7 @@ const config = {
 
   moliPet: {
     provider: process.env.MOLI_PET_PROVIDER || '9router',
-    model: process.env.MOLI_PET_MODEL || 'ag/gemini-3-flash-agent',
+    model: process.env.MOLI_PET_MODEL || 'ag/gemini-3.8-flash-low',
     fallbackProvider: process.env.MOLI_PET_FALLBACK_PROVIDER || 'beeknoee',
     fallbackModel: normalizeBeeknoeeModel(
       process.env.MOLI_PET_FALLBACK_MODEL ||

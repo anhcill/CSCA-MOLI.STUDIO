@@ -67,7 +67,7 @@ async function getUserAIRouting(user) {
   return {
     aiTier: 'free',
     aiProvider: '9router',
-    aiModel: settings.public_ai_free_9router_model || 'ag/gemini-3-flash-agent',
+    aiModel: process.env.PUBLIC_AI_FREE_9ROUTER_MODEL || process.env.PUBLIC_AI_9ROUTER_MODEL || settings.public_ai_free_9router_model || 'ag/gemini-3.7-flash-high',
   };
 }
 
