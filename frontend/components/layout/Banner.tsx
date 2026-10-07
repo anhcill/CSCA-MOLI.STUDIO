@@ -421,7 +421,10 @@ export default function Banner() {
 
       <div className="pointer-events-none absolute bottom-0 left-0 right-0 z-10">
         <svg viewBox="0 0 1440 60" fill="none" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none" className="block h-16 w-full">
-          <path d="M0,40 C360,80 1080,0 1440,40 L1440,60 L0,60 Z" fill="white" />
+          <path
+            d="M0,40 C360,80 1080,0 1440,40 L1440,60 L0,60 Z"
+            className="fill-white transition-colors dark:fill-gray-900"
+          />
         </svg>
       </div>
     </div>
