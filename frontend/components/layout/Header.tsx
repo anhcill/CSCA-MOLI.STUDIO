@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import {
   FiAward,
@@ -165,8 +166,15 @@ export default function Header() {
         <div className="flex items-center justify-between gap-4 overflow-visible">
           {/* Logo */}
           <Link href="/" className="group flex shrink-0 items-center gap-2.5 sm:gap-3">
-            <div className={`relative flex h-9.5 w-9.5 items-center justify-center rounded-2xl shadow-md transition-all duration-300 group-hover:-translate-y-0.5 sm:h-10.5 sm:w-10.5 ${nationalDayTheme ? 'bg-gradient-to-br from-[#ffd768] via-[#f6b72c] to-[#cf7d0d]' : 'bg-gradient-to-br from-violet-600 via-indigo-600 to-blue-500'}`}>
-              <span className="text-lg font-black leading-none text-white sm:text-xl">m</span>
+            <div className="relative flex h-9.5 w-9.5 items-center justify-center transition-all duration-300 group-hover:scale-105 group-hover:-translate-y-0.5 sm:h-10.5 sm:w-10.5">
+              <Image
+                src="/images/moly-logo.png"
+                alt="Moly Logo"
+                width={42}
+                height={42}
+                className="h-full w-full object-contain drop-shadow-sm"
+                priority
+              />
             </div>
             <span className={`hidden text-xl font-black tracking-tight sm:inline sm:text-2xl ${nationalDayTheme ? 'text-white drop-shadow-sm' : 'text-gray-900 dark:text-white'}`}>
               Moly
