@@ -35,6 +35,12 @@ export default function LoginPage() {
           background: rgba(255, 255, 255, 0.88) !important;
           color: #2d2926 !important;
           -webkit-text-fill-color: #2d2926 !important;
+          caret-color: #e11d2e !important;
+        }
+
+        .auth-login-input:focus {
+          border-color: #bd111c !important;
+          box-shadow: 0 0 0 3px rgba(189, 17, 28, 0.2), 0 12px 30px rgba(90, 54, 24, 0.1) !important;
         }
 
         .auth-login-input:-webkit-autofill,
@@ -42,7 +48,7 @@ export default function LoginPage() {
         .auth-login-input:-webkit-autofill:focus {
           -webkit-box-shadow: 0 0 0 1000px rgba(255, 255, 255, 0.92) inset !important;
           -webkit-text-fill-color: #2d2926 !important;
-          caret-color: #bd111c;
+          caret-color: #e11d2e !important;
           transition: background-color 9999s ease-out 0s;
         }
 
