@@ -332,6 +332,8 @@ async function getAttemptAIContext(userId, attemptId) {
         q.question_text_cn,
         q.question_text_en,
         q.question_type,
+        COALESCE(q.passage_text, parent.passage_text) AS passage_text,
+        COALESCE(options.answer_options, '[]'::jsonb) AS answer_options,
         ua.selected_answer_key,
         ua.is_correct,
         ca.answer_key AS correct_answer_key,
@@ -344,7 +346,20 @@ async function getAttemptAIContext(userId, attemptId) {
         END AS status
      FROM exam_attempts ea
      JOIN questions q ON q.exam_id = ea.exam_id
+     LEFT JOIN questions parent ON parent.id = q.passage_group_id
      LEFT JOIN user_answers ua ON ua.attempt_id = ea.id AND ua.question_id = q.id
+     LEFT JOIN LATERAL (
+       SELECT jsonb_agg(
+         jsonb_build_object(
+           'answer_key', a.answer_key,
+           'answer_text', a.answer_text,
+           'answer_text_cn', a.answer_text_cn,
+           'answer_text_en', a.answer_text_en
+         ) ORDER BY a.answer_key
+       ) AS answer_options
+       FROM answers a
+       WHERE a.question_id = q.id
+     ) options ON true
      LEFT JOIN LATERAL (
        SELECT answer_key, answer_text, answer_text_cn
        FROM answers
@@ -363,7 +378,11 @@ async function getAttemptAIContext(userId, attemptId) {
   const questions = questionsResult.rows.map((q) => ({
     question_number: q.question_number,
     question_text: q.question_text || q.question_text_cn || q.question_text_en || '',
+    question_text_cn: q.question_text_cn,
+    question_text_en: q.question_text_en,
     question_type: q.question_type,
+    passage_text: q.passage_text,
+    answer_options: Array.isArray(q.answer_options) ? q.answer_options : [],
     selected_answer_key: q.selected_answer_key,
     selected_answer_text: q.selected_answer_text,
     correct_answer_key: q.correct_answer_key,
@@ -898,7 +917,11 @@ async function askAI(req, res) {
           // overwrites the same cache key with the corrected response.
           if (!isBadForStudyQuestion) {
             const age = Math.floor((Date.now() - new Date(cached.createdAt)) / 60000);
-            const answer = aiService.sanitizeAIAnswerForQuestion(cachedAnswer, question);
+            const answer = aiService.prependFocusedQuestionRestatement(
+              aiService.sanitizeAIAnswerForQuestion(cachedAnswer, question),
+              question,
+              context,
+            );
             return res.json({
               success: true,
               cached: true,

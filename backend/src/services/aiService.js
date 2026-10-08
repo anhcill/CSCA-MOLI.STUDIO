@@ -1528,7 +1528,40 @@ function getQuestionStatus(q) {
   return q.is_correct ? 'correct' : 'incorrect';
 }
 
-function formatAIQuestionLine(q) {
+function uniqueNonEmptyTexts(values = []) {
+  const seen = new Set();
+  return values
+    .map((value) => String(value || '').trim())
+    .filter((value) => {
+      if (!value || seen.has(value)) return false;
+      seen.add(value);
+      return true;
+    });
+}
+
+function getFullQuestionText(q) {
+  return uniqueNonEmptyTexts([
+    q.question_text,
+    q.question_text_cn,
+    q.question_text_en,
+  ]).join('\n');
+}
+
+function formatAnswerOption(option) {
+  const key = String(option?.answer_key || option?.key || '').trim();
+  const texts = uniqueNonEmptyTexts([
+    option?.answer_text,
+    option?.text,
+    option?.answer_text_cn,
+    option?.text_cn,
+    option?.answer_text_en,
+    option?.text_en,
+  ]);
+  if (!key && !texts.length) return '';
+  return `${key ? `${key}. ` : ''}${texts.join(' / ')}`.trim();
+}
+
+function formatAIQuestionLine(q, includeFullQuestion = false) {
   const status = getQuestionStatus(q);
   const statusLabel = status === 'correct' ? 'đúng' : status === 'unanswered' ? 'bỏ qua' : 'sai';
   const selected = q.selected_answer_key
@@ -1537,10 +1570,25 @@ function formatAIQuestionLine(q) {
   const correct = q.correct_answer_key
     ? `${q.correct_answer_key}. ${q.correct_answer_text || ''}`.trim()
     : q.correct_answer_text || 'chưa có';
-  return `Câu ${q.question_number} (${statusLabel}): ${q.question_text || q.question_text_cn || ''}\n- Học sinh chọn: ${selected}\n- Đáp án đúng: ${correct}`;
+  const questionText = getFullQuestionText(q) || '(chưa có nội dung đề bài)';
+
+  if (!includeFullQuestion) {
+    return `Câu ${q.question_number} (${statusLabel}): ${questionText}\n- Học sinh chọn: ${selected}\n- Đáp án đúng: ${correct}`;
+  }
+
+  const answerOptions = Array.isArray(q.answer_options) ? q.answer_options : (Array.isArray(q.options) ? q.options : []);
+  const optionLines = answerOptions.map(formatAnswerOption).filter(Boolean);
+  const parts = [
+    `Đề bài - Câu ${q.question_number}:`,
+    q.passage_text ? `Đoạn dẫn:\n${String(q.passage_text).trim()}` : '',
+    questionText,
+    optionLines.length ? `Các lựa chọn:\n${optionLines.join('\n')}` : '',
+    `Bài làm của bạn (${statusLabel}):\n- Bạn chọn: ${selected}\n- Đáp án đúng: ${correct}`,
+  ];
+  return parts.filter(Boolean).join('\n\n');
 }
 
-function buildReviewQuestionContext(questions = []) {
+function buildReviewQuestionContext(questions = [], includeFullQuestion = false) {
   if (!questions.length) return '(không có)';
   const groups = [
     ['Câu sai cần sửa', questions.filter((q) => getQuestionStatus(q) === 'incorrect').slice(0, 6)],
@@ -1549,8 +1597,25 @@ function buildReviewQuestionContext(questions = []) {
   ];
   return groups
     .filter(([, items]) => items.length > 0)
-    .map(([title, items]) => `${title}:\n${items.map(formatAIQuestionLine).join('\n')}`)
+    .map(([title, items]) => `${title}:\n${items.map((item) => formatAIQuestionLine(item, includeFullQuestion)).join('\n')}`)
     .join('\n\n') || '(không có)';
+}
+
+function getFocusedQuestion(question, context = {}) {
+  const questions = Array.isArray(context.questions) ? context.questions : [];
+  return aiChatIntentService.focusQuestionsForPrompt(question, questions).focusedQuestion;
+}
+
+function prependFocusedQuestionRestatement(answer, question, context = {}) {
+  const focusedQuestion = getFocusedQuestion(question, context);
+  const safeAnswer = String(answer || '').trim();
+  if (!focusedQuestion) return safeAnswer;
+
+  const heading = `Đề bài - Câu ${focusedQuestion.question_number}:`;
+  if (safeAnswer.includes(heading)) return safeAnswer;
+
+  const restatement = formatAIQuestionLine(focusedQuestion, true);
+  return `${restatement}\n\nGiải thích:\n${safeAnswer}`.trim();
 }
 
 function buildConversationHistoryContext(conversationHistory = []) {
@@ -1607,7 +1672,7 @@ function buildAIChatPrompt(question, context = {}) {
     questionStats && `Tổng quan: đúng ${questionStats.correct || 0}, sai ${questionStats.incorrect || 0}, bỏ qua ${questionStats.unanswered || 0}`,
   ].filter(Boolean).join('\n');
 
-  const reviewQuestionContext = buildReviewQuestionContext(promptQuestions);
+  const reviewQuestionContext = buildReviewQuestionContext(promptQuestions, Boolean(focused.focusedQuestion));
   const conversationContext = buildConversationHistoryContext(conversationHistory);
 
   return `Bạn là trợ lý học tập của MOLI.STUDIO. Trả lời bằng TIẾNG VIỆT CÓ DẤU.
@@ -1627,6 +1692,7 @@ ${USER_AI_PRIVACY_PROMPT_RULES}
 - Nếu học sinh hỏi về câu đúng, hãy củng cố vì sao đúng và chỉ ra dấu hiệu nhận biết.
 - Nếu học sinh hỏi về câu bỏ qua, hãy hướng dẫn cách suy luận từ đầu, không trách người học.
 - Nếu học sinh hỏi tiếp bằng "ý trên", "câu đó", "giải thích kỹ hơn", hãy dựa vào lịch sử hội thoại gần đây.
+${focused.focusedQuestion ? '- Hệ thống sẽ tự hiển thị nguyên văn đề bài, các lựa chọn và bài làm của học sinh ở đầu câu trả lời. Bạn bắt đầu trực tiếp từ phần giải thích, không chép lại đề lần nữa.' : ''}
 
 TRÁNH:
 - KHÔNG lặp lại câu hỏi của user.
@@ -1683,7 +1749,7 @@ async function askAI(question, context = {}) {
       })
       : await callPublicAIMessages(messages, publicOptions);
     return {
-      answer: sanitizeAIAnswerForQuestion(response, question),
+      answer: prependFocusedQuestionRestatement(sanitizeAIAnswerForQuestion(response, question), question, context),
       timestamp: new Date().toISOString(),
     };
   } catch (err) {
@@ -1693,7 +1759,7 @@ async function askAI(question, context = {}) {
       try {
         const response = await callPublicAIMessages(messages, publicOptions);
         return {
-          answer: sanitizeAIAnswerForQuestion(response, question),
+          answer: prependFocusedQuestionRestatement(sanitizeAIAnswerForQuestion(response, question), question, context),
           timestamp: new Date().toISOString(),
         };
       } catch (fallbackError) {
@@ -1749,7 +1815,7 @@ async function askAIStream(question, context = {}, res) {
         feature: 'chat',
       })
       : await callPublicAIMessages(messages, publicOptions);
-    const safeAnswer = sanitizeAIAnswerForQuestion(answer, question);
+    const safeAnswer = prependFocusedQuestionRestatement(sanitizeAIAnswerForQuestion(answer, question), question, context);
     res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: safeAnswer } }] })}\n\n`);
     finishAIStream(res);
     return { answer: safeAnswer };
@@ -1758,7 +1824,7 @@ async function askAIStream(question, context = {}, res) {
       console.warn('DeepSeek stream failed, falling back to public AI:', getProviderResponseMessage(err));
       try {
         const answer = await callPublicAIMessages(messages, publicOptions);
-        const safeAnswer = sanitizeAIAnswerForQuestion(answer, question);
+        const safeAnswer = prependFocusedQuestionRestatement(sanitizeAIAnswerForQuestion(answer, question), question, context);
         res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: safeAnswer } }] })}\n\n`);
         finishAIStream(res);
         return { answer: safeAnswer };
@@ -2358,6 +2424,7 @@ module.exports = {
   isAIPrivacyQuestion,
   isPublicAIIdentityResponse,
   sanitizeAIAnswerForQuestion,
+  prependFocusedQuestionRestatement,
   sanitizePublicAIText,
   sanitizePublicAIValue,
   // Core functions
