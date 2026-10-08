@@ -1,10 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   FiAward,
   FiBookOpen,
   FiCheck,
+  FiChevronLeft,
+  FiChevronRight,
   FiExternalLink,
   FiMessageCircle,
   FiStar,
@@ -15,7 +17,57 @@ import { MOLY_TUTORS } from '@/lib/data/molyTutors';
 
 export function CourseTutorShowcase({ courseTitle }: { courseTitle: string }) {
   const [selectedTutorId, setSelectedTutorId] = useState<string | null>(null);
+  const [activeTutorIndex, setActiveTutorIndex] = useState(0);
+  const [carouselPaused, setCarouselPaused] = useState(false);
+  const carouselRef = useRef<HTMLDivElement>(null);
+  const activeTutorIndexRef = useRef(0);
+  const programmaticScrollUntilRef = useRef(0);
   const selectedTutor = MOLY_TUTORS.find((tutor) => tutor.id === selectedTutorId);
+
+  const scrollToTutor = useCallback((requestedIndex: number) => {
+    const tutorCount = MOLY_TUTORS.length;
+    const carousel = carouselRef.current;
+    if (!carousel || tutorCount === 0) return;
+
+    const nextIndex = (requestedIndex + tutorCount) % tutorCount;
+    const nextCard = carousel.querySelector<HTMLElement>(`[data-tutor-index="${nextIndex}"]`);
+    if (!nextCard) return;
+
+    activeTutorIndexRef.current = nextIndex;
+    programmaticScrollUntilRef.current = Date.now() + 900;
+    setActiveTutorIndex(nextIndex);
+    carousel.scrollTo({ left: nextCard.offsetLeft, behavior: 'smooth' });
+  }, []);
+
+  const syncActiveTutor = useCallback(() => {
+    const carousel = carouselRef.current;
+    if (!carousel || Date.now() < programmaticScrollUntilRef.current) return;
+
+    const cards = Array.from(carousel.querySelectorAll<HTMLElement>('[data-tutor-index]'));
+    if (!cards.length) return;
+
+    const nearestCard = cards.reduce((nearest, card) => (
+      Math.abs(card.offsetLeft - carousel.scrollLeft) < Math.abs(nearest.offsetLeft - carousel.scrollLeft)
+        ? card
+        : nearest
+    ));
+    const nearestIndex = Number(nearestCard.dataset.tutorIndex || 0);
+    if (nearestIndex !== activeTutorIndexRef.current) {
+      activeTutorIndexRef.current = nearestIndex;
+      setActiveTutorIndex(nearestIndex);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (carouselPaused || selectedTutorId || MOLY_TUTORS.length < 2) return undefined;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined;
+
+    const timer = window.setInterval(() => {
+      scrollToTutor(activeTutorIndexRef.current + 1);
+    }, 3400);
+
+    return () => window.clearInterval(timer);
+  }, [activeTutorIndex, carouselPaused, scrollToTutor, selectedTutorId]);
 
   return (
     <>
@@ -38,14 +90,37 @@ export function CourseTutorShowcase({ courseTitle }: { courseTitle: string }) {
           <a href={MOLY_ZALO_URL} target="_blank" rel="noopener noreferrer" className="hidden items-center gap-2 rounded-full border border-[#d9c8b9] bg-white px-4 py-2.5 text-sm font-black text-[#6b493b] transition hover:border-[#a34239] hover:text-[#a34239] dark:border-[#40506a] dark:bg-[#101e33] dark:text-[#f1d6bc] dark:hover:border-[#e79a92] sm:inline-flex">
             <FiMessageCircle className="text-[#cf543f]" /> Đăng ký qua Zalo
           </a>
+          <div className="inline-flex items-center rounded-full border border-[#d9c8b9] bg-white/85 p-1 shadow-sm dark:border-[#40506a] dark:bg-[#101e33]" aria-label="Điều khiển danh sách gia sư">
+            <button type="button" onClick={() => scrollToTutor(activeTutorIndex - 1)} aria-label="Xem gia sư trước" className="grid h-9 w-9 place-items-center rounded-full text-[#6b493b] transition hover:bg-[#fff1eb] hover:text-[#a34239] dark:text-[#f1d6bc] dark:hover:bg-[#192a42]">
+              <FiChevronLeft className="h-5 w-5" />
+            </button>
+            <span className="min-w-11 text-center text-[11px] font-black tabular-nums text-[#8a6d5d] dark:text-slate-300" aria-live="polite">
+              {activeTutorIndex + 1}/{MOLY_TUTORS.length}
+            </span>
+            <button type="button" onClick={() => scrollToTutor(activeTutorIndex + 1)} aria-label="Xem gia sư tiếp theo" className="grid h-9 w-9 place-items-center rounded-full text-[#6b493b] transition hover:bg-[#fff1eb] hover:text-[#a34239] dark:text-[#f1d6bc] dark:hover:bg-[#192a42]">
+              <FiChevronRight className="h-5 w-5" />
+            </button>
+          </div>
         </div>
       </div>
 
-      <div className="relative mt-7 flex h-[286px] snap-x snap-mandatory items-end gap-4 overflow-x-auto pb-3 [scrollbar-color:#cf9b88_transparent] [scrollbar-width:thin] sm:h-[338px]">
+      <div
+        ref={carouselRef}
+        onScroll={syncActiveTutor}
+        onMouseEnter={() => setCarouselPaused(true)}
+        onMouseLeave={() => setCarouselPaused(false)}
+        onFocusCapture={() => setCarouselPaused(true)}
+        onBlurCapture={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget)) setCarouselPaused(false);
+        }}
+        className="relative mt-7 flex h-[286px] snap-x snap-mandatory items-end gap-4 overflow-x-auto pb-3 [scroll-behavior:smooth] [scrollbar-color:#cf9b88_transparent] [scrollbar-width:thin] sm:h-[338px]"
+        aria-label="Danh sách gia sư tự động chuyển"
+      >
         {MOLY_TUTORS.map((tutor, index) => (
           <button
             type="button"
             key={tutor.id}
+            data-tutor-index={index}
             onClick={() => setSelectedTutorId(tutor.id)}
             aria-label={`Xem hồ sơ giảng viên ${tutor.name}`}
             className="group relative block h-[252px] min-w-[188px] snap-start overflow-hidden rounded-[1.35rem] bg-[#19233a] shadow-[0_10px_22px_rgba(0,0,0,.16)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_18px_30px_rgba(0,0,0,.28)] sm:h-[300px] sm:min-w-[224px]"
