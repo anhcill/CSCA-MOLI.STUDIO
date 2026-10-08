@@ -5,6 +5,7 @@ import {
   FiAward,
   FiBookOpen,
   FiCheck,
+  FiExternalLink,
   FiMessageCircle,
   FiStar,
   FiX,
@@ -114,6 +115,16 @@ export function CourseTutorShowcase({ courseTitle }: { courseTitle: string }) {
                   <ul className="mt-2.5 space-y-1.5">
                     {selectedTutor.achievements.map((achievement) => <li key={achievement} className="flex gap-2 text-xs leading-5 text-[#61584f] dark:text-slate-300"><FiCheck className="mt-0.5 shrink-0 text-[#2d8a84]" /> {achievement}</li>)}
                   </ul>
+                  {selectedTutor.proof && (
+                    <a
+                      href={selectedTutor.proof.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-3 inline-flex items-center gap-1.5 rounded-xl border border-[#d9c8b9] bg-white px-3 py-2 text-[11px] font-black text-[#a34239] transition hover:border-[#a34239] dark:border-[#40506a] dark:bg-[#192a42] dark:text-[#f3a5a5]"
+                    >
+                      <FiExternalLink /> {selectedTutor.proof.label}
+                    </a>
+                  )}
                 </div>
               </div>
 
