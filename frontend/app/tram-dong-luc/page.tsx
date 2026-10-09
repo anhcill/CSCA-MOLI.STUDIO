@@ -27,6 +27,10 @@ import {
   FiFilm,
   FiSend,
   FiUsers,
+  FiTool,
+  FiHome,
+  FiMonitor,
+  FiFileText,
 } from 'react-icons/fi';
 import { FaHeart, FaBookmark, FaFire, FaQuoteLeft } from 'react-icons/fa';
 import { useAuthStore } from '@/lib/store/authStore';
@@ -126,6 +130,9 @@ const QUICK_CHEERS = [
   { label: '🎓 Đỗ CSCA!', text: '🎓 Hẹn gặp tất cả các bạn tại cánh cổng trường đại học mơ ước!' },
 ];
 
+// ─── TẠM KHÓA TRẠM ĐỘNG LỰC ĐỂ SỬA CHỮA / BẢO TRÌ ───────────────────────────
+const IS_LOCKED_FOR_MAINTENANCE = true;
+
 export default function TramDongLucPage() {
   const { user } = useAuthStore();
 
@@ -177,6 +184,10 @@ export default function TramDongLucPage() {
 
   // Fetch real chats from SQL database
   useEffect(() => {
+    if (IS_LOCKED_FOR_MAINTENANCE) {
+      setIsLoadingChats(false);
+      return;
+    }
     let isMounted = true;
     const loadStationChats = async () => {
       try {
@@ -607,6 +618,115 @@ export default function TramDongLucPage() {
   }, []);
 
   // ─── RENDER ────────────────────────────────────────────────────────────────
+  if (IS_LOCKED_FOR_MAINTENANCE) {
+    return (
+      <div className="relative flex min-h-screen flex-col justify-between overflow-hidden bg-slate-950 text-white selection:bg-rose-500 selection:text-white">
+        {/* Ambient background glow */}
+        <div className="pointer-events-none absolute -top-40 left-1/2 h-96 w-96 -translate-x-1/2 rounded-full bg-rose-500/15 blur-[120px]" />
+        <div className="pointer-events-none absolute bottom-0 left-10 h-80 w-80 rounded-full bg-amber-500/10 blur-[100px]" />
+        <div className="pointer-events-none absolute right-10 top-1/3 h-80 w-80 rounded-full bg-indigo-500/10 blur-[100px]" />
+
+        {/* Top Header */}
+        <header className="relative z-10 border-b border-white/10 bg-slate-900/60 px-4 py-3 backdrop-blur-md sm:px-6">
+          <div className="mx-auto flex max-w-6xl items-center justify-between">
+            <Link
+              href="/"
+              className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-bold text-gray-300 transition-all hover:bg-white/10 hover:text-white"
+            >
+              <FiArrowLeft className="text-sm" />
+              <span>Về Trang Chủ</span>
+            </Link>
+
+            <div className="flex items-center gap-2">
+              <span className="flex h-2.5 w-2.5 rounded-full bg-amber-400 animate-pulse" />
+              <span className="text-xs font-extrabold uppercase tracking-wider text-amber-400">
+                Bảo Trì Hệ Thống
+              </span>
+            </div>
+          </div>
+        </header>
+
+        {/* Center Maintenance Content */}
+        <main className="relative z-10 flex flex-1 items-center justify-center px-4 py-12 sm:px-6">
+          <div className="mx-auto w-full max-w-2xl text-center">
+            {/* Maintenance Badge & Icon */}
+            <div className="mx-auto mb-6 flex h-24 w-24 items-center justify-center rounded-3xl border border-amber-500/30 bg-gradient-to-br from-amber-500/20 via-orange-500/15 to-rose-500/20 p-5 shadow-2xl shadow-amber-500/10 backdrop-blur-xl">
+              <div className="relative">
+                <FiTool className="text-4xl text-amber-400 animate-bounce" />
+                <span className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[10px]">
+                  🔒
+                </span>
+              </div>
+            </div>
+
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-amber-400/40 bg-amber-500/15 px-4 py-1.5 text-xs font-extrabold text-amber-300 shadow-sm backdrop-blur-md">
+              <span>🛠️ TẠM KHÓA ĐỂ NÂNG CẤP & SỬA CHỮA</span>
+            </div>
+
+            <h1 className="mb-4 text-3xl font-black tracking-tight text-white sm:text-4xl md:text-5xl">
+              Trạm Động Lực Đang Tạm Khóa
+            </h1>
+
+            <p className="mx-auto mb-8 max-w-xl text-base leading-relaxed text-slate-300 sm:text-lg">
+              Tính năng <strong className="text-white">Trạm Động Lực & Phòng Học Ảo</strong> đang được đội ngũ kỹ thuật tạm khóa để sửa chữa, nâng cấp trải nghiệm video và tối ưu hệ thống phòng học chung. Chúng mình sẽ sớm mở lại phục vụ các bạn!
+            </p>
+
+            {/* Feature upgrades notice */}
+            <div className="mx-auto mb-8 max-w-lg rounded-2xl border border-white/10 bg-white/5 p-4 text-left backdrop-blur-md sm:p-5">
+              <p className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-400">
+                Các hạng mục đang được sửa chữa & hoàn thiện:
+              </p>
+              <ul className="space-y-2 text-xs text-slate-300 sm:text-sm">
+                <li className="flex items-center gap-2.5">
+                  <span className="text-amber-400">⚡</span>
+                  <span>Tối ưu hóa đường truyền video & tốc độ phản hồi</span>
+                </li>
+                <li className="flex items-center gap-2.5">
+                  <span className="text-rose-400">🎧</span>
+                  <span>Nâng cấp hệ thống âm thanh tập trung & bộ lọc tiếng ồn</span>
+                </li>
+                <li className="flex items-center gap-2.5">
+                  <span className="text-emerald-400">💬</span>
+                  <span>Cải thiện tính năng chat cộng đồng & phòng học ảo trực tuyến</span>
+                </li>
+              </ul>
+            </div>
+
+            {/* Quick Actions */}
+            <div className="flex flex-col items-center justify-center gap-3 sm:flex-row">
+              <Link
+                href="/"
+                className="flex w-full items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/10 px-6 py-3.5 text-sm font-bold text-white shadow-lg backdrop-blur-md transition-all hover:bg-white/20 active:scale-95 sm:w-auto"
+              >
+                <FiHome className="text-base" />
+                <span>Về Trang Chủ</span>
+              </Link>
+              <Link
+                href="/exam-room"
+                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-600 px-6 py-3.5 text-sm font-bold text-white shadow-lg shadow-violet-500/25 transition-all hover:scale-105 hover:shadow-violet-500/40 active:scale-95 sm:w-auto"
+              >
+                <FiMonitor className="text-base" />
+                <span>Luyện Đề CSCA Ngay</span>
+              </Link>
+              <Link
+                href="/tailieu"
+                className="flex w-full items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/5 px-6 py-3.5 text-sm font-bold text-slate-200 transition-all hover:bg-white/15 hover:text-white active:scale-95 sm:w-auto"
+              >
+                <FiFileText className="text-base" />
+                <span>Kho Tài Liệu</span>
+              </Link>
+            </div>
+          </div>
+        </main>
+
+        {/* Footer */}
+        <footer className="relative z-10 border-t border-white/5 bg-slate-950/80 px-4 py-4 text-center text-xs text-slate-500">
+          CSCA Moly Studio — Nền tảng luyện thi CSCA & Săn học bổng du học Trung Quốc
+        </footer>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 text-white selection:bg-violet-500 selection:text-white">
       {/* Preconnect for fast TikTok CDN connections */}

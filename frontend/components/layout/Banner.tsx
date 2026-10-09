@@ -128,14 +128,14 @@ const SLIDE_COPY = [
       zh: 'TikTok风格沉浸式自习室 — 保持自律，与CSCA社群共同冲刺目标',
     },
     badge: {
-      vi: '🔥 Phòng học trực tuyến LIVE',
-      en: '🔥 24/7 Live Virtual Room',
-      zh: '🔥 24/7 在线自习室',
+      vi: '🛠️ Tạm khóa để sửa chữa',
+      en: '🛠️ Under Maintenance',
+      zh: '🛠️ 正在维护中',
     },
     cta: {
-      vi: 'Vào Trạm Động Lực',
-      en: 'Enter Study Station',
-      zh: '进入自习动力站',
+      vi: 'Trạm Động Lực (Bảo trì)',
+      en: 'Study Station (Maintenance)',
+      zh: '自习动力站 (维护中)',
     },
     ctaHref: '/tram-dong-luc',
     icon: FiTarget,
@@ -310,14 +310,13 @@ export default function Banner() {
                 </Link>
                 <Link
                   href="/tram-dong-luc"
-                  className="group flex items-center gap-2 rounded-xl border border-rose-400/60 bg-gradient-to-r from-rose-500/25 to-amber-500/25 px-5 py-3 text-sm font-bold text-white shadow-xl backdrop-blur-md transition-all hover:scale-105 hover:from-rose-500/40 hover:to-amber-500/40 active:scale-95 sm:px-6 sm:py-4 sm:text-base"
+                  className="group flex items-center gap-2 rounded-xl border border-amber-400/60 bg-gradient-to-r from-amber-500/25 to-orange-500/25 px-5 py-3 text-sm font-bold text-white shadow-xl backdrop-blur-md transition-all hover:scale-105 hover:from-amber-500/40 hover:to-orange-500/40 active:scale-95 sm:px-6 sm:py-4 sm:text-base"
                 >
                   <span className="relative flex h-2 w-2">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-400 opacity-75" />
-                    <span className="relative inline-flex h-2 w-2 rounded-full bg-rose-500" />
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-amber-400" />
                   </span>
                   <span>Trạm Động Lực</span>
-                  <span className="rounded bg-rose-500 px-1.5 py-0.5 text-[9px] font-black uppercase text-white shadow-sm">LIVE 🔥</span>
+                  <span className="rounded bg-amber-500 px-1.5 py-0.5 text-[9px] font-black uppercase text-white shadow-sm">BẢO TRÌ 🛠️</span>
                 </Link>
                 <Link
                   href="/register"
@@ -359,11 +358,11 @@ export default function Banner() {
                         href={subject.href}
                         className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
                           subject.isStation
-                            ? 'border border-rose-400/80 bg-rose-500/30 font-bold text-rose-200 hover:bg-rose-500/50'
+                            ? 'border border-amber-400/80 bg-amber-500/30 font-bold text-amber-200 hover:bg-amber-500/50'
                             : 'border border-white/20 bg-white/15 text-white hover:bg-white/25'
                         }`}
                       >
-                        {subject.isStation ? `🔥 ${t(subject.labelKey)}` : t(subject.labelKey)}
+                        {subject.isStation ? `🛠️ ${t(subject.labelKey)}` : t(subject.labelKey)}
                       </Link>
                     ))}
                   </div>
