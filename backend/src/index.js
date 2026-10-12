@@ -127,6 +127,7 @@ app.use(
       "Pragma",
       "X-Requested-With",
       "X-Integration-Key",
+      "X-Previous-Session",
     ],
   }),
 );

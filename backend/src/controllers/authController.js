@@ -550,6 +550,7 @@ const completeLoginForUser = async (req, user, deviceInfo = "Unknown", activityA
       ipAddress: getClientIp(req),
       userAgent: req.get("User-Agent"),
       expiresAt,
+      previousSessionToken: req.get("X-Previous-Session"),
     });
   } catch (error) {
     if (!isDeviceLimitError(error)) throw error;
@@ -824,6 +825,7 @@ const login = async (req, res) => {
       deviceInfo: req.get('User-Agent')?.substring(0, 200) || 'Unknown',
       ipAddress: getClientIp(req),
       userAgent: req.get('User-Agent'),
+      previousSessionToken: req.get('X-Previous-Session'),
     });
     const loginAllowed = await DeviceSessionService.checkLoginAllowed(user.id, deviceType);
     // Admins must finish email OTP + Authenticator before receiving a device
@@ -1672,6 +1674,7 @@ const verifyOtpController = async (req, res) => {
       ipAddress: getClientIp(req),
       userAgent: req.get('User-Agent'),
       expiresAt,
+      previousSessionToken: req.get('X-Previous-Session'),
     });
 
     const token = generateToken(buildTokenPayload({ ...user, jti, subscription_tier: user.subscription_tier || 'basic' }));

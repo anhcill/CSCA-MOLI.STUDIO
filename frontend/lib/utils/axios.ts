@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { getPreviousSessionToken, rememberPreviousSession } from './previousSession';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
@@ -8,6 +9,7 @@ let tokenLastChecked = 0;
 const TOKEN_CACHE_DURATION = 5000; // 5 seconds
 let lastOfflineAuthToastAt = 0;
 const AUTH_REVOKED_CODES = new Set(['SESSION_REVOKED', 'TOKEN_REVOKED', 'ADMIN_MFA_REQUIRED']);
+let refreshInFlight: Promise<{ token: string; refreshToken: string }> | null = null;
 
 export function clearTokenCache() {
   cachedToken = null;
@@ -16,6 +18,7 @@ export function clearTokenCache() {
 
 export function clearStoredAuth() {
   if (typeof window !== 'undefined') {
+    rememberPreviousSession(sessionStorage.getItem('token'));
     sessionStorage.removeItem('token');
     sessionStorage.removeItem('refreshToken');
     sessionStorage.removeItem('user');
@@ -62,6 +65,10 @@ const axiosInstance = axios.create({
 // Request interceptor - Add token to requests (OPTIMIZED)
 axiosInstance.interceptors.request.use(
   (config) => {
+    if (config.url?.startsWith('/auth/')) {
+      const previousSessionToken = getPreviousSessionToken();
+      if (previousSessionToken) config.headers['X-Previous-Session'] = previousSessionToken;
+    }
     const now = Date.now();
     // Only read from sessionStorage if cache is stale
     if (!cachedToken || now - tokenLastChecked > TOKEN_CACHE_DURATION) {
@@ -111,17 +118,20 @@ axiosInstance.interceptors.response.use(
       try {
         const refreshToken = sessionStorage.getItem('refreshToken');
         if (refreshToken) {
-          const response = await axios.post(`${API_URL}/auth/refresh`, {
-            refreshToken,
-          });
-
-          const { token, refreshToken: newRefreshToken } = response.data.data;
-          sessionStorage.setItem('token', token);
-          sessionStorage.setItem('refreshToken', newRefreshToken);
-
-          // Update memory cache immediately
-          cachedToken = token;
-          tokenLastChecked = Date.now();
+          if (!refreshInFlight) {
+            refreshInFlight = (async () => {
+              const response = await axios.post(`${API_URL}/auth/refresh`, { refreshToken });
+              const tokens = response.data.data;
+              // Update Zustand and its persisted state as well as sessionStorage,
+              // so reopening the app cannot restore the old refresh token.
+              const { useAuthStore } = await import('../store/authStore');
+              useAuthStore.getState().setTokens(tokens.token, tokens.refreshToken);
+              cachedToken = tokens.token;
+              tokenLastChecked = Date.now();
+              return tokens;
+            })().finally(() => { refreshInFlight = null; });
+          }
+          const { token } = await refreshInFlight;
 
           originalRequest.headers.Authorization = `Bearer ${token}`;
           return axiosInstance(originalRequest);

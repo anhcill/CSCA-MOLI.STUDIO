@@ -1,5 +1,6 @@
 const db = require("../config/database");
 const bcrypt = require("bcrypt");
+const { getPreviousSessionJti } = require("../utils/previousSession");
 
 class DeviceLimitError extends Error {
   constructor({ deviceType, maxDevices, sessions }) {
@@ -114,12 +115,17 @@ class DeviceSessionService {
     return { allowed: true, maxDevices, deviceType };
   }
 
-  static async hasMatchingDeviceSession({ userId, deviceType, deviceInfo, ipAddress, userAgent }) {
+  static async hasMatchingDeviceSession({ userId, deviceType, deviceInfo, ipAddress, userAgent, previousSessionToken }) {
     const resolvedDeviceType = deviceType || this.getDeviceTypeFromUserAgent(userAgent || deviceInfo);
     const params = [userId, resolvedDeviceType];
     let matchClause = "";
 
-    if (userAgent && ipAddress) {
+    if (previousSessionToken) {
+      const previousJti = getPreviousSessionJti(previousSessionToken, userId);
+      if (!previousJti) return false;
+      params.push(previousJti);
+      matchClause = "AND jti = $3";
+    } else if (userAgent && ipAddress) {
       params.push(userAgent, ipAddress);
       matchClause = "AND user_agent = $3 AND ip_address = $4";
     } else if (userAgent) {
@@ -146,7 +152,7 @@ class DeviceSessionService {
     return rows.length > 0;
   }
 
-  static async registerSession({ userId, jti, deviceInfo, deviceType, ipAddress, userAgent, expiresAt }) {
+  static async registerSession({ userId, jti, deviceInfo, deviceType, ipAddress, userAgent, expiresAt, previousSessionToken }) {
     const resolvedDeviceType = deviceType || this.getDeviceTypeFromUserAgent(userAgent || deviceInfo);
     const maxDevices = await this.getUserMaxDevices(userId, resolvedDeviceType);
     const client = await db.pool.connect();
@@ -173,7 +179,13 @@ class DeviceSessionService {
 
       const matchParams = [userId, resolvedDeviceType];
       let matchClause = null;
-      if (userAgent && ipAddress) {
+      if (previousSessionToken) {
+        const previousJti = getPreviousSessionJti(previousSessionToken, userId);
+        if (previousJti) {
+          matchParams.push(previousJti);
+          matchClause = "jti = $3";
+        }
+      } else if (userAgent && ipAddress) {
         matchParams.push(userAgent, ipAddress);
         matchClause = "user_agent = $3 AND ip_address = $4";
       } else if (userAgent) {

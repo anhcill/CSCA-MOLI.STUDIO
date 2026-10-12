@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { User } from '../api/auth';
-import axios, { clearStoredAuth } from '../utils/axios';
+import axios, { clearStoredAuth, clearTokenCache } from '../utils/axios';
+import { rememberPreviousSession } from '../utils/previousSession';
 
 // Decode JWT payload (base64url)
 function decodeJwtPayload(token: string): Record<string, unknown> | null {
@@ -79,6 +80,8 @@ export const useAuthStore = create<AuthState>()(
       setUser: (user) => set({ user, isAuthenticated: true }),
 
       setTokens: (token, refreshToken) => {
+        clearTokenCache();
+        rememberPreviousSession(token);
         if (typeof window !== 'undefined') {
           sessionStorage.setItem('token', token);
           sessionStorage.setItem('refreshToken', refreshToken);
@@ -87,6 +90,8 @@ export const useAuthStore = create<AuthState>()(
       },
 
       login: (user, token, refreshToken) => {
+        clearTokenCache();
+        rememberPreviousSession(token);
         if (typeof window !== 'undefined') {
           sessionStorage.setItem('token', token);
           sessionStorage.setItem('refreshToken', refreshToken);
@@ -150,6 +155,8 @@ export const useAuthStore = create<AuthState>()(
         return (state) => {
           // Sync token to sessionStorage after hydration so axios interceptor picks it up
           if (state?.token && state?.refreshToken && typeof window !== 'undefined') {
+            clearTokenCache();
+            rememberPreviousSession(state.token);
             sessionStorage.setItem('token', state.token);
             sessionStorage.setItem('refreshToken', state.refreshToken);
           }
