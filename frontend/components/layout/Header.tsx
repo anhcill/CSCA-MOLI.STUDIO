@@ -54,9 +54,33 @@ const MAIN_NAV_BOTTOM = [
   { id: 'docs', labelKey: 'nav.docs', href: '/tailieu', icon: FiFileText },
   { id: 'station', labelKey: 'nav.studyStation', href: '/tram-dong-luc', icon: FaFire },
   { id: 'forum', labelKey: 'nav.forum', href: '/forum', icon: FiMessageSquare },
-  { id: 'qa', labelKey: 'nav.qa', href: '/hoi-dap', icon: FaCrown },
-  { id: 'feedback', labelKey: 'nav.feedback', href: '/gop-y', icon: FiHelpCircle },
-  { id: 'blog', labelKey: 'nav.blog', href: '/blog', icon: FiBookOpen },
+];
+
+const FEEDBACK_DROPDOWN_ITEMS = [
+  {
+    id: 'feedback',
+    labelKey: 'nav.feedback',
+    href: '/gop-y',
+    icon: FiHelpCircle,
+    subtitle: 'Gửi phản hồi, góp ý',
+    iconBg: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400',
+  },
+  {
+    id: 'qa',
+    labelKey: 'nav.qa',
+    href: '/hoi-dap',
+    icon: FaCrown,
+    subtitle: 'Hỏi đáp bài tập VIP',
+    iconBg: 'bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400',
+  },
+  {
+    id: 'blog',
+    labelKey: 'nav.blog',
+    href: '/blog',
+    icon: FiBookOpen,
+    subtitle: 'Kinh nghiệm & bài viết',
+    iconBg: 'bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400',
+  },
 ];
 
 export default function Header() {
@@ -65,6 +89,7 @@ export default function Header() {
   const { user, isAuthenticated, logout } = useAuthStore();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showCourseMenu, setShowCourseMenu] = useState(false);
+  const [showFeedbackMenu, setShowFeedbackMenu] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mobileCourseOpen, setMobileCourseOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
@@ -73,6 +98,7 @@ export default function Header() {
   const [nationalDayTheme, setNationalDayTheme] = useState(isNationalDayThemeActive);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const courseMenuRef = useRef<HTMLDivElement>(null);
+  const feedbackMenuRef = useRef<HTMLDivElement>(null);
   const lastScrollY = useRef(0);
 
   useEffect(() => { setMounted(true); }, []);
@@ -105,12 +131,18 @@ export default function Header() {
       if (courseMenuRef.current && !courseMenuRef.current.contains(event.target as Node)) {
         setShowCourseMenu(false);
       }
+      if (feedbackMenuRef.current && !feedbackMenuRef.current.contains(event.target as Node)) {
+        setShowFeedbackMenu(false);
+      }
     };
     document.addEventListener('mousedown', onClick);
     return () => document.removeEventListener('mousedown', onClick);
   }, []);
 
-  useEffect(() => setMobileOpen(false), [pathname]);
+  useEffect(() => {
+    setMobileOpen(false);
+    setShowFeedbackMenu(false);
+  }, [pathname]);
 
   useEffect(() => {
     if (!nationalDayTheme) return;
@@ -389,6 +421,79 @@ export default function Header() {
                 </Link>
               );
             })}
+
+            {/* Dropdown Góp ý (gộp Góp ý, Hỏi đáp VIP, Blog để tiết kiệm không gian) */}
+            <div
+              className="relative"
+              ref={feedbackMenuRef}
+              onMouseEnter={() => setShowFeedbackMenu(true)}
+              onMouseLeave={() => setShowFeedbackMenu(false)}
+            >
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setShowFeedbackMenu((open) => !open);
+                }}
+                className={`flex items-center gap-1.5 whitespace-nowrap rounded-xl px-3 py-1.5 text-xs font-bold transition-all duration-200 ${nationalDayTheme
+                  ? (isActive('/gop-y') || isActive('/hoi-dap') || isActive('/blog'))
+                    ? 'bg-white/18 text-[#fff0ba]'
+                    : 'text-white/80 hover:bg-white/12 hover:text-[#ffe49a]'
+                  : (isActive('/gop-y') || isActive('/hoi-dap') || isActive('/blog'))
+                  ? 'bg-violet-50 text-violet-700 dark:bg-violet-900/20 dark:text-violet-400'
+                  : 'text-gray-500 hover:bg-gray-50 hover:text-violet-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-violet-400'
+                }`}
+              >
+                <FiHelpCircle className="text-sm" />
+                <span>{t('nav.feedback')}</span>
+                <FiChevronDown
+                  className={`text-xs transition-transform duration-200 ${
+                    showFeedbackMenu
+                      ? nationalDayTheme
+                        ? 'rotate-180 text-[#ffe49a]'
+                        : 'rotate-180 text-violet-600'
+                      : ''
+                  }`}
+                />
+              </button>
+
+              {showFeedbackMenu && (
+                <div
+                  className="absolute left-0 top-full z-50 pt-2"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <div className="w-56 overflow-hidden rounded-2xl border border-gray-100 bg-white p-1.5 shadow-xl dark:border-gray-800 dark:bg-gray-900">
+                    {FEEDBACK_DROPDOWN_ITEMS.map((item) => {
+                      const Icon = item.icon;
+                      const active = isActive(item.href);
+                      return (
+                        <Link
+                          key={item.id}
+                          href={item.href}
+                          onClick={() => setShowFeedbackMenu(false)}
+                          className={`flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-bold transition-colors ${
+                            active
+                              ? 'bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-400'
+                              : 'text-gray-700 hover:bg-gray-50 hover:text-violet-700 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-violet-400'
+                          }`}
+                        >
+                          <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${item.iconBg}`}>
+                            <Icon className="text-xs" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate">{t(item.labelKey)}</div>
+                            <div className="truncate text-[10px] font-normal text-gray-400 dark:text-gray-500">
+                              {item.subtitle}
+                            </div>
+                          </div>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
             <Link
               href="/bang-xep-hang"
               className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition-all duration-200 ${nationalDayTheme
@@ -462,7 +567,7 @@ export default function Header() {
               <span className="flex items-center gap-3"><FaGraduationCap /> {t('nav.videoCourses')}</span>
             </Link>
 
-            {[...MAIN_NAV_TOP.slice(1), ...MAIN_NAV_BOTTOM].map((item) => {
+            {[...MAIN_NAV_TOP.slice(1), ...MAIN_NAV_BOTTOM, ...FEEDBACK_DROPDOWN_ITEMS].map((item) => {
               const Icon = item.icon;
               return (
                 <Link
