@@ -1,6 +1,7 @@
 import axios from '../utils/axios';
 
 export interface RegisterData {
+  turnstileToken?: string;
   username: string;
   email: string;
   password: string;
@@ -11,6 +12,7 @@ export interface RegisterData {
 }
 
 export interface LoginData {
+  turnstileToken?: string;
   email: string;
   password: string;
 }
@@ -202,16 +204,18 @@ export const verifyOtp = async (challengeToken: string, otp: string): Promise<Ot
 /**
  * Resend OTP code
  */
-export const resendOtp = async (challengeToken: string): Promise<{ success: boolean; message: string }> => {
-  const response = await axios.post('/auth/otp/resend', { challengeToken });
+export const resendOtp = async (challengeToken: string, turnstileToken: string): Promise<{ success: boolean; message: string }> => {
+  const response = await axios.post('/auth/otp/resend', { challengeToken, turnstileToken });
   return response.data;
 };
 
 export const resendVerificationEmail = async (
   email: string,
+  turnstileToken: string,
 ): Promise<{ success: boolean; message: string }> => {
   const response = await axios.post('/auth/resend-verification-email', {
     email,
+    turnstileToken,
   });
   return response.data;
 };

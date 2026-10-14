@@ -30,6 +30,7 @@ import { sanitizeInput } from '@/lib/utils/security';
 import { useLanguage } from '@/context/LanguageContext';
 import SocialAuthButtons from './SocialAuthButtons';
 import TermsModal from './TermsModal';
+import TurnstileBox, { isTurnstileEnabled } from './TurnstileBox';
 import { FiArrowRight, FiLock, FiMonitor, FiShield, FiUser } from 'react-icons/fi';
 
 export default function LoginForm() {
@@ -49,6 +50,12 @@ export default function LoginForm() {
   const [termsModalType, setTermsModalType] = useState<'terms' | 'privacy'>('terms');
   const [unverifiedEmail, setUnverifiedEmail] = useState('');
   const [verificationResending, setVerificationResending] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState('');
+  const [turnstileResetKey, setTurnstileResetKey] = useState(0);
+  const resetTurnstile = () => {
+    setTurnstileToken('');
+    setTurnstileResetKey(key => key + 1);
+  };
   // ── OTP Step ────────────────────────────────────────────────────────────────
   const [otpStep, setOtpStep] = useState(false);
   const [pendingChallengeToken, setPendingChallengeToken] = useState('');
@@ -141,6 +148,9 @@ export default function LoginForm() {
       newErrors.password = t('auth.requiredPassword');
     } else if (formData.password.length < 6) {
       newErrors.password = t('auth.passwordMin6');
+    }
+    if (isTurnstileEnabled && !turnstileToken) {
+      newErrors.general = 'Vui lòng xác nhận Cloudflare trước khi đăng nhập.';
     }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -292,7 +302,7 @@ export default function LoginForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isLocked) return;
+    if (isLocked || isSubmitting || verificationResending) return;
     if (!validateForm()) return;
     setIsSubmitting(true);
     setLoading(true);
@@ -300,7 +310,7 @@ export default function LoginForm() {
     setUnverifiedEmail('');
 
     try {
-      const response = await login(formData);
+      const response = await login({ ...formData, turnstileToken });
       if (response.success) {
         if (await startAdminMfaFlow(response)) {
           setIsSubmitting(false);
@@ -355,21 +365,27 @@ export default function LoginForm() {
         setErrors({ general: format('auth.failedWithRemaining', { message, remaining }) });
       }
     } finally {
+      resetTurnstile();
       setIsSubmitting(false);
       setLoading(false);
     }
   };
 
   const handleResendVerification = async () => {
-    if (!unverifiedEmail) return;
+    if (!unverifiedEmail || verificationResending || isSubmitting) return;
+    if (isTurnstileEnabled && !turnstileToken) {
+      setErrors({ general: 'Vui lòng xác nhận Cloudflare trước khi gửi lại email.' });
+      return;
+    }
     setVerificationResending(true);
     try {
-      const response = await resendVerificationEmail(unverifiedEmail);
+      const response = await resendVerificationEmail(unverifiedEmail, turnstileToken);
       setErrors({ general: response.message });
       setUnverifiedEmail('');
     } catch (error: any) {
       setErrors({ general: error.response?.data?.message || 'Chưa thể gửi lại email xác minh.' });
     } finally {
+      resetTurnstile();
       setVerificationResending(false);
     }
   };
@@ -486,10 +502,14 @@ export default function LoginForm() {
   };
 
   const handleResendOtp = async () => {
-    if (!pendingChallengeToken || otpResending) return;
+    if (!pendingChallengeToken || otpResending || isSubmitting || otpCountdown > 0) return;
+    if (isTurnstileEnabled && !turnstileToken) {
+      setOtpError('Vui lòng xác nhận Cloudflare trước khi gửi lại OTP.');
+      return;
+    }
     setOtpResending(true);
     try {
-      await resendOtp(pendingChallengeToken);
+      await resendOtp(pendingChallengeToken, turnstileToken);
       setOtpCountdown(60);
       setOtpValues(['', '', '', '', '', '']);
       setOtpError('');
@@ -497,11 +517,13 @@ export default function LoginForm() {
     } catch (error: any) {
       setOtpError(error.response?.data?.message || t('auth.otpResendFailed'));
     } finally {
+      resetTurnstile();
       setOtpResending(false);
     }
   };
 
   const handleBackToLogin = () => {
+    resetTurnstile();
     setOtpStep(false);
     setPendingChallengeToken('');
     setOtpValues(['', '', '', '', '', '']);
@@ -950,12 +972,20 @@ export default function LoginForm() {
           )}
 
           <div className="text-center space-y-2">
+            {isTurnstileEnabled && (
+              <TurnstileBox
+                action="otp_resend"
+                disabled={otpResending || isSubmitting}
+                resetKey={turnstileResetKey}
+                onTokenChange={setTurnstileToken}
+              />
+            )}
             <p className="text-sm text-gray-500 dark:text-slate-400">
               {t('auth.noOtp')}{' '}
               <button
                 type="button"
                 onClick={handleResendOtp}
-                disabled={otpCountdown > 0 || otpResending}
+                disabled={otpCountdown > 0 || otpResending || isSubmitting || (isTurnstileEnabled && !turnstileToken)}
                 className={`font-semibold ${otpCountdown > 0 ? 'text-gray-400 cursor-not-allowed' : 'text-indigo-600 hover:text-indigo-500'}`}
               >
                 {otpCountdown > 0 ? format('auth.resendIn', { seconds: otpCountdown }) : otpResending ? t('auth.resending') : t('auth.resendCode')}
@@ -979,7 +1009,7 @@ export default function LoginForm() {
               <button
                 type="button"
                 onClick={handleResendVerification}
-                disabled={verificationResending}
+                disabled={verificationResending || isSubmitting || (isTurnstileEnabled && !turnstileToken)}
                 className="mt-3 block w-full rounded-xl bg-[#bd111c] px-3 py-2 font-black text-white disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {verificationResending ? 'Đang gửi…' : 'Gửi lại email xác minh'}
@@ -1026,6 +1056,15 @@ export default function LoginForm() {
           {errors.password && <p className="mt-1.5 text-sm text-red-600">{errors.password}</p>}
         </div>
 
+        {isTurnstileEnabled && (
+          <TurnstileBox
+            action="login"
+            disabled={isSubmitting || isLocked || verificationResending}
+            resetKey={turnstileResetKey}
+            onTokenChange={setTurnstileToken}
+          />
+        )}
+
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <label className="flex items-center">
             <input type="checkbox" className="h-4 w-4 rounded border-[#d8bca0] text-[#c1121f] focus:ring-[#c1121f]" />
@@ -1036,7 +1075,7 @@ export default function LoginForm() {
 
         <button
           type="submit"
-          disabled={isSubmitting || isLocked}
+          disabled={isSubmitting || isLocked || verificationResending || (isTurnstileEnabled && !turnstileToken)}
           className="group flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#df1f24] to-[#a80f14] px-4 py-3.5 font-black text-white shadow-[0_18px_34px_rgba(190,28,32,0.28)] transition-all hover:translate-y-[-1px] hover:shadow-[0_22px_42px_rgba(190,28,32,0.34)] focus:outline-none focus:ring-4 focus:ring-[#c1121f]/20 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isSubmitting ? (

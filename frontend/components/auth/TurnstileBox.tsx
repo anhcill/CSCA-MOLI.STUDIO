@@ -31,10 +31,6 @@ declare global {
 
 const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || '';
 export const isTurnstileEnabled = Boolean(siteKey);
-// Keep this component available for future high-risk forms. Authentication
-// forms currently rely on their existing rate limits instead of a widget.
-export const isLoginTurnstileEnabled =
-  isTurnstileEnabled && process.env.NEXT_PUBLIC_TURNSTILE_LOGIN_ENABLED === 'true';
 
 export default function TurnstileBox({ action, disabled = false, resetKey = 0, onTokenChange }: TurnstileBoxProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);

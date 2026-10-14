@@ -9,6 +9,8 @@ import {
   FiChevronRight,
   FiExternalLink,
   FiMessageCircle,
+  FiPause,
+  FiPlay,
   FiStar,
   FiX,
 } from 'react-icons/fi';
@@ -17,33 +19,38 @@ import { MOLY_TUTORS } from '@/lib/data/molyTutors';
 
 export function CourseTutorShowcase({ courseTitle }: { courseTitle: string }) {
   const [selectedTutorId, setSelectedTutorId] = useState<string | null>(null);
-  const [activeTutorIndex, setActiveTutorIndex] = useState(0);
+  const [activePageIndex, setActivePageIndex] = useState(0);
+  const [tutorsPerPage, setTutorsPerPage] = useState(3);
   const [carouselPaused, setCarouselPaused] = useState(false);
+  const [carouselHovered, setCarouselHovered] = useState(false);
+  const [carouselFocused, setCarouselFocused] = useState(false);
   const carouselRef = useRef<HTMLDivElement>(null);
-  const activeTutorIndexRef = useRef(0);
+  const activePageIndexRef = useRef(0);
   const programmaticScrollUntilRef = useRef(0);
   const selectedTutor = MOLY_TUTORS.find((tutor) => tutor.id === selectedTutorId);
+  const pageCount = Math.ceil(MOLY_TUTORS.length / tutorsPerPage);
 
-  const scrollToTutor = useCallback((requestedIndex: number) => {
-    const tutorCount = MOLY_TUTORS.length;
+  const scrollToPage = useCallback((requestedIndex: number) => {
     const carousel = carouselRef.current;
-    if (!carousel || tutorCount === 0) return;
+    if (!carousel || pageCount === 0) return;
 
-    const nextIndex = (requestedIndex + tutorCount) % tutorCount;
-    const nextCard = carousel.querySelector<HTMLElement>(`[data-tutor-index="${nextIndex}"]`);
+    const nextIndex = ((requestedIndex % pageCount) + pageCount) % pageCount;
+    const nextCard = carousel.querySelector<HTMLElement>(`[data-tutor-index="${nextIndex * tutorsPerPage}"]`);
     if (!nextCard) return;
 
-    activeTutorIndexRef.current = nextIndex;
+    activePageIndexRef.current = nextIndex;
     programmaticScrollUntilRef.current = Date.now() + 900;
-    setActiveTutorIndex(nextIndex);
-    carousel.scrollTo({ left: nextCard.offsetLeft, behavior: 'smooth' });
-  }, []);
+    setActivePageIndex(nextIndex);
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    carousel.scrollTo({ left: nextCard.offsetLeft, behavior: reducedMotion ? 'auto' : 'smooth' });
+  }, [pageCount, tutorsPerPage]);
 
-  const syncActiveTutor = useCallback(() => {
+  const syncActivePage = useCallback(() => {
     const carousel = carouselRef.current;
     if (!carousel || Date.now() < programmaticScrollUntilRef.current) return;
 
-    const cards = Array.from(carousel.querySelectorAll<HTMLElement>('[data-tutor-index]'));
+    const cards = Array.from(carousel.querySelectorAll<HTMLElement>('[data-tutor-index]'))
+      .filter((card) => Number(card.dataset.tutorIndex) % tutorsPerPage === 0);
     if (!cards.length) return;
 
     const nearestCard = cards.reduce((nearest, card) => (
@@ -51,23 +58,35 @@ export function CourseTutorShowcase({ courseTitle }: { courseTitle: string }) {
         ? card
         : nearest
     ));
-    const nearestIndex = Number(nearestCard.dataset.tutorIndex || 0);
-    if (nearestIndex !== activeTutorIndexRef.current) {
-      activeTutorIndexRef.current = nearestIndex;
-      setActiveTutorIndex(nearestIndex);
+    const nearestIndex = Number(nearestCard.dataset.tutorIndex || 0) / tutorsPerPage;
+    if (nearestIndex !== activePageIndexRef.current) {
+      activePageIndexRef.current = nearestIndex;
+      setActivePageIndex(nearestIndex);
     }
+  }, [tutorsPerPage]);
+
+  useEffect(() => {
+    const desktop = window.matchMedia('(min-width: 640px)');
+    const syncPageSize = () => setTutorsPerPage(desktop.matches ? 3 : 1);
+    syncPageSize();
+    desktop.addEventListener('change', syncPageSize);
+    return () => desktop.removeEventListener('change', syncPageSize);
   }, []);
 
   useEffect(() => {
-    if (carouselPaused || selectedTutorId || MOLY_TUTORS.length < 2) return undefined;
+    scrollToPage(0);
+  }, [scrollToPage]);
+
+  useEffect(() => {
+    if (carouselPaused || carouselHovered || carouselFocused || selectedTutorId || pageCount < 2) return undefined;
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined;
 
     const timer = window.setInterval(() => {
-      scrollToTutor(activeTutorIndexRef.current + 1);
-    }, 3400);
+      scrollToPage(activePageIndexRef.current + 1);
+    }, 4500);
 
     return () => window.clearInterval(timer);
-  }, [activeTutorIndex, carouselPaused, scrollToTutor, selectedTutorId]);
+  }, [activePageIndex, carouselPaused, carouselHovered, carouselFocused, pageCount, scrollToPage, selectedTutorId]);
 
   return (
     <>
@@ -91,14 +110,17 @@ export function CourseTutorShowcase({ courseTitle }: { courseTitle: string }) {
             <FiMessageCircle className="text-[#cf543f]" /> Đăng ký qua Zalo
           </a>
           <div className="inline-flex items-center rounded-full border border-[#d9c8b9] bg-white/85 p-1 shadow-sm dark:border-[#40506a] dark:bg-[#101e33]" aria-label="Điều khiển danh sách gia sư">
-            <button type="button" onClick={() => scrollToTutor(activeTutorIndex - 1)} aria-label="Xem gia sư trước" className="grid h-9 w-9 place-items-center rounded-full text-[#6b493b] transition hover:bg-[#fff1eb] hover:text-[#a34239] dark:text-[#f1d6bc] dark:hover:bg-[#192a42]">
+            <button type="button" onClick={() => scrollToPage(activePageIndex - 1)} aria-label="Xem nhóm gia sư trước" className="grid h-9 w-9 place-items-center rounded-full text-[#6b493b] transition hover:bg-[#fff1eb] hover:text-[#a34239] dark:text-[#f1d6bc] dark:hover:bg-[#192a42]">
               <FiChevronLeft className="h-5 w-5" />
             </button>
-            <span className="min-w-11 text-center text-[11px] font-black tabular-nums text-[#8a6d5d] dark:text-slate-300" aria-live="polite">
-              {activeTutorIndex + 1}/{MOLY_TUTORS.length}
+            <span className="min-w-11 text-center text-[11px] font-black tabular-nums text-[#8a6d5d] dark:text-slate-300">
+              {activePageIndex + 1}/{pageCount}
             </span>
-            <button type="button" onClick={() => scrollToTutor(activeTutorIndex + 1)} aria-label="Xem gia sư tiếp theo" className="grid h-9 w-9 place-items-center rounded-full text-[#6b493b] transition hover:bg-[#fff1eb] hover:text-[#a34239] dark:text-[#f1d6bc] dark:hover:bg-[#192a42]">
+            <button type="button" onClick={() => scrollToPage(activePageIndex + 1)} aria-label="Xem nhóm gia sư tiếp theo" className="grid h-9 w-9 place-items-center rounded-full text-[#6b493b] transition hover:bg-[#fff1eb] hover:text-[#a34239] dark:text-[#f1d6bc] dark:hover:bg-[#192a42]">
               <FiChevronRight className="h-5 w-5" />
+            </button>
+            <button type="button" onClick={() => setCarouselPaused(paused => !paused)} aria-label={carouselPaused ? 'Tiếp tục tự động chuyển gia sư' : 'Tạm dừng tự động chuyển gia sư'} aria-pressed={carouselPaused} className="grid h-9 w-9 place-items-center rounded-full text-[#6b493b] transition hover:bg-[#fff1eb] hover:text-[#a34239] dark:text-[#f1d6bc] dark:hover:bg-[#192a42]">
+              {carouselPaused ? <FiPlay className="h-4 w-4" /> : <FiPause className="h-4 w-4" />}
             </button>
           </div>
         </div>
@@ -106,14 +128,14 @@ export function CourseTutorShowcase({ courseTitle }: { courseTitle: string }) {
 
       <div
         ref={carouselRef}
-        onScroll={syncActiveTutor}
-        onMouseEnter={() => setCarouselPaused(true)}
-        onMouseLeave={() => setCarouselPaused(false)}
-        onFocusCapture={() => setCarouselPaused(true)}
+        onScroll={syncActivePage}
+        onMouseEnter={() => setCarouselHovered(true)}
+        onMouseLeave={() => setCarouselHovered(false)}
+        onFocusCapture={() => setCarouselFocused(true)}
         onBlurCapture={(event) => {
-          if (!event.currentTarget.contains(event.relatedTarget)) setCarouselPaused(false);
+          if (!event.currentTarget.contains(event.relatedTarget)) setCarouselFocused(false);
         }}
-        className="relative mt-7 flex h-[286px] snap-x snap-mandatory items-end gap-4 overflow-x-auto pb-3 [scroll-behavior:smooth] [scrollbar-color:#cf9b88_transparent] [scrollbar-width:thin] sm:h-[338px]"
+        className="relative mt-7 flex h-[286px] snap-x snap-mandatory items-end gap-4 overflow-x-auto pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:h-[338px]"
         aria-label="Danh sách gia sư tự động chuyển"
       >
         {MOLY_TUTORS.map((tutor, index) => (
@@ -123,7 +145,7 @@ export function CourseTutorShowcase({ courseTitle }: { courseTitle: string }) {
             data-tutor-index={index}
             onClick={() => setSelectedTutorId(tutor.id)}
             aria-label={`Xem hồ sơ giảng viên ${tutor.name}`}
-            className="group relative block h-[252px] min-w-[188px] snap-start overflow-hidden rounded-[1.35rem] bg-[#19233a] shadow-[0_10px_22px_rgba(0,0,0,.16)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_18px_30px_rgba(0,0,0,.28)] sm:h-[300px] sm:min-w-[224px]"
+            className={`group relative block h-[252px] min-w-0 shrink-0 basis-full overflow-hidden rounded-[1.35rem] bg-[#19233a] shadow-[0_10px_22px_rgba(0,0,0,.16)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_18px_30px_rgba(0,0,0,.28)] sm:h-[300px] sm:basis-[calc((100%-2rem)/3)] ${index % tutorsPerPage === 0 ? 'snap-start' : ''}`}
             style={{
               clipPath: index % 2 === 0
                 ? 'polygon(0 0, 100% 4%, 100% 100%, 0 100%)'

@@ -12,6 +12,7 @@ import { useLanguage } from '@/context/LanguageContext';
 import PasswordStrengthIndicator from './PasswordStrengthIndicator';
 import SocialAuthButtons from './SocialAuthButtons';
 import TermsModal from './TermsModal';
+import TurnstileBox, { isTurnstileEnabled } from './TurnstileBox';
 
 export default function RegisterForm() {
   const router = useRouter();
@@ -30,6 +31,8 @@ export default function RegisterForm() {
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [termsModalType, setTermsModalType] = useState<'terms' | 'privacy'>('terms');
   const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState('');
+  const [turnstileResetKey, setTurnstileResetKey] = useState(0);
 
   const inputBaseClass = 'auth-login-input w-full rounded-2xl border px-4 py-3.5 pl-12 font-semibold text-[#2f2926] shadow-[0_12px_30px_rgba(90,54,24,0.08)] outline-none transition-all placeholder:text-[#7a675a] focus:border-[#c1121f] focus:ring-4 focus:ring-[#c1121f]/12 disabled:cursor-not-allowed disabled:opacity-60';
 
@@ -74,6 +77,9 @@ export default function RegisterForm() {
     if (!acceptedTerms) {
       newErrors.terms = 'Bạn cần đồng ý Điều khoản sử dụng và Chính sách bảo mật.';
     }
+    if (isTurnstileEnabled && !turnstileToken) {
+      newErrors.general = 'Vui lòng xác nhận Cloudflare trước khi đăng ký.';
+    }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -94,6 +100,7 @@ export default function RegisterForm() {
         acceptedTerms,
         termsVersion: '2026-08',
         privacyVersion: '2026-08',
+        turnstileToken,
       });
       if (response.success && response.data) {
         const { user: registerUser, token, refreshToken } = response.data;
@@ -117,6 +124,8 @@ export default function RegisterForm() {
     } catch (error: any) {
       setErrors({ general: error.response?.data?.message || t('auth.registerFailed') });
     } finally {
+      setTurnstileToken('');
+      setTurnstileResetKey(key => key + 1);
       setIsSubmitting(false);
       setLoading(false);
     }
@@ -336,9 +345,18 @@ export default function RegisterForm() {
         </div>
         {errors.terms && <p className="-mt-2 text-sm font-semibold text-red-600">{errors.terms}</p>}
 
+        {isTurnstileEnabled && (
+          <TurnstileBox
+            action="register"
+            disabled={isSubmitting}
+            resetKey={turnstileResetKey}
+            onTokenChange={setTurnstileToken}
+          />
+        )}
+
         <button
           type="submit"
-          disabled={isSubmitting}
+          disabled={isSubmitting || (isTurnstileEnabled && !turnstileToken)}
           className="group flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#df1f24] to-[#a80f14] px-4 py-3.5 font-black text-white shadow-[0_18px_34px_rgba(190,28,32,0.28)] transition-all hover:translate-y-[-1px] hover:shadow-[0_22px_42px_rgba(190,28,32,0.34)] focus:outline-none focus:ring-4 focus:ring-[#c1121f]/20 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isSubmitting ? (
