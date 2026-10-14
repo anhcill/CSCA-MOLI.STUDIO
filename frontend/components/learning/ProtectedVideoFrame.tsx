@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { FiMaximize, FiMinimize } from 'react-icons/fi';
 import type { PlaybackSessionDto } from '@/lib/types/courses';
 
 // Browser deterrents only: the web has no reliable OS screen-recording signal.
@@ -13,7 +14,6 @@ export function ProtectedVideoFrame({ session, onPause, children }: {
   const [covered, setCovered] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [nativeFullscreen, setNativeFullscreen] = useState(false);
-  const [step, setStep] = useState(0);
 
   useEffect(() => {
     const cover = () => { pause.current(); setCovered(true); };
@@ -29,7 +29,6 @@ export function ProtectedVideoFrame({ session, onPause, children }: {
     window.addEventListener('pagehide', cover);
     window.addEventListener('beforeprint', cover);
     window.addEventListener('keydown', key);
-    const timer = window.setInterval(() => setStep(value => (value + 1) % 6), 9000);
     visibility();
     return () => {
       document.removeEventListener('visibilitychange', visibility);
@@ -37,7 +36,6 @@ export function ProtectedVideoFrame({ session, onPause, children }: {
       window.removeEventListener('pagehide', cover);
       window.removeEventListener('beforeprint', cover);
       window.removeEventListener('keydown', key);
-      window.clearInterval(timer);
     };
   }, []);
 
@@ -59,24 +57,20 @@ export function ProtectedVideoFrame({ session, onPause, children }: {
       } catch { setExpanded(true); }
     }
   };
-  const positions = [
-    { left: '4%', top: '18%' }, { left: '48%', top: '36%' },
-    { left: '12%', top: '60%' }, { left: '48%', top: '18%' },
-    { left: '4%', top: '38%' }, { left: '46%', top: '60%' },
-  ];
   const viewer = session.viewerCode || `Phien ${session.sessionId.slice(0, 8)}`;
   return <div ref={root} data-protected-video className={`${expanded ? 'fixed inset-0 z-[10000]' : 'relative h-full w-full'} overflow-hidden bg-black print:invisible`}
     onContextMenu={event => event.preventDefault()}
     onDragStart={event => event.preventDefault()}
     onPlayCapture={() => { if (document.hidden || covered) pause.current(); }}>
     {children}
-    <div data-video-watermark aria-hidden="true" className="pointer-events-none absolute z-20 max-w-[48%] select-none break-all rounded bg-black/20 px-2 py-1 text-[10px] font-semibold text-white/60 sm:text-xs"
-      style={{ ...positions[step], textShadow: '0 1px 2px #000' }}>
-      {viewer}<br />CSCA · {session.sessionId.slice(0, 8)}
+    <div data-video-watermark aria-hidden="true" className="pointer-events-none absolute left-2 top-2 z-20 max-w-[calc(100%-4.5rem)] select-none truncate rounded bg-black/15 px-1.5 py-1 text-[9px] font-medium text-white/50 sm:text-[10px]"
+      style={{ textShadow: '0 1px 2px #000' }}>
+      {viewer} · {session.sessionId.slice(0, 8)}
     </div>
-    <button type="button" onClick={() => void toggleFullscreen()} className="absolute right-2 top-2 z-30 rounded bg-black/75 px-3 py-2 text-xs text-white"
+    <button type="button" onClick={() => void toggleFullscreen()} className="absolute right-2 top-2 z-30 flex h-11 w-11 items-center justify-center rounded-lg bg-black/60 text-white transition hover:bg-black/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+      title={expanded || nativeFullscreen ? 'Thu nhỏ video' : 'Phóng to video'}
       aria-label={expanded || nativeFullscreen ? 'Thu nhỏ video' : 'Phóng to video'}>
-      {expanded || nativeFullscreen ? 'Thu nhỏ' : 'Phóng to'}
+      {expanded || nativeFullscreen ? <FiMinimize aria-hidden="true" className="h-5 w-5" /> : <FiMaximize aria-hidden="true" className="h-5 w-5" />}
     </button>
     {covered ? <div role="status" data-video-shield className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-3 bg-black p-4 text-center text-sm text-white">
       <p>Video đã tạm dừng để bảo vệ nội dung.</p>

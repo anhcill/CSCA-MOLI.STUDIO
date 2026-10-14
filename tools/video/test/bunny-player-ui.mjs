@@ -67,8 +67,8 @@ try {
   assert.match(await watermark.innerText(),/CSCA-7/,'server viewer code is visible');
   assert.equal(await iframe.getAttribute('allowfullscreen'),null,'iframe cannot fullscreen outside watermark');
   assert.match(await iframe.getAttribute('allow'),/picture-in-picture 'none'/);
-  const beforePosition=await watermark.getAttribute('style');
-  await page.waitForFunction(before=>document.querySelector('[data-video-watermark]').getAttribute('style')!==before,beforePosition);
+  assert.deepEqual(await watermark.evaluate(el=>({left:getComputedStyle(el).left,top:getComputedStyle(el).top})),{left:'8px',top:'8px'},'watermark stays in the corner');
+  assert.equal(await page.getByRole('button',{name:'Phóng to video',exact:true}).innerText(),'','fullscreen control uses an icon');
   // Simulate mobile browsers without element fullscreen; preserve the same iframe.
   await page.evaluate(()=>{document.querySelector('[data-protected-video]').requestFullscreen=undefined;});
   await page.getByRole('button',{name:'Phóng to video',exact:true}).click();
@@ -111,7 +111,7 @@ try {
   await page.getByRole('button',{name:'Thử lại',exact:true}).click();
   await page.getByText('Không thể gia hạn phiên phát.',{exact:false}).waitFor();
   assert.equal(errors.length,0,errors.join('\n'));
-  console.log(JSON.stringify({passed:true,checks:['initial failure retry','resume','watch progress','seek exclusion','mobile overflow','viewer watermark moves','iframe fullscreen/PiP denied','mobile expansion retains watermark/player','mobile and desktop hidden pause/shield','manual return','delivered screenshot shortcut shield','print concealment','paused refresh preserves position','playing refresh resumes','revoked refresh stops playback']},null,2));
+  console.log(JSON.stringify({passed:true,checks:['initial failure retry','resume','watch progress','seek exclusion','mobile overflow','corner watermark and icon fullscreen','iframe fullscreen/PiP denied','mobile expansion retains watermark/player','mobile and desktop hidden pause/shield','manual return','delivered screenshot shortcut shield','print concealment','paused refresh preserves position','playing refresh resumes','revoked refresh stops playback']},null,2));
 } catch(error) {
   console.error(JSON.stringify({pageErrors:errors,body:(await page.locator('body').innerText()).slice(0,2500)}));
   await page.screenshot({path:path.join(process.env.TEMP||'/tmp','bunny-day5-failure.png'),fullPage:true});
