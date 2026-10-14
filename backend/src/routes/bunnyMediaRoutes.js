@@ -11,6 +11,7 @@ const handle = work => async (req,res) => {
   catch (error) { return sendCourseError(res,error); }
 };
 router.get('/assets/:assetId',handle((s,r)=>s.status(r.params.assetId,r.user)));
+router.post('/assets/:assetId/preview',handle((s,r)=>s.preview(r.params.assetId,r.user)));
 router.post('/uploads',mediaUploadLimiter,handle((s,r)=>s.create(r.body || {},r.user)));
 router.post('/assets/:assetId/authorization',mediaUploadLimiter,handle((s,r)=>s.authorization(r.params.assetId,r.user)));
 router.post('/assets/:assetId/sync',mediaUploadLimiter,handle((s,r)=>s.sync(r.params.assetId,r.user)));

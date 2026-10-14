@@ -241,7 +241,7 @@ async function recalculateAggregates(courseId, client) {
          (SELECT COUNT(*)::int FROM course_sections WHERE course_id = $1) AS total_sections,
          (SELECT COUNT(*)::int FROM course_lessons WHERE course_id = $1) AS total_lessons,
          (SELECT COALESCE(SUM(estimated_duration_seconds), 0)::int FROM course_lessons WHERE course_id = $1) AS total_duration_seconds
-     ) x WHERE c.id = x.course_id RETURNING ${COURSE_COLUMNS}`,
+     ) x WHERE c.id = x.course_id RETURNING ${COURSE_COLUMNS.split(',').map(column => `c.${column.trim()}`).join(', ')}`,
     [courseId],
   );
   return result.rows[0] || null;

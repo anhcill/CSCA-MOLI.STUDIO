@@ -4,11 +4,15 @@ import { Upload } from 'tus-js-client';
 import { isAxiosError } from 'axios';
 import { bunnyMediaApi, type BunnyAsset } from '@/lib/api/bunnyMedia';
 import { hashVideoFile, videoContentType } from '@/lib/api/courseMedia';
+import { ProtectedVideoFrame } from '@/components/learning/ProtectedVideoFrame';
+import type { PlaybackSessionDto } from '@/lib/types/courses';
 
 export function BunnyUploadPanel({ courseId, lessonId, currentVideoAssetId, onUploaded }: {
   courseId: number; lessonId: number; currentVideoAssetId?: number | null; onUploaded?: (id: number) => Promise<void> | void;
 }) {
   const [asset, setAsset] = useState<BunnyAsset | null>(null);
+  const [preview, setPreview] = useState<PlaybackSessionDto | null>(null);
+  const previewFrame = useRef<HTMLIFrameElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -19,6 +23,14 @@ export function BunnyUploadPanel({ courseId, lessonId, currentVideoAssetId, onUp
   const alive = useRef(true);
   const controller = useRef<AbortController | null>(null);
   const storageKey = `bunny-upload:${courseId}:${lessonId}`;
+  useEffect(() => {
+    setPreview(null);
+  }, [lessonId]);
+  useEffect(() => {
+    if (!preview) return;
+    const timer = window.setTimeout(() => setPreview(null), Math.max(0, Date.parse(preview.expiresAt) - Date.now()));
+    return () => window.clearTimeout(timer);
+  }, [preview]);
   useEffect(() => {
     alive.current = true;
     const id = currentVideoAssetId || Number(localStorage.getItem(storageKey));
@@ -89,6 +101,15 @@ export function BunnyUploadPanel({ courseId, lessonId, currentVideoAssetId, onUp
   }
   return <div className="space-y-3 rounded-xl border border-teal-300 bg-white p-5 text-slate-800">
     <h4 className="font-bold">Video Bunny Stream</h4>
+    {asset?.status === 'ready' ? <button type="button" disabled={busy} className="rounded-lg border border-teal-700 px-4 py-2 font-bold text-teal-800" onClick={() => {
+      setBusy(true); setError('');
+      void bunnyMediaApi.preview(asset.videoAssetId).then(setPreview).catch(() => setError('Chỉ admin tổng được xem thử. Kiểm tra quyền tài khoản và trạng thái video.')).finally(() => setBusy(false));
+    }}>Xem thử (admin tổng)</button> : null}
+    {preview ? <div className="aspect-video overflow-hidden rounded-xl">
+      <ProtectedVideoFrame session={preview} onPause={() => previewFrame.current?.contentWindow?.postMessage(JSON.stringify({context:'player.js',version:'0.0.11',method:'pause'}),'https://player.mediadelivery.net')}>
+        <iframe ref={previewFrame} src={`${preview.embedUrl}&autoplay=false&playsinline=true`} title="Video demo admin" className="h-full w-full border-0" allow="encrypted-media; fullscreen 'none'; picture-in-picture 'none'; remote-playback 'none'" />
+      </ProtectedVideoFrame>
+    </div> : null}
     <p className="text-sm">MP4/MOV, tối đa 20 GiB. Có thể tạm dừng và chọn lại cùng tệp để tải tiếp.</p>
     {asset ? <p role="status">{asset.status === 'ready' ? `Sẵn sàng · ${Math.ceil(asset.durationSeconds)} giây` : asset.status === 'processing' ? 'Đang xử lý video...' : asset.status === 'failed' ? 'Bunny báo xử lý lỗi.' : 'Đang chờ hoàn tất tải lên.'}</p> : null}
     <input type="file" accept="video/mp4,video/quicktime,.mp4,.mov" disabled={busy || asset?.status === 'ready' || asset?.status === 'processing'} onChange={event => {

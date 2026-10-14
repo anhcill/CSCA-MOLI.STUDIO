@@ -107,6 +107,16 @@ function createBunnyMediaService({ database = db, adapter, config = bunnyConfigF
       return dto(saved);
     });
   }
-  return { create, status, authorization, sync, recover };
+  async function preview(id, actor) {
+    if (!actor?.rbacRoles?.includes('super_admin'))
+      throw new CourseApiError(403, 'SUPER_ADMIN_REQUIRED', 'Only super admins can preview unpublished videos.');
+    const row = await assetForActor(id, actor); requireBunny(row);
+    if (row.status !== 'ready') throw new CourseApiError(409, 'VIDEO_NOT_READY', 'Video is not ready.');
+    const signed = bunny.createEmbedUrl(row.bunny_video_id, 300);
+    return { sessionId: crypto.randomUUID(), lessonId: Number(row.lesson_id), viewerCode: `ADMIN-${actor.id}`,
+      deliveryType: 'bunny', embedUrl: signed.url, manifestUrl: '', expiresAt: signed.expiresAt,
+      variants: [], resumePositionSeconds: 0 };
+  }
+  return { create, status, authorization, sync, recover, preview };
 }
 module.exports = { createBunnyMediaService, providerState };
