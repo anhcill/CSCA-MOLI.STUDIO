@@ -69,7 +69,9 @@ async function screenshot(name){await page.evaluate(()=>window.scrollTo(0,0));aw
 async function noOverflow(){assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+1),false,'Horizontal page overflow');}
 try{
   await goto('/goi-video');await page.getByRole('heading',{name:video.name,exact:true}).waitFor();await noOverflow();await screenshot('catalog-desktop');
-  await page.getByRole('button',{name:'Combo gói + video',exact:true}).click();await page.getByRole('heading',{name:combo.name,exact:true}).waitFor();
+  assert.match(page.url(),/\/vip\?section=video/,'old catalog redirects to upgrade page');
+  await page.getByRole('navigation',{name:'Chọn loại gói nâng cấp'}).getByRole('link',{name:'Gói + video',exact:false}).click();await page.getByRole('heading',{name:combo.name,exact:true}).waitFor();
+  assert.match(page.url(),/section=combo/);
   await page.setViewportSize({width:390,height:844});await noOverflow();await screenshot('catalog-mobile');
   await goto('/thanh-toan-khoa-hoc?type=video&productId=1');await page.getByLabel('Môn muốn học').selectOption('MATH');
   await page.getByRole('button',{name:'Kiểm tra giá & ưu đãi'}).click();await page.getByRole('button',{name:'Xác nhận & tạo thanh toán'}).click();

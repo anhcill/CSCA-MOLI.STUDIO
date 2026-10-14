@@ -4,16 +4,16 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { videoShop,type Page,type ShopProduct,type ProductType,type Promotion } from '@/lib/api/videoShop';
 import { ShopShell,Message,Pager,money,subjects,buttonClass,panelClass,errorText,secondaryClass } from './shared';
-export default function VideoCatalog() {
+export default function VideoCatalog({ embedded = false, productType = 'video' }: { embedded?: boolean; productType?: ProductType }) {
   const params=useSearchParams(),courseId=Number(params.get('courseId'));
-  const [type,setType]=useState<ProductType>('video'),[page,setPage]=useState(1),[data,setData]=useState<Page<ShopProduct>|null>(null);
+  const [type,setType]=useState<ProductType>(productType),[page,setPage]=useState(1),[data,setData]=useState<Page<ShopProduct>|null>(null);
   const [promotion,setPromotion]=useState<Promotion|null>(null),[error,setError]=useState(''),[retry,setRetry]=useState(0);
   useEffect(()=>{let live=true;setData(null);setError('');setPromotion(null);
     Promise.all([videoShop.catalog(type,page),videoShop.promotion(type)]).then(([d,p])=>{if(live){setData(d);setPromotion(p);}}).catch(e=>live&&setError(errorText(e)));
     return()=>{live=false;};
   },[type,page,retry]);
-  return <ShopShell title="Chọn gói cho hành trình của bạn"><p className="-mt-4 mb-7 max-w-2xl text-slate-600 dark:text-slate-300">Học video theo gói, hoặc kết hợp cùng quyền luyện tập VIP. Nội dung và thời hạn từng phần luôn được hiển thị trước khi thanh toán.</p>
-    <div className="mb-6 flex flex-wrap gap-3" role="group" aria-label="Loại gói">{(['video','combo'] as const).map(t=><button key={t} aria-pressed={type===t} className={type===t?buttonClass:secondaryClass} onClick={()=>{setType(t);setPage(1);}}>{t==='video'?'Gói video':'Combo gói + video'}</button>)}<Link href="/vip" className={secondaryClass}>Gói luyện tập hiện tại ↗</Link></div>
+  const content = <><h2 className="mb-6 text-2xl font-black text-slate-900">{type === 'video' ? 'Gói khóa học video' : 'Gói luyện tập kết hợp video'}</h2><p className="-mt-4 mb-7 max-w-2xl text-slate-600 dark:text-slate-300">Học video theo gói, hoặc kết hợp cùng quyền luyện tập VIP. Nội dung và thời hạn từng phần luôn được hiển thị trước khi thanh toán.</p>
+    {!embedded && <div className="mb-6 flex flex-wrap gap-3" role="group" aria-label="Loại gói">{(['video','combo'] as const).map(t=><button key={t} aria-pressed={type===t} className={type===t?buttonClass:secondaryClass} onClick={()=>{setType(t);setPage(1);}}>{t==='video'?'Gói video':'Combo gói + video'}</button>)}<Link href="/vip" className={secondaryClass}>Gói luyện tập hiện tại ↗</Link></div>}
     {promotion&&<div className="mb-6 rounded-2xl bg-[#102b34] p-6 text-white"><p className="text-lg font-black">{promotion.title}</p><p className="mt-2 text-sm text-slate-200">{promotion.content}</p>{promotion.coupon_code&&<p className="mt-3">Mã ưu đãi: <strong>{promotion.coupon_code}</strong></p>}</div>}
     {error?<Message error>{error} <button className="underline" onClick={()=>setRetry(r=>r+1)}>Thử lại</button></Message>:!data?<Message>Đang tải gói học…</Message>:!data.items.length?<Message>Chưa có gói mở bán. Bạn có thể tiếp tục khám phá thư viện khóa học.</Message>:<>
       <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">{data.items.map(p=><article key={p.id} className={`${panelClass} flex flex-col`}>
@@ -26,5 +26,6 @@ export default function VideoCatalog() {
         <ul className="mb-5 space-y-2 text-sm">{p.courses.map(c=><li key={c.id}><Link href={`/khoa-hoc/${c.slug}`} className="underline decoration-slate-300 underline-offset-4">{c.title}</Link></li>)}{p.features.map(f=><li key={f}>✓ {f}</li>)}</ul>
         <Link href={`/thanh-toan-khoa-hoc?type=${type}&productId=${p.id}`} className={`${p.canPurchase?buttonClass:secondaryClass} mt-auto`}>{p.canPurchase?'Chọn gói này':'Xem chi tiết gói'}</Link>
       </article>)}</div><Pager page={page} hasMore={data.hasMore} onPage={setPage}/></>}
-  </ShopShell>;
+  </>;
+  return embedded ? <section className="text-slate-900">{content}</section> : <ShopShell title="Chọn gói cho hành trình của bạn">{content}</ShopShell>;
 }

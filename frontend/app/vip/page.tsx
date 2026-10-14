@@ -1,7 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { Suspense, useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import UpgradeNavigation from '@/components/video-commerce/UpgradeNavigation';
+import VideoCatalog from '@/components/video-commerce/VideoCatalog';
 import { useAuthStore } from '@/lib/store/authStore';
 import { canAccessSubject, getVipDisplay, type TierLevel } from '@/lib/utils/permissions';
 import { FaCheckCircle, FaStar, FaCrown, FaVideo } from 'react-icons/fa';
@@ -199,6 +201,24 @@ function getPackageDescription(pkg: VipPackage) {
 }
 
 export default function VipPricingPage() {
+  return <Suspense fallback={<p className="p-8">Đang tải gói nâng cấp...</p>}><UpgradePage /></Suspense>;
+}
+
+function UpgradePage() {
+  const params = useSearchParams();
+  const requestedSection = params.get('section');
+  const section = requestedSection === 'video' || requestedSection === 'combo' ? requestedSection : 'practice';
+  if (section !== 'practice') return <div className="min-h-screen bg-gradient-to-br from-slate-50 via-indigo-50 to-purple-50 px-4 pb-16 pt-24 sm:px-6 lg:px-8">
+    <div className="mx-auto max-w-7xl">
+      <h1 className="mb-6 text-3xl font-black text-slate-900 sm:text-4xl">Nâng cấp tài khoản</h1>
+      <UpgradeNavigation section={section} />
+      <VideoCatalog key={section} embedded productType={section} />
+    </div>
+  </div>;
+  return <LegacyVipPricingPage />;
+}
+
+function LegacyVipPricingPage() {
   const router = useRouter();
   const { isAuthenticated, user } = useAuthStore();
   const [packages, setPackages] = useState<VipPackage[]>([]);
@@ -321,6 +341,7 @@ export default function VipPricingPage() {
           Quay về
         </button>
 
+        <UpgradeNavigation section="practice" />
         {/* Header */}
         <div className="text-center mb-16">
           <div className="inline-flex items-center gap-2 px-5 py-2 bg-amber-100 border border-amber-200 rounded-full text-amber-800 text-sm font-bold mb-4">

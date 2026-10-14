@@ -1,4 +1,10 @@
-import { Suspense } from 'react';
-import VideoCatalog from '@/components/video-commerce/VideoCatalog';
-export const metadata={title:'Gói video & combo | MOLY'};
-export default function Page(){return <Suspense fallback={<p className="p-8">Đang tải gói học…</p>}><VideoCatalog/></Suspense>;}
+import { redirect } from 'next/navigation';
+
+export default async function Page({ searchParams }: {
+  searchParams: Promise<{ courseId?: string; type?: string }>;
+}) {
+  const params = await searchParams;
+  const query = new URLSearchParams({ section: params.type === 'combo' ? 'combo' : 'video' });
+  if (params.courseId && /^\d+$/.test(params.courseId)) query.set('courseId', params.courseId);
+  redirect(`/vip?${query}`);
+}
