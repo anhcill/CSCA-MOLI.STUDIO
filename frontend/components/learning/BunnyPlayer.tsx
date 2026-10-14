@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import learningApi from '@/lib/api/learning';
 import type { PlaybackSessionDto } from '@/lib/types/courses';
 import { ProtectedVideoFrame } from './ProtectedVideoFrame';
+import { useBunnyWatermark } from './useBunnyWatermark';
 
 const ORIGIN = 'https://player.mediadelivery.net';
 export function BunnyPlayer({ lessonId, session, onProgressSaved }: {
@@ -11,6 +12,7 @@ export function BunnyPlayer({ lessonId, session, onProgressSaved }: {
 }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const [active, setActive] = useState(session);
+  const { sendWatermark, watermarkInside } = useBunnyWatermark(frame, active);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const position = useRef(session.resumePositionSeconds);
@@ -90,8 +92,11 @@ export function BunnyPlayer({ lessonId, session, onProgressSaved }: {
   if (url.origin !== ORIGIN || !url.pathname.startsWith('/embed/')) return <p role="alert">Địa chỉ video không hợp lệ.</p>;
   url.searchParams.set('autoplay', 'false');
   url.searchParams.set('playsinline', 'true');
-  return <ProtectedVideoFrame session={active} onPause={() => { send('pause'); playing.current = false; previous.current = null; void flush(true); }}>
-    <iframe key={active.sessionId} ref={frame} src={url.toString()} title="Video bài học" className="h-full w-full border-0" allow="autoplay; encrypted-media; fullscreen 'none'; picture-in-picture 'none'; display-capture 'none'; remote-playback 'none'" />
+  url.searchParams.set('disableIosPlayer', 'true');
+  url.searchParams.set('chromecast', 'false');
+  url.searchParams.set('disableAirPlay', 'true');
+  return <ProtectedVideoFrame nativeControls watermarkInside={watermarkInside} session={active} onPause={() => { send('pause'); playing.current = false; previous.current = null; void flush(true); }}>
+    <iframe key={active.sessionId} ref={frame} onLoad={sendWatermark} allowFullScreen src={url.toString()} title="Video bài học" className="h-full w-full border-0" allow="autoplay; encrypted-media; fullscreen; picture-in-picture 'none'; display-capture 'none'; remote-playback 'none'" />
     {busy ? <p role="status" className="absolute left-2 top-2 rounded bg-black/80 p-2 text-sm text-white">Đang gia hạn phiên phát...</p> : null}
     {error ? <div role="alert" className="absolute inset-0 grid place-content-center gap-3 bg-black/90 p-4 text-center text-white"><p>{error}</p><button type="button" disabled={busy} onClick={() => void refresh()} className="rounded bg-teal-700 px-4 py-2">Thử lại</button></div> : null}
   </ProtectedVideoFrame>;

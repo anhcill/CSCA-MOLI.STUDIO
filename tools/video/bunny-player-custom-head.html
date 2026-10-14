@@ -1,0 +1,52 @@
+<!-- Append to Bunny Library > Player Settings > Custom head HTML / Custom CSS. -->
+<style>
+  #moly-viewer-watermark {
+    position: absolute; top: 8px; left: 8px; z-index: 50;
+    max-width: calc(100% - 64px); overflow: hidden; white-space: nowrap;
+    text-overflow: ellipsis; pointer-events: none; user-select: none;
+    padding: 3px 6px; border-radius: 4px; background: rgba(0,0,0,.15);
+    color: rgba(255,255,255,.55); font: 10px sans-serif;
+    text-shadow: 0 1px 2px #000;
+  }
+  media-pip-button, media-airplay-button,
+  [data-plyr="pip"], [data-plyr="airplay"] { display: none !important; }
+</style>
+<script>
+(() => {
+  if (window.__molyWatermarkInstalled) return;
+  window.__molyWatermarkInstalled = true;
+  const allowed = new Set(['https://molystudio.online', 'https://www.molystudio.online']);
+  let parentOrigin;
+  try { parentOrigin = new URL(document.referrer).origin; } catch { return; }
+  if (window.parent === window || !allowed.has(parentOrigin)) return;
+  const watermark = document.createElement('div');
+  watermark.id = 'moly-viewer-watermark';
+  watermark.setAttribute('aria-hidden', 'true');
+  watermark.setAttribute('slot', 'top-chrome');
+  let sessionId = null;
+  const attach = () => {
+    // Keep the overlay inside the element that the player's fullscreen button expands.
+    const target = document.fullscreenElement || document.querySelector('media-controller, .plyr');
+    if (!target || target.tagName === 'VIDEO') return;
+    if (watermark.parentElement !== target) target.appendChild(watermark);
+    if (sessionId) window.parent.postMessage({type:'moly:watermark-applied',sessionId},parentOrigin);
+  };
+  window.addEventListener('message', event => {
+    if (event.source !== window.parent || event.origin !== parentOrigin) return;
+    const data = event.data;
+    if (data?.type !== 'moly:watermark' || typeof data.sessionId !== 'string' ||
+        typeof data.label !== 'string' || data.label.length > 120 || data.sessionId.length > 100) return;
+    sessionId = data.sessionId;
+    watermark.textContent = data.label;
+    attach();
+  });
+  const start = () => {
+    new MutationObserver(attach).observe(document.body,{childList:true,subtree:true});
+    document.addEventListener('fullscreenchange',attach);
+    attach();
+    window.parent.postMessage({type:'moly:watermark-ready'},parentOrigin);
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded',start,{once:true});
+  else start();
+})();
+</script>

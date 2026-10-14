@@ -5,6 +5,7 @@ import { isAxiosError } from 'axios';
 import { bunnyMediaApi, type BunnyAsset } from '@/lib/api/bunnyMedia';
 import { hashVideoFile, videoContentType } from '@/lib/api/courseMedia';
 import { ProtectedVideoFrame } from '@/components/learning/ProtectedVideoFrame';
+import { useBunnyWatermark } from '@/components/learning/useBunnyWatermark';
 import type { PlaybackSessionDto } from '@/lib/types/courses';
 
 export function BunnyUploadPanel({ courseId, lessonId, currentVideoAssetId, onUploaded }: {
@@ -13,6 +14,7 @@ export function BunnyUploadPanel({ courseId, lessonId, currentVideoAssetId, onUp
   const [asset, setAsset] = useState<BunnyAsset | null>(null);
   const [preview, setPreview] = useState<PlaybackSessionDto | null>(null);
   const previewFrame = useRef<HTMLIFrameElement>(null);
+  const { sendWatermark, watermarkInside } = useBunnyWatermark(previewFrame, preview);
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -106,8 +108,8 @@ export function BunnyUploadPanel({ courseId, lessonId, currentVideoAssetId, onUp
       void bunnyMediaApi.preview(asset.videoAssetId).then(setPreview).catch(() => setError('Chỉ admin tổng được xem thử. Kiểm tra quyền tài khoản và trạng thái video.')).finally(() => setBusy(false));
     }}>Xem thử (admin tổng)</button> : null}
     {preview ? <div className="aspect-video overflow-hidden rounded-xl">
-      <ProtectedVideoFrame session={preview} onPause={() => previewFrame.current?.contentWindow?.postMessage(JSON.stringify({context:'player.js',version:'0.0.11',method:'pause'}),'https://player.mediadelivery.net')}>
-        <iframe ref={previewFrame} src={`${preview.embedUrl}&autoplay=false&playsinline=true`} title="Video demo admin" className="h-full w-full border-0" allow="encrypted-media; fullscreen 'none'; picture-in-picture 'none'; remote-playback 'none'" />
+      <ProtectedVideoFrame nativeControls watermarkInside={watermarkInside} session={preview} onPause={() => previewFrame.current?.contentWindow?.postMessage(JSON.stringify({context:'player.js',version:'0.0.11',method:'pause'}),'https://player.mediadelivery.net')}>
+        <iframe ref={previewFrame} onLoad={sendWatermark} allowFullScreen src={`${preview.embedUrl}&autoplay=false&playsinline=true&disableIosPlayer=true&chromecast=false&disableAirPlay=true`} title="Video demo admin" className="h-full w-full border-0" allow="encrypted-media; fullscreen; picture-in-picture 'none'; remote-playback 'none'" />
       </ProtectedVideoFrame>
     </div> : null}
     <p className="text-sm">MP4/MOV, tối đa 20 GiB. Có thể tạm dừng và chọn lại cùng tệp để tải tiếp.</p>

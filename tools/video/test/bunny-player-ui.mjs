@@ -65,17 +65,14 @@ try {
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false,'mobile overflow');
   const watermark=page.locator('[data-video-watermark]');
   assert.match(await watermark.innerText(),/CSCA-7/,'server viewer code is visible');
-  assert.equal(await iframe.getAttribute('allowfullscreen'),null,'iframe cannot fullscreen outside watermark');
+  assert.notEqual(await iframe.getAttribute('allowfullscreen'),null,'Bunny fullscreen is allowed');
   assert.match(await iframe.getAttribute('allow'),/picture-in-picture 'none'/);
-  assert.deepEqual(await watermark.evaluate(el=>({left:getComputedStyle(el).left,top:getComputedStyle(el).top})),{left:'8px',top:'8px'},'watermark stays in the corner');
-  assert.equal(await page.getByRole('button',{name:'Phóng to video',exact:true}).innerText(),'','fullscreen control uses an icon');
-  // Simulate mobile browsers without element fullscreen; preserve the same iframe.
-  await page.evaluate(()=>{document.querySelector('[data-protected-video]').requestFullscreen=undefined;});
-  await page.getByRole('button',{name:'Phóng to video',exact:true}).click();
-  assert.equal(await page.locator('[data-protected-video]').evaluate(el=>getComputedStyle(el).position),'fixed');
-  assert.ok(await watermark.isVisible(),'watermark survives mobile expansion');
-  assert.equal(await iframe.elementHandle().then(handle=>handle.contentFrame()),frame,'expansion preserves player');
-  await page.getByRole('button',{name:'Thu nhỏ video',exact:true}).click();
+  assert.equal(await page.getByRole('button',{name:'Phóng to video',exact:true}).count(),0,'no duplicate fullscreen control');
+  await frame.evaluate(()=>parent.postMessage({type:'moly:watermark-ready'},'*'));
+  await frame.waitForFunction(()=>window.commands.length>0);
+  // A stale acknowledgement must not remove the fallback watermark.
+  await frame.evaluate(()=>parent.postMessage({type:'moly:watermark-applied',sessionId:'old'},'*'));
+  assert.ok(await watermark.isVisible());
   for (const width of [390,1440]) {
     await page.setViewportSize({width,height:844});
     await frame.evaluate(()=>{window.commands=[];window.emit('play');});
@@ -111,7 +108,7 @@ try {
   await page.getByRole('button',{name:'Thử lại',exact:true}).click();
   await page.getByText('Không thể gia hạn phiên phát.',{exact:false}).waitFor();
   assert.equal(errors.length,0,errors.join('\n'));
-  console.log(JSON.stringify({passed:true,checks:['initial failure retry','resume','watch progress','seek exclusion','mobile overflow','corner watermark and icon fullscreen','iframe fullscreen/PiP denied','mobile expansion retains watermark/player','mobile and desktop hidden pause/shield','manual return','delivered screenshot shortcut shield','print concealment','paused refresh preserves position','playing refresh resumes','revoked refresh stops playback']},null,2));
+  console.log(JSON.stringify({passed:true,checks:['initial failure retry','resume','watch progress','seek exclusion','mobile overflow','corner fallback watermark','native fullscreen allowed and PiP denied','no duplicate fullscreen control','mobile and desktop hidden pause/shield','manual return','delivered screenshot shortcut shield','print concealment','paused refresh preserves position','playing refresh resumes','revoked refresh stops playback']},null,2));
 } catch(error) {
   console.error(JSON.stringify({pageErrors:errors,body:(await page.locator('body').innerText()).slice(0,2500)}));
   await page.screenshot({path:path.join(process.env.TEMP||'/tmp','bunny-day5-failure.png'),fullPage:true});

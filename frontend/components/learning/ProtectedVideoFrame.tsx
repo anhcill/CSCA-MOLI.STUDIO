@@ -5,8 +5,8 @@ import { FiMaximize, FiMinimize } from 'react-icons/fi';
 import type { PlaybackSessionDto } from '@/lib/types/courses';
 
 // Browser deterrents only: the web has no reliable OS screen-recording signal.
-export function ProtectedVideoFrame({ session, onPause, children }: {
-  session: PlaybackSessionDto; onPause: () => void; children: ReactNode;
+export function ProtectedVideoFrame({ session, onPause, children, nativeControls = false, watermarkInside = false }: {
+  session: PlaybackSessionDto; onPause: () => void; children: ReactNode; nativeControls?: boolean; watermarkInside?: boolean;
 }) {
   const root = useRef<HTMLDivElement>(null);
   const pause = useRef(onPause);
@@ -16,7 +16,12 @@ export function ProtectedVideoFrame({ session, onPause, children }: {
   const [nativeFullscreen, setNativeFullscreen] = useState(false);
 
   useEffect(() => {
-    const cover = () => { pause.current(); setCovered(true); };
+    const cover = () => {
+      pause.current(); setCovered(true);
+      if (document.fullscreenElement && root.current?.contains(document.fullscreenElement)) {
+        void document.exitFullscreen().catch(() => undefined);
+      }
+    };
     const visibility = () => { if (document.hidden) cover(); };
     const key = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setExpanded(false);
@@ -63,15 +68,15 @@ export function ProtectedVideoFrame({ session, onPause, children }: {
     onDragStart={event => event.preventDefault()}
     onPlayCapture={() => { if (document.hidden || covered) pause.current(); }}>
     {children}
-    <div data-video-watermark aria-hidden="true" className="pointer-events-none absolute left-2 top-2 z-20 max-w-[calc(100%-4.5rem)] select-none truncate rounded bg-black/15 px-1.5 py-1 text-[9px] font-medium text-white/50 sm:text-[10px]"
+    {!watermarkInside && <div data-video-watermark aria-hidden="true" className="pointer-events-none absolute left-2 top-2 z-20 max-w-[calc(100%-4.5rem)] select-none truncate rounded bg-black/15 px-1.5 py-1 text-[9px] font-medium text-white/50 sm:text-[10px]"
       style={{ textShadow: '0 1px 2px #000' }}>
       {viewer} · {session.sessionId.slice(0, 8)}
-    </div>
-    <button type="button" onClick={() => void toggleFullscreen()} className="absolute right-2 top-2 z-30 flex h-11 w-11 items-center justify-center rounded-lg bg-black/60 text-white transition hover:bg-black/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+    </div>}
+    {!nativeControls && <button type="button" onClick={() => void toggleFullscreen()} className="absolute right-2 top-2 z-30 flex h-11 w-11 items-center justify-center rounded-lg bg-black/60 text-white transition hover:bg-black/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
       title={expanded || nativeFullscreen ? 'Thu nhỏ video' : 'Phóng to video'}
       aria-label={expanded || nativeFullscreen ? 'Thu nhỏ video' : 'Phóng to video'}>
       {expanded || nativeFullscreen ? <FiMinimize aria-hidden="true" className="h-5 w-5" /> : <FiMaximize aria-hidden="true" className="h-5 w-5" />}
-    </button>
+    </button>}
     {covered ? <div role="status" data-video-shield className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-3 bg-black p-4 text-center text-sm text-white">
       <p>Video đã tạm dừng để bảo vệ nội dung.</p>
       <button type="button" onClick={() => { if (!document.hidden) setCovered(false); }} className="rounded bg-teal-700 px-4 py-2">Tiếp tục xem</button>
