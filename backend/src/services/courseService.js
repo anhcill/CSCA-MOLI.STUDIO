@@ -1,4 +1,5 @@
 const repository = require("../repositories/courseRepository");
+const videoAccess = require('./videoLearningAccess');
 const { canAccessVipContent } = require("../utils/vipEntitlements");
 const {
   SUBJECT_CODES,
@@ -25,9 +26,10 @@ function isActiveEnrollment(enrollment) {
   return !enrollment.expires_at || new Date(enrollment.expires_at) > new Date();
 }
 
-function hasEntitlement(user, course, enrollment = null, packageEntitlement = null) {
+function hasEntitlement(user, course, enrollment = null, packageEntitlement = null, videoEntitlement = null) {
   if (user?.role === "admin") return true;
   if (!course) return false;
+  if (videoEntitlement) return true;
   if (course.access_type === "free") return true;
   if (course.access_type === "package") return Boolean(packageEntitlement);
   if (course.access_type === "vip") {
@@ -40,13 +42,13 @@ function hasEntitlement(user, course, enrollment = null, packageEntitlement = nu
   return isActiveEnrollment(enrollment) && enrollment.source === "admin";
 }
 
-function accessView(user, course, enrollment, packageEntitlement = null) {
+function accessView(user, course, enrollment, packageEntitlement = null, videoEntitlement = null) {
   const enrolled = isActiveEnrollment(enrollment);
-  const entitled = hasEntitlement(user, course, enrollment, packageEntitlement);
+  const entitled = hasEntitlement(user, course, enrollment, packageEntitlement, videoEntitlement);
   return {
     isEnrolled: enrolled,
     enrollmentStatus: enrollment?.status || null,
-    canEnroll: Boolean(user) && !enrolled && entitled && !["contact", "private"].includes(course.access_type),
+    canEnroll: Boolean(user) && enrollment?.status !== 'revoked' && !enrolled && entitled && (Boolean(videoEntitlement) || !["contact", "private"].includes(course.access_type)),
     canLearn: Boolean(user) && enrolled && entitled,
     denialCode: !user
       ? "AUTH_REQUIRED"
@@ -165,7 +167,8 @@ async function getCourseLanding(slug, user) {
       ? repository.findActivePackageEntitlement(user.id, row.id)
       : null,
   ]);
-  const access = accessView(user, row, enrollment, packageEntitlement);
+  const videoEntitlement = user ? await videoAccess.find(user.id, row.id) : null;
+  const access = accessView(user, row, enrollment, packageEntitlement, videoEntitlement);
   const totalLessons = toFiniteNumber(progressRow?.required_lessons);
   const completedLessons = toFiniteNumber(progressRow?.completed_lessons);
   const detailCurriculum = buildCurriculum(sections, lessons).map((section) => {
@@ -220,7 +223,8 @@ async function enroll(courseIdValue, user) {
   const packageEntitlement = course.access_type === "package"
     ? await repository.findActivePackageEntitlement(user.id, courseId)
     : null;
-  if (!hasEntitlement(user, course, existing, packageEntitlement)) {
+  const videoEntitlement = await videoAccess.find(user.id, courseId);
+  if (!hasEntitlement(user, course, existing, packageEntitlement, videoEntitlement)) {
     throw new CourseApiError(
       403,
       course.access_type === "premium" ? "PREMIUM_REQUIRED"
@@ -231,15 +235,15 @@ async function enroll(courseIdValue, user) {
     );
   }
   if (isActiveEnrollment(existing)) return mapEnrollmentDto(existing, course);
-  if (["contact", "private"].includes(course.access_type)) {
+  if (!videoEntitlement && ["contact", "private"].includes(course.access_type)) {
     throw new CourseApiError(403, "ADMIN_ENROLLMENT_REQUIRED", "This course requires enrollment by an administrator.");
   }
-  const source = course.access_type === "free" ? "free" : course.access_type;
+  const source = videoEntitlement ? 'video' : course.access_type === "free" ? "free" : course.access_type;
   const created = await repository.createEnrollment({
     userId: user.id,
     courseId,
     source,
-    expiresAt: source === "free"
+    expiresAt: source === "free" || source === 'video'
       ? null
       : source === "package"
         ? packageEntitlement?.expires_at || null
@@ -253,6 +257,8 @@ async function enroll(courseIdValue, user) {
 
 async function requireLearningAccess(courseIdValue, user) {
   const courseId = positiveInteger(courseIdValue, "courseId");
+  // A newly purchased right may reactivate an expired enrollment, never a revoked one.
+  if (await videoAccess.find(user.id, courseId)) await videoAccess.syncEnrollments(user.id);
   const [course, enrollment] = await Promise.all([
     repository.findPublishedById(courseId),
     repository.findEnrollment(user.id, courseId),
@@ -264,7 +270,8 @@ async function requireLearningAccess(courseIdValue, user) {
   const packageEntitlement = course.access_type === "package"
     ? await repository.findActivePackageEntitlement(user.id, courseId)
     : null;
-  if (!hasEntitlement(user, course, enrollment, packageEntitlement)) {
+  const videoEntitlement = await videoAccess.find(user.id, courseId);
+  if (!hasEntitlement(user, course, enrollment, packageEntitlement, videoEntitlement)) {
     throw new CourseApiError(403, "ENTITLEMENT_EXPIRED", "The entitlement for this course is no longer active.");
   }
   return { course, enrollment };

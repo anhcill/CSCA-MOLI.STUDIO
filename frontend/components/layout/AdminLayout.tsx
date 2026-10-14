@@ -48,6 +48,13 @@ const NAV_SECTIONS = [
         roles: [],
       },
       {
+        label: 'Gói video & combo',
+        icon: FiVideo,
+        href: '/admin/video-commerce',
+        permission: 'users.manage',
+        roles: [],
+      },
+      {
         label: 'Hiệu suất Admin',
         icon: FiBarChart2,
         href: '/admin/analytics',

@@ -8,6 +8,9 @@
     "dev": "nodemon src/index.js",
     "test": "jest --watchAll --verbose",
     "test:hls": "node --test test/courseHls.test.cjs ../tools/video/test/publish.test.mjs ../workers/video-gateway/test/gateway.test.mjs",
+    "test:video-commerce": "node --test test/videoCommerceFoundation.test.cjs test/bunnyStreamAdapter.test.cjs",
+    "test:video-payments": "node --test test/videoPayments.test.cjs test/videoPayosGateway.test.cjs",
+    "test:video-payment-dispatch": "jest --runInBand --watchAll=false src/services/__tests__/videoPaymentDispatch.spec.js",
     "db:migrate": "node src/scripts/migrate.js",
     "db:migrate:courses": "node scripts/apply_csca_course_migrations.js",
     "db:migrate:mobile-auth": "node scripts/apply_mobile_auth_migrations.js",
@@ -63,6 +66,7 @@
     "word-extractor": "^1.0.4"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.9",
     "jest": "^29.7.0",
     "nodemon": "^3.0.2",
     "supertest": "^6.3.3"

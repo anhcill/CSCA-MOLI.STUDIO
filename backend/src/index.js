@@ -277,6 +277,39 @@ if (coursesEnabled) {
   app.use("/api/admin/courses", adminWriteLimiter, require("./routes/adminCourseRoutes"));
   app.use("/api/admin/course-teaching", adminWriteLimiter, require("./routes/teacherCourseRoutes"));
   app.use("/api/admin/course-media", require("./routes/courseMediaRoutes"));
+  if (parseFeatureFlag(process.env.CSCA_BUNNY_STREAM_ENABLED, 'CSCA_BUNNY_STREAM_ENABLED')) {
+    app.use('/api/admin/bunny-media', require('./routes/bunnyMediaRoutes'));
+  }
+
+  // Disabled deployments never query the new commerce schema.
+  if (parseFeatureFlag(process.env.CSCA_VIDEO_COMMERCE_ENABLED, "CSCA_VIDEO_COMMERCE_ENABLED")) {
+    const { createVideoCommerceRepository } = require("./repositories/videoCommerceRepository");
+    const { createVideoCommerceService } = require("./services/videoCommerceService");
+    const { createVideoCommerceRoutes } = require("./routes/videoCommerceRoutes");
+    const { authenticate, authorizePermission } = require("./middleware/authMiddleware");
+    const { createVideoPaymentRoutes } = require("./routes/videoPaymentRoutes");
+    const { createVideoAdminService } = require("./services/videoAdminService");
+    const { createVideoCouponAdminService } = require("./services/videoCouponAdminService");
+    const { createVideoShopRoutes } = require("./routes/videoShopRoutes");
+    const videoAdmin = createVideoAdminService({ db, repository: createVideoCommerceRepository(db),
+      payments: require("./services/videoPaymentRuntime"),
+      recalculateVip: (id, client) => require("./models/User").recalculateVipSummary(id, client),
+      sendRightsEmail: data => require("./services/emailService").sendVideoRightsEmail(data),
+      salesEnabled: () => parseFeatureFlag(process.env.CSCA_VIDEO_COMMERCE_SALES_ENABLED, "CSCA_VIDEO_COMMERCE_SALES_ENABLED"),
+    });
+    app.use("/api/video-commerce", adminWriteLimiter, createVideoShopRoutes({ service: videoAdmin,
+      coupons: createVideoCouponAdminService({ db, admin: videoAdmin }), authenticate, authorizePermission }));
+    app.use("/api/video-commerce/payments", adminWriteLimiter, createVideoPaymentRoutes({
+      service: require("./services/videoPaymentRuntime"),
+      authenticate,
+      authorizePermission,
+    }));
+    app.use("/api/video-commerce", adminWriteLimiter, createVideoCommerceRoutes({
+      service: createVideoCommerceService(createVideoCommerceRepository(db)),
+      authenticate,
+      authorizePermission,
+    }));
+  }
 }
 
 // ====================================

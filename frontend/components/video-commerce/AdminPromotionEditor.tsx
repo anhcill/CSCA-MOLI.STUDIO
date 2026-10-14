@@ -1,0 +1,16 @@
+'use client';
+import { useEffect,useState } from 'react';
+import { shopGet,shopWrite,type Promotion,type ProductType } from '@/lib/api/videoShop';
+import { LookupPicker } from './AdminProductEditor';
+import { Message,inputClass,buttonClass,panelClass,errorText } from './shared';
+export default function AdminPromotionEditor(){
+  const [type,setType]=useState<ProductType>('video'),[data,setData]=useState<Promotion|null>(null),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
+  useEffect(()=>{let live=true;setLoading(true);setData(null);setError('');setNotice('');shopGet<Promotion|null>(`/manage/promotions/${type}`).then(p=>live&&setData(p||{product_type:type,title:'',content:'',coupon_id:null,is_active:false,starts_at:null,ends_at:null})).catch(e=>live&&setError(errorText(e))).finally(()=>live&&setLoading(false));return()=>{live=false;};},[type]);
+  async function save(e:React.FormEvent){e.preventDefault();if(!data||busy)return;setBusy(true);setError('');setNotice('');try{await shopWrite('put',`/manage/promotions/${type}`,data);setNotice('Đã lưu banner.');}catch(err){setError(errorText(err));}finally{setBusy(false);}}
+  const local=(value:string|null)=>value?new Date(new Date(value).getTime()-new Date(value).getTimezoneOffset()*60000).toISOString().slice(0,16):'';
+  return <form className={`${panelClass} space-y-4`} onSubmit={save}><h2 className="text-xl font-black">Banner ưu đãi</h2><label className="block text-sm font-bold">Hiển thị trên<select disabled={busy} className={`${inputClass} mt-2`} value={type} onChange={e=>setType(e.target.value as ProductType)}><option value="video">Danh sách gói video</option><option value="combo">Danh sách combo</option></select></label>
+    {error&&<Message error>{error}</Message>}{notice&&<Message>{notice}</Message>}{loading?<Message>Đang tải…</Message>:data&&<fieldset disabled={busy} className="space-y-4"><label className="block text-sm font-bold">Tiêu đề<input required maxLength={160} className={`${inputClass} mt-2`} value={data.title} onChange={e=>setData({...data,title:e.target.value})}/></label><label className="block text-sm font-bold">Nội dung<textarea maxLength={2000} className={`${inputClass} mt-2`} value={data.content} onChange={e=>setData({...data,content:e.target.value})}/></label><LookupPicker kind="coupons" label="Voucher đi kèm (tùy chọn)" selected={data.coupon_id?[data.coupon_id]:[]} onChange={ids=>setData({...data,coupon_id:ids[0]??null})}/><p className="text-xs text-slate-500">Voucher cần được bật cho đúng loại gói. Mã hết hiệu lực sẽ tự ẩn banner.</p>
+      <div className="grid gap-4 sm:grid-cols-2">{(['starts_at','ends_at'] as const).map(k=><label key={k} className="text-sm font-bold">{k==='starts_at'?'Bắt đầu':'Kết thúc'}<input type="datetime-local" className={`${inputClass} mt-2`} value={local(data[k])} onChange={e=>setData({...data,[k]:e.target.value?new Date(e.target.value).toISOString():null})}/></label>)}</div><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={data.is_active} onChange={e=>setData({...data,is_active:e.target.checked})}/>Hiển thị banner</label><button className={buttonClass} disabled={busy}>{busy?'Đang lưu…':'Lưu banner'}</button>
+    </fieldset>}
+  </form>;
+}

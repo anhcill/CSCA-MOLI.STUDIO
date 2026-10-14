@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import axios from '@/lib/utils/axios';
+import { BunnyUploadPanel } from './BunnyUploadPanel';
 import {
   courseMediaApi,
   hashVideoFile,
@@ -11,7 +13,30 @@ import {
 
 type UploadStage = 'idle' | 'hashing' | 'uploading' | 'completing' | 'processing' | 'finalizing' | 'ready' | 'error';
 
-export function VideoUploadPanel({
+type VideoUploadProps = { courseId: number; lessonId: number; currentVideoAssetId?: number | null;
+  onUploaded?: (videoAssetId: number) => Promise<void> | void; onDeleted?: () => Promise<void> | void };
+
+export function VideoUploadPanel(props: VideoUploadProps) {
+  const [provider, setProvider] = useState<'r2' | 'bunny' | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [retry, setRetry] = useState(0);
+  useEffect(() => {
+    let active = true; setFailed(false); setProvider(null);
+    if (!props.currentVideoAssetId) { setProvider('r2'); return; }
+    const path = process.env.NEXT_PUBLIC_BUNNY_STREAM_ENABLED === 'true' ? '/admin/bunny-media' : '/admin/course-media';
+    void axios.get(`${path}/assets/${props.currentVideoAssetId}`).then(response => {
+      if (active) setProvider(response.data.data.provider || 'r2');
+    }).catch(() => { if (active) setFailed(true); });
+    return () => { active = false; };
+  }, [props.currentVideoAssetId, props.lessonId, retry]);
+  if (!provider) return <div role="status">{failed ? <button type="button" onClick={() => setRetry(value => value + 1)}>Chưa tải được trạng thái video. Thử lại</button> : 'Đang tải trạng thái video...'}</div>;
+  return <div className="space-y-3">
+    {!props.currentVideoAssetId && process.env.NEXT_PUBLIC_BUNNY_STREAM_ENABLED === 'true' ? <label className="block text-sm font-bold">Kho video <select value={provider} onChange={event => setProvider(event.target.value as 'r2' | 'bunny')} className="ml-2 rounded border p-2"><option value="r2">R2 hiện có</option><option value="bunny">Bunny Stream</option></select></label> : null}
+    {provider === 'bunny' ? <BunnyUploadPanel key={props.lessonId} {...props} /> : <LegacyVideoUploadPanel key={props.lessonId} {...props} />}
+  </div>;
+}
+
+function LegacyVideoUploadPanel({
   courseId,
   lessonId,
   currentVideoAssetId,
@@ -31,9 +56,28 @@ export function VideoUploadPanel({
   const [videoAssetId, setVideoAssetId] = useState<number | null>(null);
   const [assetExternalKey, setAssetExternalKey] = useState('');
   const [deleting, setDeleting] = useState(false);
+  const [pendingSessionId, setPendingSessionId] = useState('');
+  const pendingKey = `r2-upload:${courseId}:${lessonId}`;
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => () => abortRef.current?.abort(), []);
+  useEffect(() => {
+    try {
+      const pending = JSON.parse(localStorage.getItem(pendingKey) || 'null');
+      if (pending) { setPendingSessionId(pending.sessionId); setVideoAssetId(pending.videoAssetId); setAssetExternalKey(pending.assetExternalKey); setStage('error'); }
+    } catch { /* Ignore invalid local recovery metadata. */ }
+  }, [pendingKey]);
+  useEffect(() => {
+    if (!currentVideoAssetId) return;
+    let active = true;
+    void axios.get(`/admin/course-media/assets/${currentVideoAssetId}`).then(response => {
+      if (!active) return;
+      const asset = response.data.data;
+      setVideoAssetId(asset.videoAssetId); setAssetExternalKey(asset.assetExternalKey);
+      setStage(asset.status === 'ready' ? 'ready' : asset.status === 'processing' ? 'processing' : 'idle');
+    }).catch(() => { if (active) setError('Chưa tải được trạng thái xử lý. Hãy mở lại bài để kiểm tra.'); });
+    return () => { active = false; };
+  }, [currentVideoAssetId]);
 
   const selectFile = (next: File | null) => {
     setError('');
@@ -71,6 +115,8 @@ export function VideoUploadPanel({
         checksumSha256,
       });
       createdAssetId = session.videoAssetId;
+      localStorage.setItem(pendingKey,JSON.stringify({ sessionId: session.sessionId, videoAssetId: session.videoAssetId, assetExternalKey: session.assetExternalKey }));
+      setPendingSessionId(session.sessionId);
       setVideoAssetId(session.videoAssetId);
       setAssetExternalKey(session.assetExternalKey);
       setStage('uploading');
@@ -78,6 +124,7 @@ export function VideoUploadPanel({
       await putVideoToSignedUrl(session, file, setProgress, controller.signal);
       setStage('completing');
       const completed = await courseMediaApi.completeUpload(session.sessionId);
+      localStorage.removeItem(pendingKey); setPendingSessionId('');
       setProgress(100);
       setStage('processing');
       setVideoAssetId(completed.videoAssetId);
@@ -87,25 +134,9 @@ export function VideoUploadPanel({
         setError(`Video đã tải lên với asset #${completed.videoAssetId}, nhưng chưa gắn được vào bài học. Không tải lại tệp; hãy thử lưu bài học lại.`);
       }
     } catch (cause) {
-      let cleanupFailed = false;
-      if (createdAssetId) {
-        try {
-          await courseMediaApi.deleteAsset(createdAssetId);
-          setVideoAssetId(null);
-          setAssetExternalKey('');
-        } catch {
-          cleanupFailed = true;
-        }
-      }
-      if (cause instanceof DOMException && cause.name === 'AbortError') {
-        setError(cleanupFailed
-          ? 'Đã hủy tải video nhưng chưa dọn được dữ liệu tạm. Hãy bấm “Xóa video và dữ liệu R2”.'
-          : 'Đã hủy tải video và đã dọn dữ liệu tạm.');
-      } else {
-        setError(cleanupFailed
-          ? 'Tải video lỗi và chưa dọn được dữ liệu tạm. Hãy bấm “Xóa video và dữ liệu R2”.'
-          : 'Không thể tải video lên. Dữ liệu tạm đã được dọn; kiểm tra kết nối rồi thử lại.');
-      }
+      setError(createdAssetId
+        ? `Chưa xác nhận hoàn tất asset #${createdAssetId}. Dữ liệu vẫn được giữ; kiểm tra trạng thái trước khi tải lại hoặc xóa.`
+        : cause instanceof DOMException && cause.name === 'AbortError' ? 'Đã dừng tải.' : 'Không thể tạo phiên tải. Hãy kiểm tra kết nối.');
       setStage('error');
     } finally {
       abortRef.current = null;
@@ -123,6 +154,7 @@ export function VideoUploadPanel({
     setError('');
     try {
       await courseMediaApi.deleteAsset(assetId);
+      localStorage.removeItem(pendingKey); setPendingSessionId('');
       setFile(null);
       setVideoAssetId(null);
       setAssetExternalKey('');
@@ -152,7 +184,7 @@ export function VideoUploadPanel({
   const transferBusy = stage === 'hashing' || stage === 'uploading' || stage === 'completing';
   const busy = transferBusy || stage === 'finalizing';
   const existingAssetId = videoAssetId ?? currentVideoAssetId ?? null;
-  const mustDeleteBeforeUpload = Boolean(currentVideoAssetId);
+  const mustDeleteBeforeUpload = Boolean(existingAssetId);
   const processingCode = videoAssetId && assetExternalKey
     ? `${courseId}:${lessonId}:${videoAssetId}:${assetExternalKey}`
     : '';
@@ -192,6 +224,14 @@ export function VideoUploadPanel({
         </div>
       ) : null}
       <div className="flex flex-wrap gap-2">
+        {pendingSessionId ? <button type="button" disabled={busy} onClick={async () => {
+          setStage('completing'); setError('');
+          try {
+            const result = await courseMediaApi.completeUpload(pendingSessionId);
+            localStorage.removeItem(pendingKey); setPendingSessionId(''); setStage('processing');
+            await onUploaded?.(result.videoAssetId);
+          } catch { setStage('error'); setError('Chưa xác nhận được tệp đã tải đủ. Dữ liệu vẫn được giữ; kiểm tra kết nối rồi thử lại.'); }
+        }} className="rounded-lg border px-4 py-2 text-sm font-bold">Kiểm tra lần tải trước</button> : null}
         <button type="button" disabled={!file || busy || deleting || stage === 'processing' || mustDeleteBeforeUpload} onClick={upload} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">
           {stage === 'error' ? 'Thử tải lại' : label}
         </button>

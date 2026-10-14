@@ -193,7 +193,11 @@ const LESSON_UPDATE_COLUMNS = Object.freeze({
 async function updateLesson(courseId, lessonId, patch, client) {
   const entries = Object.entries(patch).filter(([key]) => LESSON_UPDATE_COLUMNS[key]);
   if (!entries.length) return findLesson(courseId, lessonId, client);
-  const sets = entries.map(([key], index) => `${LESSON_UPDATE_COLUMNS[key]} = $${index + 3}`);
+  const assetId = patch.videoAssetId === undefined ? '(SELECT video_asset_id FROM course_lessons WHERE id=$1)' : '$' + (entries.findIndex(([key]) => key === 'videoAssetId') + 3);
+  const sets = entries.map(([key], index) => key === 'estimatedDurationSeconds'
+    ? `estimated_duration_seconds = COALESCE((SELECT CEIL(duration_seconds)::int FROM video_assets WHERE id=${assetId}
+        AND course_id=$2 AND lesson_id=$1 AND status='ready' AND deleted_at IS NULL AND duration_seconds>0), $${index + 3})`
+    : `${LESSON_UPDATE_COLUMNS[key]} = $${index + 3}`);
   const result = await executor(client).query(
     `UPDATE course_lessons SET ${sets.join(", ")} WHERE id = $1 AND course_id = $2 RETURNING *`,
     [lessonId, courseId, ...entries.map(([, value]) => value)],
@@ -254,14 +258,16 @@ async function getPublishReadiness(courseId, client) {
              SELECT 1 FROM video_assets va
              WHERE va.id = l.video_asset_id AND va.course_id = l.course_id
                AND va.lesson_id = l.id AND va.status = 'ready' AND va.deleted_at IS NULL
-               AND va.hls_master_object_key IS NOT NULL
+               AND ((to_jsonb(va)->>'provider' = 'bunny' AND to_jsonb(va)->>'bunny_video_id' IS NOT NULL
+                 AND to_jsonb(va)->>'bunny_library_id' IS NOT NULL AND va.duration_seconds>0) OR (
+               va.hls_master_object_key IS NOT NULL
                AND BTRIM(va.hls_master_object_key) <> ''
                AND EXISTS (
                  SELECT 1 FROM video_variants vv
                  WHERE vv.video_asset_id = va.id AND vv.is_ready = TRUE
                    AND BTRIM(vv.playlist_object_key) <> ''
                    AND BTRIM(vv.segment_prefix) <> ''
-               )
+               )))
            )
        )::int AS invalid_video_lessons
      FROM course_sections s

@@ -88,7 +88,8 @@ class Transaction {
       const result = await db.query(
         `SELECT id, transaction_code, package_id, package_name, package_duration,
                 amount, payment_method, payment_channel, status, paid_at,
-                vip_expires_at, created_at, updated_at
+                vip_expires_at, created_at, updated_at,
+                COALESCE(raw_response->>'commerceType', 'legacy') AS product_type
          FROM transactions
          WHERE user_id = $1
          ORDER BY created_at DESC

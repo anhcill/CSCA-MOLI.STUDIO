@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>CSCA · Thiết kế gói video và combo</title>
+  <style>
+    :root{--ink:#15213a;--navy:#071228;--paper:#f7f3ed;--line:#ddcfc0;--gold:#b89170;--green:#147560;--muted:#617083;--white:#fffaf4}
+    *{box-sizing:border-box}body{margin:0;color:var(--ink);background:radial-gradient(circle at 90% 10%,#dfebe5,transparent 35%),var(--paper);font:15px/1.6 "Segoe UI",sans-serif}
+    button,input,select{font:inherit}button{cursor:pointer}button:disabled{cursor:not-allowed;opacity:.65}button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #16866a;outline-offset:3px}
+    .preview{padding:12px 24px;background:#e9e3db;border-bottom:1px solid var(--line);font-size:13px;color:#4e5360}.preview strong{color:var(--ink)}
+    .shell{max-width:1220px;margin:auto;padding:24px}header{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-bottom:28px}.brand{font-weight:900;letter-spacing:.06em}.brand small{display:block;color:var(--muted);font-weight:500;letter-spacing:0}
+    .views,.switch{display:flex;flex-wrap:wrap;gap:6px;padding:5px;border:1px solid var(--line);border-radius:14px;background:#fffaf4}
+    .views button,.switch button{border:0;border-radius:10px;background:none;padding:9px 15px;color:var(--ink);font-weight:650}.views button[aria-pressed=true],.switch button[aria-pressed=true]{background:var(--navy);color:white}
+    .hero{border-radius:24px;background:linear-gradient(115deg,#071228,#17364a);padding:28px 32px;color:white;position:relative;overflow:hidden}.hero:after{content:"";width:220px;height:220px;border:1px solid #b8917055;border-radius:50%;position:absolute;right:-30px;top:-80px;pointer-events:none}
+    .eyebrow{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.16em;color:#a3e6cd}h1{font-size:clamp(25px,3vw,36px);line-height:1.2;margin:10px 0 14px}h2{font-size:21px;line-height:1.3;margin:0 0 12px}h3{margin:0 0 8px;font-size:18px}p{margin:0 0 15px}.hero p{max-width:640px;color:#d6dfeb;margin-bottom:0}.topline{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:25px 0 18px}.quiet{color:var(--muted);font-size:13px}
+    .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}.card,.panel{border:1px solid var(--line);border-radius:20px;background:var(--white);padding:24px;box-shadow:0 10px 25px #17212e05}.card.featured{border:2px solid var(--gold);padding:23px}.tag{display:inline-flex;border-radius:30px;background:#e1efe6;color:#17624e;font-size:11px;font-weight:800;padding:4px 10px;margin-bottom:16px}.tag.combo{background:#eee0cf;color:#7c5632}.card ul{padding-left:20px;font-size:14px;margin:18px 0 24px;min-height:102px}.card li{margin:8px 0}.price{font-weight:750;font-size:19px}.note{font-size:12px;color:var(--muted);margin:5px 0 18px}
+    .button{display:inline-block;border:1px solid var(--navy);border-radius:11px;background:var(--navy);padding:11px 18px;color:white;font-weight:700;text-align:center}.full{width:100%}.secondary{background:transparent;color:var(--ink);border-color:var(--line)}
+    .explain{margin-top:22px;padding:17px 21px;border-left:3px solid var(--gold);background:#f0e8df;font-size:14px}.grid{display:grid;grid-template-columns:1.35fr 1fr;gap:22px;margin-top:24px}.stack{display:grid;gap:17px}.row{display:flex;justify-content:space-between;gap:20px;padding:13px 0;border-bottom:1px solid #e9ded3}.row:last-child{border-bottom:0}.row strong{text-align:right}.sub{font-size:13px;color:var(--muted)}
+    label{display:block;margin-bottom:6px;font-size:13px;font-weight:700}input,select{border:1px solid var(--line);border-radius:9px;background:white;padding:10px 12px;width:100%;color:var(--ink);min-width:0}.inline{display:flex;gap:9px}.inline input{flex:1}.field{margin-bottom:17px}.two{display:grid;grid-template-columns:1fr 1fr;gap:16px}.checkbox{display:flex;align-items:center;gap:10px}.checkbox input{width:auto}.total{font-size:20px;font-weight:800}.steps{color:var(--muted);font-size:13px;margin:20px 0}.admin-grid{display:grid;grid-template-columns:220px 1fr;gap:23px}.side{border-right:1px solid var(--line);padding-right:18px}.side span{display:block;padding:11px;border-radius:10px;margin-bottom:3px}.side .selected{background:#e3e9e4;color:var(--green);font-weight:800}.side small{display:block;padding:9px;color:var(--muted)}
+    .admin-tabs{display:flex;flex-wrap:wrap;gap:16px;border-bottom:1px solid var(--line);margin-bottom:22px;padding-bottom:13px;font-size:13px}.admin-tabs b{color:var(--green)}.muted-panel{background:#f1ece6;border-radius:12px;padding:16px;margin:16px 0}.footer{display:flex;gap:12px;align-items:center;justify-content:flex-end;margin-top:24px}#toast{color:var(--green);font-size:13px}.hidden,[hidden]{display:none!important}footer{padding:25px 0;font-size:12px;color:var(--muted)}
+    @media(max-width:800px){.cards{grid-template-columns:1fr}.card ul{min-height:0}.grid{grid-template-columns:1fr}.admin-grid{grid-template-columns:1fr}.side{display:none}header{align-items:flex-start;flex-direction:column}.topline{align-items:flex-start;flex-direction:column}.two{grid-template-columns:1fr}.shell{padding:18px}.hero{padding:24px}.panel,.card{padding:20px}.views{width:100%}.views button{flex:1;padding:8px}.footer{flex-wrap:wrap}.row{gap:12px}.inline .button{padding:10px}.preview{padding:10px 18px}}
+  </style>
+</head>
+<body>
+  <div class="preview"><strong>Bản thiết kế ngày 1</strong> · Chỉ mô phỏng các màn hình bổ sung. Giá/thời hạn cấu hình sau. Không tạo đơn hoặc thay đổi website hiện tại.</div>
+  <div class="shell">
+    <header>
+      <div class="brand">MOLY STUDIO <small>CSCA Learning · Video & Combo</small></div>
+      <nav class="views" aria-label="Màn hình thiết kế">
+        <button data-view="catalog" aria-pressed="true">01 · Chọn gói</button>
+        <button data-view="checkout" aria-pressed="false">02 · Thanh toán</button>
+        <button data-view="admin" aria-pressed="false">03 · Quản trị</button>
+      </nav>
+    </header>
+    <main>
+      <section id="catalog">
+        <div class="hero"><span class="eyebrow">Học theo lộ trình của bạn</span><h1>Chọn gói học video phù hợp.</h1><p>Học qua từng bài giảng, xem lại khi cần và tiếp tục đúng nơi bạn đã dừng. Chọn combo để học video cùng các quyền lợi của gói tương ứng.</p></div>
+        <div class="topline"><div class="switch" aria-label="Loại gói"><button data-kind="video" aria-pressed="true">Gói video</button><button data-kind="combo" aria-pressed="false">Combo</button></div><span class="quiet">Danh mục minh họa · Nội dung từng gói do admin quản lý</span></div>
+        <div class="cards">
+          <article class="card featured"><span class="tag kind-label">GÓI VIDEO</span><h2><span class="kind-prefix">Video</span> Tự Nhiên</h2><p class="sub">Theo nhóm môn và khóa được gắn vào gói.</p><ul><li>Video Toán, Vật lý, Hóa học</li><li>Theo dõi tiến độ từng bài</li><li class="combo-benefit" hidden>Kèm gói Tự Nhiên hiện tại</li><li class="video-benefit">Xem lại trong thời hạn gói</li></ul><div class="price">Giá cấu hình sau</div><div class="note">Thời hạn do admin thiết lập</div><button class="button full choose" data-name="Tự Nhiên">Xem bước thanh toán</button></article>
+          <article class="card"><span class="tag kind-label">GÓI VIDEO</span><h2><span class="kind-prefix">Video</span> Xã Hội</h2><p class="sub">Các bài giảng trong lộ trình Xã Hội.</p><ul><li>Video theo danh mục của gói</li><li>Lưu vị trí xem gần nhất</li><li class="combo-benefit" hidden>Kèm gói Xã Hội hiện tại</li><li class="video-benefit">Học trên điện thoại và máy tính</li></ul><div class="price">Giá cấu hình sau</div><div class="note">Thời hạn do admin thiết lập</div><button class="button secondary full choose" data-name="Xã Hội">Xem bước thanh toán</button></article>
+          <article class="card"><span class="tag kind-label">GÓI VIDEO</span><h2><span class="kind-prefix">Video</span> Theo Môn</h2><p class="sub">Chọn môn bạn muốn tập trung học.</p><ul><li>Quyền học đúng môn đã chọn</li><li>Chương trình chia theo chương/bài</li><li class="combo-benefit" hidden>Kèm gói hiện tại của môn đã chọn</li><li class="video-benefit">Giữ lại tiến độ khi gia hạn</li></ul><div class="price">Giá cấu hình sau</div><div class="note">Môn và thời hạn theo cấu hình gói</div><button class="button secondary full choose" data-name="Theo Môn">Xem bước thanh toán</button></article>
+        </div>
+        <div class="explain">Trang gói hiện tại vẫn giữ nguyên. Đây là khu mua video và combo được bổ sung từ trang khóa học.</div>
+      </section>
+      <section id="checkout" hidden>
+        <div class="steps">Khóa học / Chọn gói / Thanh toán</div><h1>Kiểm tra gói bạn chọn</h1><p class="quiet">Voucher, xu và cách thanh toán quen thuộc; quyền nhận được luôn hiển thị rõ.</p>
+        <div class="grid"><div class="stack">
+          <div class="panel"><span class="tag" id="checkout-kind">GÓI VIDEO</span><h2 id="checkout-name">Video Tự Nhiên</h2><div class="row"><span>Quyền video</span><strong id="checkout-rights">Video thuộc gói Tự Nhiên</strong></div><div class="row" id="checkout-vip" hidden><span>Quyền gói hiện tại</span><strong id="checkout-vip-name">Gói Tự Nhiên</strong></div><div class="row"><span>Thời hạn video</span><strong>Chờ cấu hình</strong></div><div class="row" id="checkout-vip-duration" hidden><span>Thời hạn gói hiện tại</span><strong>Chờ cấu hình</strong></div><div class="field" id="subject-field" hidden><label for="subject">Chọn môn</label><select id="subject"><option>Toán</option><option>Vật lý</option><option>Hóa học</option></select></div></div>
+          <div class="panel"><h3>Ưu đãi của bạn</h3><label for="voucher">Mã giảm giá</label><div class="inline"><input id="voucher" placeholder="Nhập mã voucher"><button class="button secondary" id="apply-voucher">Áp dụng</button></div><p id="voucher-result" class="note" role="status"></p><label class="checkbox"><input type="checkbox"> Sử dụng xu khả dụng</label><p class="note">Mức giảm và tổng tiền được hiển thị trước khi thanh toán.</p></div>
+        </div><div class="panel"><h2>Chi tiết thanh toán</h2><div class="row"><span>Giá gói</span><strong>Chưa cấu hình</strong></div><div class="row"><span>Voucher / xu</span><strong>—</strong></div><div class="row total"><span>Tổng tiền</span><span>—</span></div><div class="muted-panel"><strong>Chuyển khoản ngân hàng</strong><p class="note">Khi mở bán, mã QR và trạng thái xác nhận sẽ xuất hiện tại đây.</p></div><button class="button full" disabled>Chưa mở bán</button><p class="note">Gói bản nháp chưa thể thanh toán. Admin có thể hoàn thiện giá và thời hạn sau.</p></div></div>
+      </section>
+      <section id="admin" hidden>
+        <div class="admin-grid"><aside class="side"><small>QUẢN TRỊ</small><span>Quản lý VIP</span><span>Khóa học</span><span class="selected">Gói video & combo</span><span>Voucher</span><span>Người dùng</span><small>Các mục hiện tại giữ nguyên.</small></aside><div>
+          <div class="topline"><div><span class="eyebrow" style="color:var(--green)">Gói video & combo</span><h1 style="margin-bottom:0">Tạo bản nháp gói</h1></div><span class="tag">BẢN NHÁP</span></div>
+          <div class="admin-tabs"><b>Gói</b><span>Học viên & quyền</span><span>Đơn hàng</span><span>Thống kê</span></div>
+          <form class="panel" id="draft-form"><div class="two"><div class="field"><label for="admin-type">Loại gói</label><select id="admin-type"><option value="video">Gói video</option><option value="combo">Combo gói hiện tại + video</option></select></div><div class="field"><label for="admin-name">Tên gói</label><input id="admin-name" value="Video Tự Nhiên" required></div></div>
+            <div class="two"><div class="field"><label for="admin-price">Giá bán (VND)</label><input id="admin-price" type="number" min="0" placeholder="Có thể để trống lúc này"></div><div class="field"><label for="admin-duration">Thời hạn video</label><select id="admin-duration"><option value="unconfigured">Chưa cấu hình</option value="days">Theo số ngày</option><option value="lifetime">Không giới hạn</option></select></div></div>
+            <div class="field" id="days-field" hidden><label for="admin-days">Số ngày</label><input id="admin-days" type="number" min="1" placeholder="Nhập khi đã chốt"></div>
+            <div class="two" id="combo-fields" hidden><div class="field"><label for="admin-vip">Gói hiện tại kết hợp</label><select id="admin-vip"><option>Gói Tự Nhiên</option><option>Gói Xã Hội</option></select></div><div class="field"><label for="admin-vip-days">Thời hạn phần gói hiện tại</label><input id="admin-vip-days" type="number" min="1" placeholder="Cấu hình sau"></div></div>
+            <div class="field"><label for="admin-courses">Khóa học thuộc gói video</label><select id="admin-courses"><option>Khóa Toán CSCA · nội dung minh họa</option><option>Chưa chọn khóa</option></select></div>
+            <div class="muted-panel"><strong>Lưu nháp trước, hoàn thiện sau.</strong><p class="note" style="margin-bottom:0">Giá và thời hạn chưa nhập sẽ được giữ ở trạng thái chưa cấu hình. Hệ thống kiểm tra đủ thông tin trước khi cho phép mở bán.</p></div>
+            <div class="footer"><span id="toast" role="status"></span><button class="button" type="submit">Lưu bản nháp xem trước</button><button class="button secondary" type="button" disabled>Mở bán</button></div>
+          </form>
+          <div class="explain">Các màn hình học viên, cấp/thu hồi, đơn hàng và voucher được triển khai tiếp theo; đây là bản thiết kế để thống nhất bố cục.</div>
+        </div></div>
+      </section>
+    </main>
+    <footer>Thiết kế bổ sung · Giữ phong cách giao diện CSCA hiện tại · Tên gói và danh mục ở đây chỉ để minh họa.</footer>
+  </div>
+  <script>
+    let kind='video';
+    const show=view=>{['catalog','checkout','admin'].forEach(id=>document.getElementById(id).hidden=id!==view);document.querySelectorAll('[data-view]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.view===view)));};
+    document.querySelectorAll('[data-view]').forEach(button=>button.addEventListener('click',()=>show(button.dataset.view)));
+    document.querySelectorAll('[data-kind]').forEach(button=>button.addEventListener('click',()=>{
+      kind=button.dataset.kind; const combo=kind==='combo';
+      document.querySelectorAll('[data-kind]').forEach(item=>item.setAttribute('aria-pressed',String(item===button)));
+      document.querySelectorAll('.kind-label').forEach(item=>{item.textContent=combo?'COMBO':'GÓI VIDEO';item.classList.toggle('combo',combo)});
+      document.querySelectorAll('.kind-prefix').forEach(item=>item.textContent=combo?'Combo':'Video');
+      document.querySelectorAll('.combo-benefit').forEach(item=>item.hidden=!combo);document.querySelectorAll('.video-benefit').forEach(item=>item.hidden=combo);
+    }));
+    document.querySelectorAll('.choose').forEach(button=>button.addEventListener('click',()=>{
+      const name=button.dataset.name, combo=kind==='combo';
+      document.getElementById('checkout-kind').textContent=combo?'COMBO':'GÓI VIDEO';
+      document.getElementById('checkout-name').textContent=(combo?'Combo ':'Video ')+name;
+      document.getElementById('checkout-rights').textContent='Video thuộc gói '+name;
+      document.getElementById('checkout-vip-name').textContent='Gói '+name;
+      document.getElementById('checkout-vip').hidden=!combo;document.getElementById('checkout-vip-duration').hidden=!combo;
+      document.getElementById('subject-field').hidden=name!=='Theo Môn';show('checkout');
+    }));
+    document.getElementById('admin-type').addEventListener('change',event=>document.getElementById('combo-fields').hidden=event.target.value!=='combo');
+    document.getElementById('admin-duration').addEventListener('change',event=>{const days=event.target.value==='days';document.getElementById('days-field').hidden=!days;document.getElementById('admin-days').required=days;});
+    document.getElementById('draft-form').addEventListener('submit',event=>{event.preventDefault();document.getElementById('toast').textContent='Đã ghi nhận trong bản xem trước; chưa gửi dữ liệu lên hệ thống.';});
+    document.getElementById('apply-voucher').addEventListener('click',()=>document.getElementById('voucher-result').textContent='Mô phỏng: voucher sẽ được kiểm tra khi gói đã mở bán.');
+  </script>
+</body>
+</html>

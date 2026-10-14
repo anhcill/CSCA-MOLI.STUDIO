@@ -314,9 +314,11 @@ export interface HlsVariantDto {
 }
 
 export interface PlaybackSessionDto {
+  viewerCode?: string;
   sessionId: string;
   lessonId: number;
-  deliveryType: 'hls';
+  deliveryType: 'hls' | 'bunny';
+  embedUrl?: string;
   manifestUrl: string;
   expiresAt: string;
   variants: HlsVariantDto[];

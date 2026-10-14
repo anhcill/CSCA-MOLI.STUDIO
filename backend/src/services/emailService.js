@@ -833,6 +833,33 @@ class EmailService {
     });
   }
 
+  async sendVideoRightsEmail({ email, name, action, packageName, videoExpiresAt, vipExpiresAt, combo }) {
+    const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+    const end = value => value ? new Date(value).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) : 'Không giới hạn';
+    const lines = [`Xin chào ${name || 'bạn'},`, `${action === 'granted' ? 'Bạn được cấp' : 'Đã thu hồi nguồn quyền'}: ${packageName}.`,
+      ...(action === 'granted' ? [`Hạn video: ${end(videoExpiresAt)}.`, ...(combo ? [`Hạn quyền VIP: ${end(vipExpiresAt)}.`] : [])]
+        : ['Các nguồn quyền khác còn hiệu lực và tiến độ học của bạn được giữ lại.']),
+      'Bạn có thể kiểm tra chi tiết tại mục Gói video của tôi.'];
+    return this._send({ to: email, subject: 'Cập nhật quyền học video - MOLY.STUDIO', html: lines.map(line => `<p>${escape(line)}</p>`).join(''),
+      text: lines.join('\n'), account: 'critical', throwOnError: true });
+  }
+
+  async sendVideoPurchaseEmail({ email, name, order }) {
+    const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+    const label = order.type === 'combo' ? 'Combo gói và video' : 'Gói video';
+    const formatExpiry = value => value ? new Date(value).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) : 'Không giới hạn';
+    const videoEnd = formatExpiry(order.rights.videoExpiresAt);
+    const lines = [
+      `Xin chào ${name},`, `${label}: ${order.snapshot.name}`,
+      `Mã đơn: ${order.orderId}`, `Số tiền: ${order.amount.toLocaleString('vi-VN')} VND`,
+      `Quyền video: ${order.snapshot.video.name}. Hết hạn: ${videoEnd}.`,
+      ...(order.snapshot.vip ? [`Quyền gói: ${order.snapshot.vip.name}. Hết hạn: ${formatExpiry(order.rights.vipExpiresAt)}.`] : []),
+      'Vào mục Khóa học của tôi để tiếp tục học.',
+    ];
+    return this._send({ to: email, subject: `Xác nhận ${label} - MOLY.STUDIO`,
+      html: lines.map(line => `<p>${escape(line)}</p>`).join(''), text: lines.join('\n'), account: 'critical', throwOnError: true });
+  }
+
   async sendPaymentConfirmation({ email, name, packageName, amount, durationDays, transactionCode, method }) {
     const methodLabel = {
       momo: 'MoMo',

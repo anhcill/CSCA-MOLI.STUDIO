@@ -138,6 +138,13 @@ const PaymentRiskActions = {
       const tx = await pool.query('SELECT * FROM transactions WHERE id = $1', [id]);
       if (!tx.rows[0]) return res.status(404).json({ success: false, message: 'Transaction not found' });
 
+      if (require('../utils/videoPaymentIdentity').isVideoPayment(tx.rows[0])) {
+        const data = await require('../services/videoPaymentRuntime').status(tx.rows[0].user_id, tx.rows[0].transaction_code);
+        await AuditLog.log({ adminId: req.user.id, action: 'sync_payment', entityType: 'transaction',
+          entityId: parseInt(id), afterData: { status: data.status, productType: data.type }, ...AuditLog.reqMeta(req) });
+        return res.json({ success: true, data });
+      }
+
       const meta = AuditLog.reqMeta(req);
       await AuditLog.log({
         adminId: req.user.id, action: 'sync_payment', entityType: 'transaction',
@@ -225,10 +232,16 @@ const PaymentRiskActions = {
 
       await client.query('BEGIN');
 
-      const tx = await client.query('SELECT user_id, package_id FROM transactions WHERE id = $1', [id]);
+      const tx = await client.query('SELECT user_id, package_id, raw_response FROM transactions WHERE id = $1', [id]);
       if (!tx.rows[0]) {
         await client.query('ROLLBACK');
         return res.status(404).json({ success: false, message: 'Transaction not found' });
+      }
+
+      if (require('../utils/videoPaymentIdentity').isVideoPayment(tx.rows[0])) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ success: false, code: 'VIDEO_ORDER_RECONCILIATION_REQUIRED',
+          message: 'Video/combo orders must be reconciled through their payment fulfillment flow.' });
       }
 
       const userId = tx.rows[0].user_id;
@@ -347,10 +360,16 @@ const PaymentRiskActions = {
 
       await client.query('BEGIN');
 
-      const tx = await client.query('SELECT user_id FROM transactions WHERE id = $1', [id]);
+      const tx = await client.query('SELECT user_id,raw_response FROM transactions WHERE id = $1', [id]);
       if (!tx.rows[0]) {
         await client.query('ROLLBACK');
         return res.status(404).json({ success: false, message: 'Transaction not found' });
+      }
+
+      if (require('../utils/videoPaymentIdentity').isVideoPayment(tx.rows[0])) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ success: false, code: 'VIDEO_ORDER_SCOPED_REVOKE_REQUIRED',
+          message: 'Video/combo rights must be revoked by source, not through legacy VIP revocation.' });
       }
 
       const userId = tx.rows[0].user_id;

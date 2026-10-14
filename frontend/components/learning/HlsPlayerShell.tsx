@@ -3,9 +3,6 @@
 import Hls, { ErrorTypes, Events, type ErrorData, type Level } from 'hls.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  FiMaximize,
-  FiMinimize,
-  FiMonitor,
   FiPause,
   FiPlay,
   FiRotateCcw,
@@ -15,6 +12,8 @@ import {
 } from 'react-icons/fi';
 import learningApi from '@/lib/api/learning';
 import type { PlaybackSessionDto } from '@/lib/types/courses';
+import { BunnyPlayer } from './BunnyPlayer';
+import { ProtectedVideoFrame } from './ProtectedVideoFrame';
 
 const PROGRESS_INTERVAL_MS = 15_000;
 const MAX_WATCHED_DELTA_PER_UPDATE = 60;
@@ -58,7 +57,6 @@ function formatPlaybackTime(value: number): string {
 }
 
 export function HlsPlayerShell({ lessonId, session, loading = false, error = '', onProgressSaved }: PlayerProps) {
-  const playerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const refreshPromiseRef = useRef<Promise<PlaybackSessionDto> | null>(null);
@@ -74,6 +72,7 @@ export function HlsPlayerShell({ lessonId, session, loading = false, error = '',
   const completionRequestedRef = useRef(false);
   const initializedLessonRef = useRef<number | null>(null);
   const mediaRecoveryAttemptsRef = useRef(0);
+  const restorePlayingRef = useRef(false);
 
   const [activeSession, setActiveSession] = useState(session);
   const [playerError, setPlayerError] = useState(error);
@@ -87,9 +86,6 @@ export function HlsPlayerShell({ lessonId, session, loading = false, error = '',
   const [volume, setVolume] = useState(1);
   const [muted, setMuted] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const [pictureInPictureSupported, setPictureInPictureSupported] = useState(false);
-  const [isPictureInPicture, setIsPictureInPicture] = useState(false);
   currentLessonIdRef.current = lessonId;
 
   useEffect(() => {
@@ -127,6 +123,7 @@ export function HlsPlayerShell({ lessonId, session, loading = false, error = '',
       .then((nextSession) => {
         if (currentLessonIdRef.current !== lessonId) return nextSession;
         const video = videoRef.current;
+        restorePlayingRef.current = Boolean(video && !video.paused && !video.ended);
         pendingPositionRef.current = video?.currentTime || lastPositionRef.current;
         playbackRetryRef.current = false;
         setPlayerError('');
@@ -152,7 +149,7 @@ export function HlsPlayerShell({ lessonId, session, loading = false, error = '',
   }, [lessonId]);
 
   useEffect(() => {
-    if (activeSession?.lessonId !== lessonId) return;
+    if (activeSession?.lessonId !== lessonId || activeSession.deliveryType === 'bunny') return;
     const expiresAt = Date.parse(activeSession.expiresAt);
     const delay = Number.isFinite(expiresAt)
       ? Math.max(1_000, expiresAt - Date.now() - SESSION_REFRESH_MARGIN_MS)
@@ -177,6 +174,7 @@ export function HlsPlayerShell({ lessonId, session, loading = false, error = '',
       if (position > 0 && Number.isFinite(video.duration)) {
         video.currentTime = Math.min(position, Math.max(0, video.duration - 0.25));
       }
+      if (restorePlayingRef.current && !document.hidden) void video.play().catch(() => undefined);
     };
     video.addEventListener('loadedmetadata', restorePosition);
 
@@ -313,7 +311,7 @@ export function HlsPlayerShell({ lessonId, session, loading = false, error = '',
       window.removeEventListener('pagehide', onPageHide);
       void flushProgress(true);
     };
-  }, [flushProgress]);
+  }, [flushProgress, activeSession?.sessionId]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -326,23 +324,11 @@ export function HlsPlayerShell({ lessonId, session, loading = false, error = '',
       setMuted(video.muted);
       setPlaybackRate(video.playbackRate);
     };
-    const syncFullscreen = () => setIsFullscreen(document.fullscreenElement === playerRef.current);
     const events = ['play', 'pause', 'ended', 'timeupdate', 'durationchange', 'loadedmetadata', 'volumechange', 'ratechange'] as const;
     events.forEach((eventName) => video.addEventListener(eventName, syncPlayback));
-    const enterPictureInPicture = () => setIsPictureInPicture(true);
-    const leavePictureInPicture = () => setIsPictureInPicture(false);
-    video.addEventListener('enterpictureinpicture', enterPictureInPicture);
-    video.addEventListener('leavepictureinpicture', leavePictureInPicture);
-    document.addEventListener('fullscreenchange', syncFullscreen);
-    setPictureInPictureSupported(
-      document.pictureInPictureEnabled && typeof video.requestPictureInPicture === 'function',
-    );
     syncPlayback();
     return () => {
       events.forEach((eventName) => video.removeEventListener(eventName, syncPlayback));
-      video.removeEventListener('enterpictureinpicture', enterPictureInPicture);
-      video.removeEventListener('leavepictureinpicture', leavePictureInPicture);
-      document.removeEventListener('fullscreenchange', syncFullscreen);
     };
   }, [activeSession, lessonId]);
 
@@ -400,31 +386,6 @@ export function HlsPlayerShell({ lessonId, session, loading = false, error = '',
     if (!video) return;
     video.defaultPlaybackRate = nextRate;
     video.playbackRate = nextRate;
-  };
-
-  const togglePictureInPicture = async () => {
-    const video = videoRef.current;
-    if (!video || !pictureInPictureSupported) return;
-    if (document.pictureInPictureElement) {
-      await document.exitPictureInPicture();
-    } else {
-      await video.requestPictureInPicture();
-    }
-  };
-
-  const toggleFullscreen = async () => {
-    const player = playerRef.current;
-    if (!player) return;
-    if (document.fullscreenElement) {
-      await document.exitFullscreen();
-      return;
-    }
-    if (player.requestFullscreen) {
-      await player.requestFullscreen();
-      return;
-    }
-    const safariVideo = videoRef.current as (HTMLVideoElement & { webkitEnterFullscreen?: () => void }) | null;
-    safariVideo?.webkitEnterFullscreen?.();
   };
 
   useEffect(() => {
@@ -485,6 +446,9 @@ export function HlsPlayerShell({ lessonId, session, loading = false, error = '',
   }, [activeSession, lessonId]);
 
   const hasCurrentSession = activeSession?.lessonId === lessonId;
+  if (hasCurrentSession && activeSession.deliveryType === 'bunny') {
+    return <BunnyPlayer key={lessonId} lessonId={lessonId} session={activeSession} onProgressSaved={onProgressSaved} />;
+  }
 
   if (loading && !hasCurrentSession) {
     return <div aria-live="polite" className="flex h-full w-full animate-pulse items-center justify-center bg-slate-900 text-slate-300">Đang tạo phiên phát...</div>;
@@ -494,10 +458,14 @@ export function HlsPlayerShell({ lessonId, session, loading = false, error = '',
     return <div role="alert" className="flex h-full w-full flex-col items-center justify-center gap-4 bg-slate-950 p-8 text-center text-amber-100"><p>{playerError || 'Video chưa sẵn sàng.'}</p><button type="button" onClick={() => void refreshSession().catch(() => undefined)} disabled={refreshing} className="rounded-lg bg-white px-4 py-2 font-bold text-slate-900 disabled:opacity-60">{refreshing ? 'Đang thử lại...' : 'Thử lại'}</button></div>;
   }
 
-  return <div ref={playerRef} className="group relative h-full w-full overflow-hidden bg-black">
+  return <ProtectedVideoFrame session={activeSession} onPause={() => { restorePlayingRef.current = false; videoRef.current?.pause(); lastTimeUpdateRef.current = null; void flushProgress(true); }}>
     <video
       ref={videoRef}
       playsInline
+      disablePictureInPicture
+      disableRemotePlayback
+      controlsList="nodownload noremoteplayback nofullscreen"
+      x-webkit-airplay="deny"
       preload="metadata"
       className="h-full w-full cursor-pointer object-contain"
       aria-label="Video bài học"
@@ -558,19 +526,6 @@ export function HlsPlayerShell({ lessonId, session, loading = false, error = '',
         >
           {[0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map((rate) => <option key={rate} value={rate}>{rate}×</option>)}
         </select>
-        <button
-          type="button"
-          onClick={() => void togglePictureInPicture()}
-          disabled={!pictureInPictureSupported}
-          aria-label={isPictureInPicture ? 'Đóng cửa sổ nổi' : 'Phát nền trong cửa sổ nổi'}
-          title={pictureInPictureSupported ? (isPictureInPicture ? 'Đóng cửa sổ nổi' : 'Phát nền / cửa sổ nổi') : 'Trình duyệt không hỗ trợ cửa sổ nổi'}
-          className={`rounded-lg p-2 hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-40 ${isPictureInPicture ? 'bg-[#23858a]' : ''}`}
-        >
-          <FiMonitor className="h-5 w-5" />
-        </button>
-        <button type="button" onClick={() => void toggleFullscreen()} aria-label={isFullscreen ? 'Thoát toàn màn hình' : 'Phóng to toàn màn hình'} title={isFullscreen ? 'Thoát toàn màn hình' : 'Phóng to toàn màn hình'} className="rounded-lg p-2 hover:bg-white/15">
-          {isFullscreen ? <FiMinimize className="h-5 w-5" /> : <FiMaximize className="h-5 w-5" />}
-        </button>
       </div>
     </div>
     {!isPlaying && currentTime === 0 && !playerError ? (
@@ -580,5 +535,5 @@ export function HlsPlayerShell({ lessonId, session, loading = false, error = '',
     ) : null}
     {refreshing ? <div aria-live="polite" className="absolute left-3 top-3 rounded bg-black/70 px-3 py-2 text-sm text-white">Đang làm mới phiên phát...</div> : null}
     {playerError ? <div role="alert" className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black/80 p-8 text-center text-amber-100"><p>{playerError}</p><button type="button" onClick={() => void refreshSession().catch(() => undefined)} disabled={refreshing} className="rounded-lg bg-white px-4 py-2 font-bold text-slate-900 disabled:opacity-60">Thử lại</button></div> : null}
-  </div>;
+  </ProtectedVideoFrame>;
 }

@@ -79,6 +79,13 @@ function createCourseMediaService({ storage, repository = mediaRepository, now =
     }
   };
   return {
+    async getAssetStatus(assetIdValue, actor) {
+      const asset = await repository.findAssetForFinalize(positiveId(assetIdValue, 'assetId'));
+      if (!asset) throw new CourseApiError(404, 'VIDEO_ASSET_NOT_FOUND', 'Video not found.');
+      await authorizeCourse(actor, asset.course_id);
+      return { videoAssetId: Number(asset.id), provider: asset.provider || 'r2', status: asset.status,
+        assetExternalKey: asset.external_key, durationSeconds: Number(asset.duration_seconds || 0) };
+    },
     async requestDirectUpload(input, actor) {
       const createdBy = positiveId(actor?.id, "actor.id");
       const courseId = positiveId(input.courseId, "courseId");
@@ -118,6 +125,7 @@ function createCourseMediaService({ storage, repository = mediaRepository, now =
         throw new CourseApiError(409, "VIDEO_ASSET_NOT_DELETABLE", "Video asset is not attached to a course lesson.");
       }
       await authorizeCourse(actor, asset.course_id);
+      if (asset.provider === 'bunny') throw new CourseApiError(409, 'BUNNY_ASSET_PROTECTED', 'Use Bunny management for this asset.');
       const prefix = createAssetPrefix({
         courseId: asset.course_id,
         lessonId: asset.lesson_id,
@@ -195,6 +203,7 @@ function createCourseMediaService({ storage, repository = mediaRepository, now =
       const asset = await repository.findAssetForFinalize(assetId);
       if (!asset) throw new CourseApiError(404, "VIDEO_ASSET_NOT_FOUND", "Video asset was not found.");
       await authorizeCourse(actor, asset.course_id);
+      if (asset.provider === 'bunny') throw new CourseApiError(409, 'BUNNY_ASSET_PROTECTED', 'Use Bunny synchronization for this asset.');
       if (!asset.course_id || !asset.lesson_id || !["processing", "ready"].includes(asset.status)) {
         throw new CourseApiError(409, "VIDEO_ASSET_NOT_FINALIZABLE", "Video asset is not ready for HLS finalization.");
       }

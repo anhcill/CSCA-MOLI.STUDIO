@@ -56,7 +56,7 @@ async function findSessionForAdmin(externalKey, createdBy) {
 
 async function findAssetForFinalize(assetId) {
   const result = await db.query(
-    `SELECT id, external_key, course_id, lesson_id, purpose, status, created_by
+    `SELECT *
      FROM video_assets
      WHERE id = $1 AND purpose = 'lesson' AND deleted_at IS NULL
      LIMIT 1`,
@@ -67,7 +67,7 @@ async function findAssetForFinalize(assetId) {
 
 async function findAssetForDelete(assetId) {
   const result = await db.query(
-    `SELECT id, external_key, course_id, lesson_id, purpose, status, deleted_at
+    `SELECT *
      FROM video_assets
      WHERE id = $1 AND purpose = 'lesson'
      LIMIT 1`,

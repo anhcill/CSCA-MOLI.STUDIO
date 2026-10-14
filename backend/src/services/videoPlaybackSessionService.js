@@ -87,6 +87,17 @@ async function createLessonPlaybackSessionUnsafe(lessonIdValue, user) {
     throw new CourseApiError(409, "VIDEO_NOT_READY", "The lesson video is not ready for playback.");
   }
 
+  if (asset.provider === 'bunny') {
+    const { createBunnyStreamAdapter, bunnyConfigFromEnv } = require('./bunnyStreamAdapter');
+    const config = bunnyConfigFromEnv();
+    if (process.env.CSCA_BUNNY_STREAM_ENABLED !== 'true' || String(config.libraryId) !== asset.bunny_library_id)
+      throw new CourseApiError(503, 'BUNNY_NOT_CONFIGURED', 'Bunny playback is not configured.');
+    const signed = createBunnyStreamAdapter(config).createEmbedUrl(asset.bunny_video_id, 300);
+    const resume = await videoPlaybackRepository.getResumePosition(user.id, lessonId);
+    return { sessionId: crypto.randomUUID(),viewerCode: `CSCA-${user.id}`,lessonId,deliveryType:'bunny',manifestUrl:'',embedUrl:signed.url,
+      expiresAt:signed.expiresAt,variants:[],resumePositionSeconds:Math.min(Math.max(0,Number(resume)||0),Number(asset.duration_seconds)||0) };
+  }
+
   const [variantRows, resumePosition] = await Promise.all([
     videoPlaybackRepository.listReadyVariants(asset.id),
     videoPlaybackRepository.getResumePosition(user.id, lessonId),
@@ -105,6 +116,7 @@ async function createLessonPlaybackSessionUnsafe(lessonIdValue, user) {
   const storedResumeSeconds = Math.max(0, Math.floor(toFiniteNumber(resumePosition)));
   return {
     sessionId: session.sessionId,
+    viewerCode: `CSCA-${user.id}`,
     lessonId,
     deliveryType: "hls",
     manifestUrl: session.playbackUrl,

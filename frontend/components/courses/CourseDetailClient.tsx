@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { FiCheck, FiRefreshCw, FiTarget } from 'react-icons/fi';
 import coursesApi from '@/lib/api/courses';
 import type { CourseDetailDto } from '@/lib/types/courses';
@@ -31,6 +32,7 @@ export function CourseDetailClient({ slug }: { slug: string }) {
   return (
     <>
       <CourseHero course={course} />
+      <Link href={`/goi-video?courseId=${course.id}`} className="mt-5 inline-flex rounded-xl bg-teal-700 px-5 py-3 text-sm font-bold text-white hover:bg-teal-800">Xem gói video & combo</Link>
       <div className="mt-10 grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_360px] xl:gap-10">
         <main className="space-y-8">
           <div id="online-course" className="rounded-[1.75rem] border border-[#c9dfe0] bg-gradient-to-br from-[#eff9f7] via-white to-[#fff8ef] p-6 shadow-sm dark:border-[#294f5d] dark:from-[#102b34] dark:via-[#0b172b] dark:to-[#2a211c] sm:p-8">

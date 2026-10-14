@@ -88,9 +88,14 @@ function curriculum(sections, lessons) {
 }
 
 async function listMyEnrollments(user) {
+  const videoAccess = require('./videoLearningAccess');
+  await videoAccess.syncEnrollments(user.id);
   const rows = await learningRepository.listUserEnrollments(user.id);
+  const allowed = await Promise.all(rows.map(async row => courseService.hasEntitlement(user, row, row,
+    row.access_type === 'package' ? await courseRepository.findActivePackageEntitlement(user.id, row.course_id) : null,
+    await videoAccess.find(user.id, row.course_id))));
   return rows
-    .filter((row) => courseService.hasEntitlement(user, row, row))
+    .filter((_row, index) => allowed[index])
     .map((row) => {
       const progress = progressSummary(row);
       return {

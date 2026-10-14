@@ -1,0 +1,25 @@
+{
+  "commit": "20a04a5a144565a9accda038e0a7345a5118b67e",
+  "lineEndings": "LF",
+  "purpose": "Day 1 source baseline, not a rendered UI snapshot",
+  "files": {
+    "frontend/app/vip/page.tsx": "de98fa7612498eae3f45ed19a60f109a59d0c1c69afd40c3bccff3aa0c81375f",
+    "frontend/app/checkout/page.tsx": "1e7fa8c2d0e18533ad8bbfbba97fd8168865da4d136ae3fe254f1a47267d9665",
+    "frontend/app/checkout/success/page.tsx": "cec0109a8439d72f102d09804fa14d5d0848dbbd74d0086e6dd3a7ce02eaa7de",
+    "frontend/app/admin/vip/page.tsx": "69568b1ae7d18d2e681fcdab6a2e15898e3f882c1fcd5b0f6eb23279d5e3ec50",
+    "frontend/app/admin/coupons/page.tsx": "38110a00de9c3966e3ced834e44e697553b7bef236b9cd5d5e2c3c3135fa8835",
+    "frontend/app/khoa-hoc/page.tsx": "9ff62201f28fcab659f878b8ea6f7db63ca11bb4fb58e7adae4e30e39cac8d21",
+    "backend/src/routes/payments.js": "25110e2cb025656c3243546ec7d0f4deb514f521e39a82e65b5a02fecf7077e5",
+    "backend/src/routes/vipPackageRoutes.js": "337d4af18ef26d776aafb47ad89cc4a925b136564e5bfedb586366e4aee1db90",
+    "backend/src/models/Transaction.js": "743428cb089ada2aa741f914455767bb0d7abdfc5df679cbba51f41ddac7d488",
+    "backend/src/models/User.js": "f8964d5c2e83a9dd5ae2a88b601c88bc347a8821168cbdb1491318738d6def1c",
+    "backend/src/controllers/vipPackageController.js": "ae6b7e3f4f20b977280c4f42e320b1554c621dda60e4f209a5a95c2e183a25ef",
+    "backend/src/controllers/adminVipController.js": "ea1fdada92d236b7c8d459087b20b5c43735a31e2711f63b967d722a043b5812",
+    "backend/src/controllers/couponController.js": "bd951d80e84371715a861e33007a231f3461d8ad993438ca47357adaa3d011fa",
+    "backend/src/controllers/adminCouponController.js": "cb00b90d6770c0580f496c5b9452d337b4ae89310b2ef2092178f0cc9a4d7f5b",
+    "backend/src/controllers/paymentRiskActionsController.js": "ba7489c8f2462e8e6e396faeab40c725eabeabc1e2d1d3b3f4866682eaf7aaea",
+    "backend/src/services/coinService.js": "487488ef91d6356b94bc5552d15bde8307b42edc6d4e935019cd66f49159b7fb",
+    "backend/src/repositories/courseRepository.js": "df2aecc92d1af27e7edb9337e8b49ebfb0e625110fcc053768a48cc6716bf05c",
+    "backend/src/services/courseService.js": "242b1b3bce6567ef643ff113807773d02aef312e7b67daeb2d48fb45b0b667a4"
+  }
+}

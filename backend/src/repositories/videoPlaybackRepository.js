@@ -2,7 +2,7 @@ const db = require("../config/database");
 
 async function findLessonVideoAsset(lessonId) {
   const result = await db.query(
-    `SELECT va.id, va.status, va.hls_master_object_key
+    `SELECT va.*
      FROM course_lessons l
      JOIN video_assets va
        ON va.id = l.video_asset_id

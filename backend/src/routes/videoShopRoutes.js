@@ -1,0 +1,31 @@
+const express=require('express');
+const {sendData,sendCourseError}=require('../utils/courseResponses');
+function createVideoShopRoutes({service,coupons,authenticate,authorizePermission}) {
+  const router=express.Router();
+  router.use((_req,res,next)=>{res.set('Cache-Control','no-store');next();});
+  const handle=(fn,status=200)=>async(req,res)=>{try{return sendData(res,await fn(req),{status});}catch(error){return sendCourseError(res,error);}};
+  router.get('/shop/catalog/:type',handle(req=>service.catalog(req.params.type,req.query)));
+  router.get('/shop/products/:type/:id',handle(req=>service.product(req.params.type,req.params.id)));
+  router.get('/shop/promotion/:type',handle(req=>coupons.promotion(req.params.type)));
+  router.get('/me/rights',authenticate,handle(req=>service.rights(req.query,req.user.id)));
+  router.use('/manage',authenticate,authorizePermission('users.manage'));
+  router.get('/manage/products/:type',handle(req=>service.catalog(req.params.type,req.query,true)));
+  router.post('/manage/products/:type',handle(req=>service.saveProduct(req.params.type,null,req.body,req.user.id),201));
+  router.patch('/manage/products/:type/:id',handle(req=>service.saveProduct(req.params.type,req.params.id,req.body,req.user.id)));
+  router.get('/manage/lookup/:kind',handle(req=>service.lookup(req.params.kind,req.query)));
+  router.get('/manage/rights',handle(req=>service.rights(req.query)));
+  router.post('/manage/grants',handle(req=>service.grant(req.body,req.user.id),201));
+  router.post('/manage/rights/:id/revoke',handle(req=>service.revoke(req.params.id,req.body,req.user.id)));
+  router.get('/manage/orders',handle(req=>service.orders(req.query)));
+  router.post('/manage/orders/:code/sync',handle(req=>service.sync(req.params.code,req.user.id)));
+  router.get('/manage/stats',handle(()=>service.stats()));
+  router.get('/manage/events',handle(req=>service.events(req.query)));
+  router.get('/manage/coupons',handle(req=>coupons.list(req.query)));
+  router.post('/manage/coupons',handle(req=>coupons.save(null,req.body,req.user.id),201));
+  router.patch('/manage/coupons/:id',handle(req=>coupons.save(req.params.id,req.body,req.user.id)));
+  router.get('/manage/coupons/:id/usage',handle(req=>coupons.usage(req.params.id,req.query)));
+  router.get('/manage/promotions/:type',handle(req=>coupons.promotion(req.params.type,true)));
+  router.put('/manage/promotions/:type',handle(req=>coupons.savePromotion(req.params.type,req.body,req.user.id)));
+  return router;
+}
+module.exports={createVideoShopRoutes};

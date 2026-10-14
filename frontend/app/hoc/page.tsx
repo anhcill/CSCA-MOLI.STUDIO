@@ -39,6 +39,7 @@ export default function MyLearningPage() {
           </div>
         </section>
 
+        <Link href="/tai-khoan/goi-video" className="mt-6 inline-flex rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-bold text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-white">Quyền video & lịch sử mua gói →</Link>
         <section className="py-8 sm:py-10">
           <MyLearningClient />
         </section>

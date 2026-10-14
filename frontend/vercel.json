@@ -37,6 +37,7 @@
     }
   ],
   "env": {
+    "NEXT_PUBLIC_BUNNY_STREAM_ENABLED": "true",
     "NODE_ENV": "production",
     "NEXT_PUBLIC_API_URL": "https://csca-molistudio-production.up.railway.app/api",
     "NEXT_PUBLIC_SOCKET_URL": "https://csca-molistudio-production.up.railway.app"

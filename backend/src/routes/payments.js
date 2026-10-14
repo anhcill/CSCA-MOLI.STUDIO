@@ -10,6 +10,7 @@ const emailService = require('../services/emailService');
 const { authenticate } = require('../middleware/authMiddleware');
 const db = require('../config/database');
 const coinService = require('../services/coinService');
+const { isVideoPayment } = require('../utils/videoPaymentIdentity');
 const {
   canAccessSubject,
   hasAllSubjects,
@@ -533,7 +534,7 @@ async function getReservedCoins(userId, client = db) {
      FROM transactions
      WHERE user_id = $1
        AND status IN ('pending', 'processing')
-       AND created_at >= NOW() - INTERVAL '24 hours'`,
+       AND (raw_response->>'commerceType' IN ('video','combo') OR created_at >= NOW() - INTERVAL '24 hours')`,
     [userId]
   );
   return Number.parseInt(reservedRes.rows[0]?.reserved, 10) || 0;
@@ -626,8 +627,15 @@ async function updateVipStatusForPayment(userId, durationDays, tier, entitlement
 }
 
 async function completeClaimedBankTransfer(transaction, providerPayload = {}) {
+  if (isVideoPayment(transaction)) {
+    return require('../services/videoPaymentRuntime').acceptPayment(transaction.id, {
+      provider: 'payos', orderCode: providerPayload.orderCode, amount: providerPayload.amount,
+      currency: providerPayload.currency || 'VND', reference: `order:${providerPayload.orderCode}`,
+    });
+  }
   await applyCoinSpend(transaction);
   await incrementCouponUsage(transaction).catch(err => {
+    if (getStoredPaymentMeta(transaction).couponReservation) throw err;
     console.error('[Payment] Coupon usage update failed, continuing payment completion:', err.message);
   });
 
@@ -682,8 +690,14 @@ async function completeClaimedBankTransfer(transaction, providerPayload = {}) {
 }
 
 async function completeZeroAmountTransaction(transaction, providerPayload = {}) {
+  if (isVideoPayment(transaction)) {
+    return require('../services/videoPaymentRuntime').acceptPayment(transaction.id, {
+      provider: 'zero', orderCode: transaction.id, amount: 0, reference: `ZERO_${transaction.id}`,
+    });
+  }
   await applyCoinSpend(transaction);
   await incrementCouponUsage(transaction).catch(err => {
+    if (getStoredPaymentMeta(transaction).couponReservation) throw err;
     console.error('[Payment] Coupon usage update failed, continuing payment completion:', err.message);
   });
 
@@ -744,6 +758,10 @@ async function getPayOSPaymentRequest(transaction) {
 }
 
 async function reconcilePendingPayOSPayment(transaction) {
+  if (isVideoPayment(transaction)) {
+    await require('../services/videoPaymentRuntime').status(transaction.user_id, transaction.transaction_code);
+    return Transaction.findById(transaction.id);
+  }
   if (!transaction || transaction.status !== 'pending' || transaction.payment_method !== 'bank_transfer') {
     return transaction;
   }
@@ -999,6 +1017,17 @@ router.post('/create', authenticate, async (req, res) => {
         [userId],
       );
       const lockedCoins = lockedUser.rows[0]?.coins || 0;
+      // Opt into the shared coupon reservation protocol only when the new
+      // commerce module is enabled. Legacy-only deployments retain their path.
+      if (appliedCoupon && process.env.CSCA_VIDEO_COMMERCE_ENABLED === 'true') {
+        const { lockCoupon, couponDiscount } = require('../services/paymentCouponReservation');
+        const lockedCoupon = await lockCoupon(paymentClient, { code: appliedCoupon.code, userId });
+        if (!restrictionAllows(lockedCoupon.applicable_packages, pkg.id)
+          || !restrictionAllows(lockedCoupon.applicable_tiers, tier)
+          || couponDiscount(lockedCoupon, Number(effectivePrice)) !== discountAmount) {
+          throw Object.assign(new Error('Voucher changed; please request a new checkout.'), { status: 409 });
+        }
+      }
 
       if (use_coins === true || Number.parseInt(coins_to_use, 10) > 0) {
         const requestedCoins = Number.parseInt(coins_to_use, 10);
@@ -1017,6 +1046,8 @@ router.post('/create', authenticate, async (req, res) => {
       const paymentMeta = {
         idempotencyKey: idemKey || null,
         couponCode: coupon_code?.trim() || null,
+        couponReservation: Boolean(appliedCoupon && process.env.CSCA_VIDEO_COMMERCE_ENABLED === 'true'),
+        couponId: appliedCoupon?.id || null,
         coinsUsed,
         coinValueVnd: COIN_VALUE_VND,
         coinDiscountAmount,
@@ -1206,6 +1237,7 @@ router.post('/momo-webhook', async (req, res) => {
       console.warn('MoMo webhook: transaction not found', orderId);
       return res.status(200).json({ success: false });
     }
+    if (isVideoPayment(transaction)) return res.status(409).json({ success: false, message: 'Video orders require payOS verification' });
 
     if (resultCode === 0) {
       if (transaction.status !== 'completed') {
@@ -1218,6 +1250,7 @@ router.post('/momo-webhook', async (req, res) => {
         // ── Increment coupon usage CHỈ khi thành công ──────────────────────
         await applyCoinSpend(transaction);
         await incrementCouponUsage(transaction).catch(err => {
+          if (getStoredPaymentMeta(transaction).couponReservation) throw err;
           console.error('[Payment] Coupon usage update failed, continuing payment completion:', err.message);
         });
 
@@ -1309,11 +1342,14 @@ router.post('/vnpay-webhook', async (req, res) => {
       return res.status(200).json({ success: false });
     }
 
+    if (isVideoPayment(transaction)) return res.status(409).json({ success: false, message: 'Video orders require payOS verification' });
+
     if (vnp_ResponseCode === '00') {
       if (transaction.status !== 'completed') {
         // Increment coupon usage CHỉ khi thành công
         await applyCoinSpend(transaction);
         await incrementCouponUsage(transaction).catch(err => {
+          if (getStoredPaymentMeta(transaction).couponReservation) throw err;
           console.error('[Payment] Coupon usage update failed, continuing payment completion:', err.message);
         });
 
@@ -1411,6 +1447,10 @@ router.post('/verify-return', authenticate, async (req, res) => {
     if (transaction.user_id !== req.user.id) {
       return res.json({ success: false, status: 'unauthorized' });
     }
+    if (isVideoPayment(transaction)) {
+      const data = await require('../services/videoPaymentRuntime').status(req.user.id, orderId);
+      return res.json({ success: true, status: data.status, data });
+    }
 
     if (transaction.status === 'pending' && transaction.payment_method === 'bank_transfer') {
       transaction = await reconcilePendingPayOSPayment(transaction);
@@ -1476,6 +1516,14 @@ router.post('/payos-webhook', async (req, res) => {
     if (!transaction) {
       // Dữ liệu mẫu của payOS thường dùng orderCode không tồn tại.
       return res.json({ success: true, message: 'Unknown/test order acknowledged' });
+    }
+    if (isVideoPayment(transaction)) {
+      if (transaction.payment_method !== 'bank_transfer') return res.status(409).json({ success: false, message: 'Order provider mismatch' });
+      const data = await require('../services/videoPaymentRuntime').acceptPayment(transaction.id, {
+        provider: 'payos', orderCode: webhookData.orderCode, amount: webhookData.amount,
+        currency: webhookData.currency || 'VND', reference: `order:${webhookData.orderCode}`,
+      });
+      return res.json({ success: true, status: data.status });
     }
 
     const payos = getPayOSMeta(transaction);
@@ -1547,6 +1595,10 @@ router.get('/check-status', authenticate, async (req, res) => {
     let transaction = await Transaction.findByTransactionCode(orderId);
     if (!transaction) return res.json({ success: false, status: 'not_found' });
     if (transaction.user_id !== req.user.id) return res.json({ success: false, status: 'unauthorized' });
+    if (isVideoPayment(transaction)) {
+      const data = await require('../services/videoPaymentRuntime').status(req.user.id, orderId);
+      return res.json({ success: true, status: data.status, data });
+    }
 
     if (transaction.status === 'pending' && transaction.payment_method === 'bank_transfer') {
       transaction = await reconcilePendingPayOSPayment(transaction);
@@ -1576,6 +1628,18 @@ router.get('/check-status', authenticate, async (req, res) => {
 // Helper: increment coupon usage CHỈ khi chưa có record
 // ─────────────────────────────────────────────────────────────────────────────
 async function incrementCouponUsage(transaction) {
+  if (getStoredPaymentMeta(transaction).couponReservation) {
+    const client = await db.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('SELECT id FROM users WHERE id=$1 FOR UPDATE', [transaction.user_id]);
+      await client.query('SELECT id FROM transactions WHERE id=$1 FOR UPDATE', [transaction.id]);
+      await require('../services/paymentCouponReservation').consumeCoupon(client, transaction);
+      await client.query('COMMIT');
+      return;
+    } catch (error) { await client.query('ROLLBACK'); throw error; }
+    finally { client.release(); }
+  }
   const existingUsage = await require('../config/database').query(
     `SELECT id FROM coupon_usages WHERE transaction_id = $1 LIMIT 1`,
     [transaction.id]

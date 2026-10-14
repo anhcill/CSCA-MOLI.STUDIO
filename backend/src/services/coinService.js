@@ -53,7 +53,7 @@ async function getReservedPaymentCoins(userId, { excludeTransactionId = null, cl
      FROM transactions
      WHERE user_id = $1
        AND status IN ('pending', 'processing')
-       AND created_at >= NOW() - INTERVAL '24 hours'
+       AND (raw_response->>'commerceType' IN ('video','combo') OR created_at >= NOW() - INTERVAL '24 hours')
        ${excludeClause}`,
     params,
   );

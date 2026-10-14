@@ -61,6 +61,10 @@ export default function CoursesPage() {
           </div>
         </nav>
 
+        <div className="mb-5 flex flex-wrap items-center gap-3">
+          <Link href="/goi-video" className="rounded-xl bg-teal-700 px-5 py-3 text-sm font-bold text-white hover:bg-teal-800">Xem gói video & combo</Link>
+          <Link href="/tai-khoan/goi-video" className="px-2 py-3 text-sm font-bold underline underline-offset-4">Gói video của tôi</Link>
+        </div>
         <section
           className="relative isolate overflow-hidden rounded-[1.75rem] border border-white/10 bg-[#071228] text-white shadow-[0_30px_70px_-32px_rgba(23,26,42,.75)]"
           style={{

@@ -134,11 +134,12 @@ export default function ClientShell({ children }: { children: React.ReactNode })
     pathname?.startsWith('/ho-tro/messages');
   const isGame = pathname?.startsWith('/games');
   const isCoursePage = pathname?.startsWith('/khoa-hoc') || pathname?.startsWith('/hoc');
+  const isVideoCommerce = ['/goi-video', '/thanh-toan-khoa-hoc', '/tai-khoan/goi-video'].includes(pathname || '');
   const isTopicPractice = pathname?.startsWith('/luyen-chu-de');
   const isSubjectPage = pathname?.match(/^\/(toan|vat-ly|hoa|tu-vung|cau-truc-de|ly-thuyet|cong-thuc|giai-de-chi-tiet|tailieu|tiengtrung-xahoi|tiengtrung-tunhien|lo-trinh|mon)/);
   const isSubjectScopedPage = Boolean(new URLSearchParams(queryString).get('subject')) && pathname?.match(/^\/(lich-su|tu-vung|cau-truc-de|ly-thuyet|cong-thuc|giai-de-chi-tiet|lo-trinh)$/);
   const isStudyStation = pathname?.startsWith('/tram-dong-luc');
-  const noFooter = isAdmin || isAuth || isExam || isChat || isGame || isCoursePage || isTopicPractice || isSubjectPage || isSubjectScopedPage || isStudyStation;
+  const noFooter = isAdmin || isAuth || isExam || isChat || isGame || isCoursePage || isVideoCommerce || isTopicPractice || isSubjectPage || isSubjectScopedPage || isStudyStation;
   const showFloatingContacts = !isAdmin && !isAuth && !isExam && !isChat && !isGame && !isSubjectPage && !isSubjectScopedPage && !isStudyStation;
   const showMoliPet = isAuthenticated && !isAdmin && !isAuth && !isExam && !isChat && !isGame && !isStudyStation;
   // The National Day greeting takes the daily letter's exact corner position
@@ -159,13 +160,13 @@ export default function ClientShell({ children }: { children: React.ReactNode })
 
   return (
     <>
-      {showFloatingContacts && mounted && <FloatingContactButtons />}
-      {showMoliPet && mounted && <MoliPet defaultPosition={moliPetPosition} />}
-      {showDailyGift && mounted && <DailyGiftBox />}
-      {showNationalDayGreeting && mounted && <NationalDayGreeting />}
-      {showOnlineClassAnnouncement && mounted && <OnlineClassAnnouncement />}
-      {showExamCountdownNotice && mounted && <ExamCountdownNotice />}
-      {mounted && showNotificationPrompt && <NotificationPermissionPrompt />}
+      {showFloatingContacts && mounted && !isVideoCommerce && <FloatingContactButtons />}
+      {showMoliPet && mounted && !isVideoCommerce && <MoliPet defaultPosition={moliPetPosition} />}
+      {showDailyGift && mounted && !isVideoCommerce && <DailyGiftBox />}
+      {showNationalDayGreeting && mounted && !isVideoCommerce && <NationalDayGreeting />}
+      {showOnlineClassAnnouncement && mounted && !isVideoCommerce && <OnlineClassAnnouncement />}
+      {showExamCountdownNotice && mounted && !isVideoCommerce && <ExamCountdownNotice />}
+      {mounted && showNotificationPrompt && !isVideoCommerce && <NotificationPermissionPrompt />}
       {mounted && showUpdateToast && (
         <UpdateToast
           visible={updateAvailable}
@@ -175,7 +176,7 @@ export default function ClientShell({ children }: { children: React.ReactNode })
       )}
 
       <div className="min-h-[100dvh] flex flex-col">
-        {mounted && showPwaBanner && <PWAInstallBanner />}
+        {mounted && showPwaBanner && !isVideoCommerce && <PWAInstallBanner />}
         <div className="flex-1">
           {children}
         </div>
