@@ -2,6 +2,7 @@ import type { MoliPetSettings, PetColor, PetMood, PetPoint, PetPosition, PetSkin
 
 export const SETTINGS_KEY = 'moli_pet_settings_v1';
 export const HIDDEN_UNTIL_KEY = 'moli_pet_hidden_until_v1';
+export const HIDDEN_KEY = 'moli_pet_hidden_v1';
 export const POSITION_KEY = 'moli_pet_position_v2';
 export const SETTINGS_DEFAULTS_VERSION = 6;
 export const PET_FRAME_SIZE = 88;

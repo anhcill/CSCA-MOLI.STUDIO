@@ -102,7 +102,7 @@ export interface MoliPetController {
   updateSettings: (patch: Partial<MoliPetSettings>) => void;
   movePetToSide: (position: PetPosition) => void;
   restorePet: () => void;
-  hideForDay: () => void;
+  hidePet: () => void;
   setOpen: (value: boolean | ((value: boolean) => boolean)) => void;
   setMinimized: (value: boolean | ((value: boolean) => boolean)) => void;
   setSettingsOpen: (value: boolean | ((value: boolean) => boolean)) => void;

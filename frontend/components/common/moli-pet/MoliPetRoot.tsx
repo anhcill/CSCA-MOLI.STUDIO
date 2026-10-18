@@ -85,10 +85,10 @@ export default function MoliPetRoot({ defaultPosition = 'left' }: MoliPetProps) 
             </button>
             <button
               type="button"
-              onClick={controller.hideForDay}
+              onClick={controller.hidePet}
               className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-slate-400 transition hover:bg-violet-50 hover:text-violet-700"
-              aria-label="Ẩn MolyPet hôm nay"
-              title="Ẩn pet hôm nay"
+              aria-label="Ẩn MolyPet"
+              title="Ẩn MolyPet"
             >
               <FiEyeOff className="h-[18px] w-[18px]" />
             </button>
@@ -200,6 +200,15 @@ export default function MoliPetRoot({ defaultPosition = 'left' }: MoliPetProps) 
         className={`fixed z-[65] h-[88px] w-[88px] select-none ${open ? 'z-[95]' : ''}`}
         style={containerStyle}
       >
+        <button
+          type="button"
+          onClick={controller.hidePet}
+          className="absolute -top-3 right-0 z-10 grid h-8 w-8 place-items-center rounded-full border border-violet-100 bg-white/95 text-slate-500 shadow-sm hover:bg-violet-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet-500"
+          aria-label="Ẩn MolyPet"
+          title="Ẩn MolyPet"
+        >
+          <FiEyeOff className="h-4 w-4" />
+        </button>
         {showHintBubble && (
           <div
             className={`pointer-events-none absolute top-2 ${bubbleSideClass} w-max max-w-52 rounded-2xl border border-violet-100 bg-white/95 px-3 py-2 text-xs font-bold text-slate-600 shadow-xl backdrop-blur`}

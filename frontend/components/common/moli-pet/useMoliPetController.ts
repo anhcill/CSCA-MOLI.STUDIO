@@ -7,6 +7,7 @@ import { authFetch } from '@/lib/utils/authFetch';
 import { getClipboardImageFile, preparePastedChatImage, type PastedChatImage } from '@/lib/utils/chatImagePaste';
 import {
   HIDDEN_UNTIL_KEY,
+  HIDDEN_KEY,
   PET_FRAME_SIZE,
   PET_PANEL_MARGIN,
   PET_PANEL_MAX_WIDTH,
@@ -66,9 +67,13 @@ export function useMoliPetController({ defaultPosition = 'left' }: MoliPetProps)
   useEffect(() => {
     const nextSettings = readSettings(defaultPosition);
     const hiddenUntil = Number(window.localStorage.getItem(HIDDEN_UNTIL_KEY) || 0);
+    const isHidden = window.localStorage.getItem(HIDDEN_KEY) === 'true' || hiddenUntil > Date.now();
+    // Preserve an existing manual dismissal when migrating from the 24-hour timer.
+    if (isHidden) window.localStorage.setItem(HIDDEN_KEY, 'true');
+    window.localStorage.removeItem(HIDDEN_UNTIL_KEY);
     setSettings(nextSettings);
     setPetPoint(getInitialPetPoint(nextSettings.position));
-    setHidden(hiddenUntil > Date.now());
+    setHidden(isHidden);
     setMessages([
       {
         role: 'assistant',
@@ -218,6 +223,7 @@ export function useMoliPetController({ defaultPosition = 'left' }: MoliPetProps)
   };
 
   const restorePet = () => {
+    window.localStorage.removeItem(HIDDEN_KEY);
     window.localStorage.removeItem(HIDDEN_UNTIL_KEY);
     setHidden(false);
     setPetPoint((current) => current || getInitialPetPoint(settings.position));
@@ -225,8 +231,8 @@ export function useMoliPetController({ defaultPosition = 'left' }: MoliPetProps)
     setMinimized(false);
   };
 
-  const hideForDay = () => {
-    window.localStorage.setItem(HIDDEN_UNTIL_KEY, String(Date.now() + 24 * 60 * 60 * 1000));
+  const hidePet = () => {
+    window.localStorage.setItem(HIDDEN_KEY, 'true');
     setHidden(true);
   };
 
@@ -527,7 +533,7 @@ export function useMoliPetController({ defaultPosition = 'left' }: MoliPetProps)
     updateSettings,
     movePetToSide,
     restorePet,
-    hideForDay,
+    hidePet,
     setOpen,
     setMinimized,
     setSettingsOpen,
