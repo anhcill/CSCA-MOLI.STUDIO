@@ -3,7 +3,7 @@
 import { type FormEvent } from 'react';
 import { FiEyeOff, FiImage, FiMessageCircle, FiPaperclip, FiSend, FiX } from 'react-icons/fi';
 import AIFormattedText from '@/components/ai/AIFormattedText';
-import { PigeonPet } from './PigeonPet';
+import { OwlPet } from './OwlPet';
 import { useMoliPetController } from './useMoliPetController';
 import type { MoliPetProps } from './types';
 
@@ -20,7 +20,6 @@ export default function MoliPetRoot({ defaultPosition = 'left' }: MoliPetProps) 
     hidden,
     open,
     minimized,
-    settings,
     input,
     pastedImage,
     processingImage,
@@ -219,7 +218,7 @@ export default function MoliPetRoot({ defaultPosition = 'left' }: MoliPetProps) 
           aria-label={open ? 'Đóng MolyPet' : 'Mở MolyPet'}
         >
           <span className="relative block h-full w-full transition-transform duration-300 group-hover:scale-105 motion-reduce:transform-none motion-reduce:transition-none">
-            <PigeonPet motion={settings.motion} />
+            <OwlPet />
           </span>
         </button>
       </div>
