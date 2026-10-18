@@ -1,21 +1,11 @@
 'use client';
 
 import { type FormEvent } from 'react';
-import { FiChevronDown, FiEyeOff, FiImage, FiMessageCircle, FiPaperclip, FiSend, FiX } from 'react-icons/fi';
+import { FiEyeOff, FiImage, FiMessageCircle, FiPaperclip, FiSend, FiX } from 'react-icons/fi';
 import AIFormattedText from '@/components/ai/AIFormattedText';
-import { PET_VARIANTS } from './constants';
-import { PetFace } from './PetFace';
+import { PigeonPet } from './PigeonPet';
 import { useMoliPetController } from './useMoliPetController';
-import type { MoliPetProps, PetVariant } from './types';
-
-const ANIMAL_VARIANTS: PetVariant[] = [
-  'moly-3d-panda',
-  'moly-3d',
-  'moly-3d-fox',
-  'moly-3d-penguin',
-  'moly-3d-hog',
-  'moly-3d-crab',
-];
+import type { MoliPetProps } from './types';
 
 const QUICK_PROMPTS = [
   'Giúp mình giải bài này',
@@ -30,7 +20,6 @@ export default function MoliPetRoot({ defaultPosition = 'left' }: MoliPetProps) 
     hidden,
     open,
     minimized,
-    settingsOpen,
     settings,
     input,
     pastedImage,
@@ -38,10 +27,6 @@ export default function MoliPetRoot({ defaultPosition = 'left' }: MoliPetProps) 
     loading,
     messages,
     petPoint,
-    dragging,
-    walking,
-    facing,
-    petMood,
     routeHint,
     cooldownSeconds,
     showHintBubble,
@@ -93,15 +78,6 @@ export default function MoliPetRoot({ defaultPosition = 'left' }: MoliPetProps) 
             </div>
             <button
               type="button"
-              onClick={() => controller.setSettingsOpen((value) => !value)}
-              className="flex h-9 items-center gap-1 rounded-full border border-violet-100 bg-violet-50 px-3 text-xs font-bold text-violet-700 transition hover:bg-violet-100"
-              aria-expanded={settingsOpen}
-            >
-              Đổi pet
-              <FiChevronDown className={`transition ${settingsOpen ? 'rotate-180' : ''}`} />
-            </button>
-            <button
-              type="button"
               onClick={() => controller.setOpen(false)}
               className="grid h-9 w-9 place-items-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
               aria-label="Đóng trò chuyện"
@@ -118,54 +94,6 @@ export default function MoliPetRoot({ defaultPosition = 'left' }: MoliPetProps) 
               <FiEyeOff className="h-[18px] w-[18px]" />
             </button>
           </header>
-
-          {settingsOpen && (
-            <div className="moli-pet-soft shrink-0 border-b border-violet-100 bg-violet-50/70 p-3">
-              <p className="mb-2 text-xs font-black uppercase tracking-[0.12em] text-violet-500">
-                Chọn người bạn đồng hành
-              </p>
-              <div className="grid grid-cols-3 gap-2">
-                {ANIMAL_VARIANTS.map((variant) => {
-                  const animal = PET_VARIANTS[variant];
-                  const active = settings.variant === variant;
-                  return (
-                    <button
-                      key={variant}
-                      type="button"
-                      onClick={() => {
-                        controller.updateSettings({ variant });
-                        controller.setSettingsOpen(false);
-                      }}
-                      className={`flex min-w-0 flex-col items-center rounded-2xl border p-2 transition ${
-                        active
-                          ? 'moli-pet-white border-violet-400 bg-white shadow-[0_7px_18px_rgba(124,91,200,0.16)]'
-                          : 'moli-pet-white border-transparent bg-white/70 hover:border-violet-200 hover:bg-white'
-                      }`}
-                      aria-pressed={active}
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={animal.preview}
-                        alt=""
-                        className="h-12 w-12 object-contain [image-rendering:auto]"
-                      />
-                      <span className="mt-1 max-w-full truncate text-[10px] font-bold text-slate-600">
-                        {animal.label.replace(' 3D', '').replace(' hiện tại', '')}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-              <button
-                type="button"
-                onClick={controller.hideForDay}
-                className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-slate-400 transition hover:bg-white hover:text-slate-600"
-              >
-                <FiEyeOff />
-                Ẩn pet hôm nay
-              </button>
-            </div>
-          )}
 
           <div
             ref={messagesScrollRef}
@@ -290,15 +218,8 @@ export default function MoliPetRoot({ defaultPosition = 'left' }: MoliPetProps) 
           className="group relative h-full w-full cursor-grab touch-none rounded-full outline-none active:cursor-grabbing focus-visible:ring-4 focus-visible:ring-violet-300/70"
           aria-label={open ? 'Đóng MolyPet' : 'Mở MolyPet'}
         >
-          <span className="relative block transition-transform duration-300 group-hover:scale-105">
-            <PetFace
-              color={settings.color}
-              variant={settings.variant}
-              mood={petMood}
-              walking={walking || dragging}
-              facing={facing}
-              waving={false}
-            />
+          <span className="relative block h-full w-full transition-transform duration-300 group-hover:scale-105 motion-reduce:transform-none motion-reduce:transition-none">
+            <PigeonPet motion={settings.motion} />
           </span>
         </button>
       </div>
