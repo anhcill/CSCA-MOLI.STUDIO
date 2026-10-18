@@ -5,7 +5,7 @@ const {
   updateSettings: saveSettings,
 } = require("../services/siteSettingsService");
 
-const PUBLIC_KEYS = ["exam_date"];
+const PUBLIC_KEYS = ["exam_date", "welcome_settings"];
 const ADMIN_KEYS = [
   "exam_date",
   "public_ai_provider",
@@ -17,6 +17,7 @@ const ADMIN_KEYS = [
   "public_ai_fallback_provider",
   "admin_question_review_model",
   "admin_question_review_fallback_model",
+  "welcome_settings",
 ];
 
 ensureSettingsTable().catch((error) => {
@@ -37,7 +38,17 @@ function normalizeModel(value, fallback) {
 async function getPublicSettings(req, res) {
   try {
     const data = await getSettings(PUBLIC_KEYS);
-    res.json({ success: true, data: { exam_date: data.exam_date } });
+    let parsedWelcome = null;
+    try {
+      parsedWelcome = data.welcome_settings ? JSON.parse(data.welcome_settings) : null;
+    } catch {}
+    res.json({
+      success: true,
+      data: {
+        exam_date: data.exam_date,
+        welcome_settings: parsedWelcome,
+      },
+    });
   } catch (e) {
     res.status(500).json({ success: false, message: "Loi server" });
   }
@@ -46,7 +57,17 @@ async function getPublicSettings(req, res) {
 async function getAdminSettings(req, res) {
   try {
     const data = await getSettings(ADMIN_KEYS);
-    res.json({ success: true, data });
+    let parsedWelcome = null;
+    try {
+      parsedWelcome = data.welcome_settings ? JSON.parse(data.welcome_settings) : null;
+    } catch {}
+    res.json({
+      success: true,
+      data: {
+        ...data,
+        welcome_settings: parsedWelcome,
+      },
+    });
   } catch (e) {
     res.status(500).json({ success: false, message: "Loi server" });
   }
@@ -111,6 +132,11 @@ async function updateSettings(req, res) {
         DEFAULT_SETTINGS.admin_question_review_fallback_model,
       );
     }
+    if (req.body.welcome_settings !== undefined) {
+      next.welcome_settings = typeof req.body.welcome_settings === "string"
+        ? req.body.welcome_settings
+        : JSON.stringify(req.body.welcome_settings);
+    }
 
     if (!Object.keys(next).length) {
       return res.status(400).json({ success: false, message: "Khong co cai dat can luu" });
@@ -118,7 +144,18 @@ async function updateSettings(req, res) {
 
     await saveSettings(next);
     const data = await getSettings(ADMIN_KEYS);
-    res.json({ success: true, message: "Cap nhat thanh cong", data });
+    let parsedWelcome = null;
+    try {
+      parsedWelcome = data.welcome_settings ? JSON.parse(data.welcome_settings) : null;
+    } catch {}
+    res.json({
+      success: true,
+      message: "Cap nhat thanh cong",
+      data: {
+        ...data,
+        welcome_settings: parsedWelcome,
+      },
+    });
   } catch (e) {
     console.error("updateSettings error:", e.message);
     res.status(500).json({ success: false, message: "Loi server" });

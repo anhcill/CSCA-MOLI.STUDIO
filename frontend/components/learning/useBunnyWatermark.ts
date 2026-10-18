@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState, type RefObject } from 'react';
 import type { PlaybackSessionDto } from '@/lib/types/courses';
 
 const BUNNY_ORIGIN = 'https://player.mediadelivery.net';
-export function useBunnyWatermark(frame: RefObject<HTMLIFrameElement | null>, session: PlaybackSessionDto | null) {
+export function useBunnyWatermark(frame: { current: HTMLIFrameElement | null }, session: PlaybackSessionDto | null) {
   const [acknowledgedSession, setAcknowledgedSession] = useState<string | null>(null);
   const sendWatermark = useCallback(() => {
     if (!session) return;

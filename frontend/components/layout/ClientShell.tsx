@@ -17,6 +17,12 @@ import { useAuthStore } from '@/lib/store/authStore';
 import axios from '@/lib/utils/axios';
 import { disconnectSocket, initSocket } from '@/lib/socket';
 import { isNationalDayThemeActive, NATIONAL_DAY_THEME_END } from '@/lib/nationalDayTheme';
+import FirstTimeWelcomeModal from '@/components/welcome/FirstTimeWelcomeModal';
+import {
+  getCachedWelcomeSettings,
+  saveCachedWelcomeSettings,
+  getWelcomeSeenKey,
+} from '@/lib/welcome/welcomeConfig';
 
 const ACTIVITY_RECORD_TTL = 5 * 60 * 1000;
 let lastActivityRecordedAt = 0;
@@ -30,7 +36,8 @@ export default function ClientShell({ children }: { children: React.ReactNode })
   const currentRoute = `${pathname || '/'}${queryString ? `?${queryString}` : ''}`;
   const [mounted, setMounted] = useState(false);
   const [nationalDayTheme, setNationalDayTheme] = useState(isNationalDayThemeActive);
-  const { isAuthenticated, token } = useAuthStore();
+  const { isAuthenticated, token, user } = useAuthStore();
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
 
   // Keep query-dependent shell behavior without useSearchParams(), which would
   // force the entire root Suspense boundary into client-side rendering.
@@ -158,8 +165,59 @@ export default function ClientShell({ children }: { children: React.ReactNode })
   // Register service worker + detect updates
   const { updateAvailable, updateVersion, activateUpdate } = useServiceWorker();
 
+  // Sync public site settings (welcome, etc.) from backend
+  useEffect(() => {
+    if (!mounted) return;
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+    fetch(`${apiUrl}/settings/public`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json) => {
+        if (json?.data?.welcome_settings) {
+          saveCachedWelcomeSettings(json.data.welcome_settings);
+        }
+      })
+      .catch(() => {});
+  }, [mounted]);
+
+  // First-time login welcome modal check (reset for all users via versioning)
+  useEffect(() => {
+    if (!mounted || !isAuthenticated || !user) return;
+    if (pathname?.startsWith('/admin')) return;
+
+    try {
+      const config = getCachedWelcomeSettings();
+      if (!config.enabled) return;
+
+      const version = config.version || 2;
+      const key = getWelcomeSeenKey(user.id, version);
+      const seen = localStorage.getItem(key);
+      if (!seen) {
+        setShowWelcomeModal(true);
+      }
+    } catch {}
+  }, [mounted, isAuthenticated, user, pathname]);
+
+  const handleWelcomeDismiss = () => {
+    setShowWelcomeModal(false);
+    if (user?.id) {
+      try {
+        const config = getCachedWelcomeSettings();
+        const version = config.version || 2;
+        const key = getWelcomeSeenKey(user.id, version);
+        localStorage.setItem(key, 'true');
+      } catch {}
+    }
+  };
+
   return (
     <>
+      {showWelcomeModal && mounted && (
+        <FirstTimeWelcomeModal
+          isOpen={showWelcomeModal}
+          onClose={handleWelcomeDismiss}
+          userName={user?.full_name}
+        />
+      )}
       {showFloatingContacts && mounted && !isVideoCommerce && <FloatingContactButtons />}
       {showMoliPet && mounted && !isVideoCommerce && <MoliPet defaultPosition={moliPetPosition} />}
       {showDailyGift && mounted && !isVideoCommerce && <DailyGiftBox />}

@@ -11,6 +11,22 @@ const DEFAULT_SETTINGS = {
   public_ai_fallback_provider: "beeknoee",
   admin_question_review_model: "cx/gpt-5.5",
   admin_question_review_fallback_model: "ag/claude-opus-4-6-thinking",
+  welcome_settings: JSON.stringify({
+    enabled: true,
+    version: 2,
+    badge: "CSCA MOLI.STUDIO",
+    title: "Chào mừng bạn đến với CSCA MOLI.STUDIO",
+    description: "Nền tảng luyện thi CSCA, ôn học bổng CSC và chuẩn bị du học Trung Quốc hàng đầu.",
+    buttonText: "Bắt đầu khám phá ngay",
+    autoTransitionDuration: 5,
+    autoTransitionEnabled: true,
+    notFoundTitle: "Không tìm thấy trang",
+    notFoundMessage: "Đường dẫn bạn truy cập có thể không đúng, đã bị xóa hoặc tạm thời không thể kết nối.",
+    offlineTitle: "Mất kết nối mạng",
+    offlineMessage: "Thiết bị của bạn đang ngoại tuyến. Vui lòng kiểm tra lại đường truyền Internet.",
+    homeButtonText: "Về trang chủ",
+    backButtonText: "Quay lại",
+  }),
 };
 
 let initPromise = null;

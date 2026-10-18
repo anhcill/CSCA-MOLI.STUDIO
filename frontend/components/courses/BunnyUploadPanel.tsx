@@ -14,7 +14,7 @@ export function BunnyUploadPanel({ courseId, lessonId, currentVideoAssetId, onUp
   const [asset, setAsset] = useState<BunnyAsset | null>(null);
   const [preview, setPreview] = useState<PlaybackSessionDto | null>(null);
   const previewFrame = useRef<HTMLIFrameElement>(null);
-  const { sendWatermark, watermarkInside } = useBunnyWatermark(previewFrame, preview);
+  const { sendWatermark, watermarkInside } = useBunnyWatermark(previewFrame as any, preview);
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');

@@ -12,7 +12,7 @@ export function BunnyPlayer({ lessonId, session, onProgressSaved }: {
 }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const [active, setActive] = useState(session);
-  const { sendWatermark, watermarkInside } = useBunnyWatermark(frame, active);
+  const { sendWatermark, watermarkInside } = useBunnyWatermark(frame as any, active);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const position = useRef(session.resumePositionSeconds);
