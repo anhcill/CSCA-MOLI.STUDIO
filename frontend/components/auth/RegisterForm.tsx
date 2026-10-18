@@ -78,7 +78,7 @@ export default function RegisterForm() {
       newErrors.terms = 'Bạn cần đồng ý Điều khoản sử dụng và Chính sách bảo mật.';
     }
     if (isTurnstileEnabled && !turnstileToken) {
-      newErrors.general = 'Vui lòng xác nhận Cloudflare trước khi đăng ký.';
+      newErrors.general = 'Vui lòng chờ xác minh bảo mật hoàn tất trước khi đăng ký.';
     }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;

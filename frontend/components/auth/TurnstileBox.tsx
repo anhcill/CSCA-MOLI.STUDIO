@@ -18,6 +18,11 @@ declare global {
           sitekey: string;
           action?: string;
           theme?: 'auto' | 'light' | 'dark';
+          execution?: 'render' | 'execute';
+          appearance?: 'always' | 'execute' | 'interaction-only';
+          'refresh-expired'?: 'auto' | 'manual' | 'never';
+          'before-interactive-callback'?: () => void;
+          'timeout-callback'?: () => void;
           callback?: (token: string) => void;
           'expired-callback'?: () => void;
           'error-callback'?: () => void;
@@ -36,6 +41,7 @@ export default function TurnstileBox({ action, disabled = false, resetKey = 0, o
   const containerRef = useRef<HTMLDivElement | null>(null);
   const widgetIdRef = useRef<string | null>(null);
   const didMountRef = useRef(false);
+  const [status, setStatus] = useState<'verifying' | 'verified' | 'interaction' | 'error'>('verifying');
   const [scriptReady, setScriptReady] = useState(() =>
     typeof window !== 'undefined' && Boolean(window.turnstile),
   );
@@ -79,9 +85,15 @@ export default function TurnstileBox({ action, disabled = false, resetKey = 0, o
       sitekey: siteKey,
       action,
       theme: 'auto',
-      callback: (token) => onTokenChange(token),
-      'expired-callback': () => onTokenChange(''),
-      'error-callback': () => onTokenChange(''),
+      // Non-interactive mode itself is configured on the Cloudflare widget.
+      execution: 'render',
+      appearance: 'interaction-only',
+      'refresh-expired': 'auto',
+      callback: (token) => { setStatus('verified'); onTokenChange(token); },
+      'expired-callback': () => { setStatus('verifying'); onTokenChange(''); },
+      'error-callback': () => { setStatus('error'); onTokenChange(''); },
+      'timeout-callback': () => { setStatus('error'); onTokenChange(''); },
+      'before-interactive-callback': () => { setStatus('interaction'); onTokenChange(''); },
     });
 
     return () => {
@@ -99,6 +111,7 @@ export default function TurnstileBox({ action, disabled = false, resetKey = 0, o
     }
     if (!widgetIdRef.current || !window.turnstile) return;
     window.turnstile.reset(widgetIdRef.current);
+    setStatus('verifying');
     onTokenChange('');
   }, [resetKey, onTokenChange]);
 
@@ -108,10 +121,13 @@ export default function TurnstileBox({ action, disabled = false, resetKey = 0, o
     <div className="space-y-2">
       <div
         ref={containerRef}
-        className={`min-h-[28px] ${disabled ? 'pointer-events-none opacity-60' : ''}`}
+        className={disabled ? 'pointer-events-none opacity-60' : ''}
       />
-      <p className="text-xs font-semibold text-[#5a4538]">
-        Xác nhận Cloudflare để bảo vệ tài khoản khỏi spam.
+      <p role="status" className="text-xs font-semibold text-[#5a4538]">
+        {status === 'verified' ? 'Đã xác minh bảo mật.'
+          : status === 'interaction' ? 'Cloudflare cần bạn xác nhận thêm để tiếp tục.'
+          : status === 'error' ? 'Chưa thể xác minh bảo mật. Kiểm tra kết nối hoặc tải lại trang.'
+          : 'Đang tự động xác minh bảo mật…'}
       </p>
     </div>
   );

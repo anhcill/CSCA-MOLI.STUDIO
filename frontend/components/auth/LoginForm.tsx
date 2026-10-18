@@ -150,7 +150,7 @@ export default function LoginForm() {
       newErrors.password = t('auth.passwordMin6');
     }
     if (isTurnstileEnabled && !turnstileToken) {
-      newErrors.general = 'Vui lòng xác nhận Cloudflare trước khi đăng nhập.';
+      newErrors.general = 'Vui lòng chờ xác minh bảo mật hoàn tất trước khi đăng nhập.';
     }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -374,7 +374,7 @@ export default function LoginForm() {
   const handleResendVerification = async () => {
     if (!unverifiedEmail || verificationResending || isSubmitting) return;
     if (isTurnstileEnabled && !turnstileToken) {
-      setErrors({ general: 'Vui lòng xác nhận Cloudflare trước khi gửi lại email.' });
+      setErrors({ general: 'Vui lòng chờ xác minh bảo mật hoàn tất trước khi gửi lại email.' });
       return;
     }
     setVerificationResending(true);
@@ -504,7 +504,7 @@ export default function LoginForm() {
   const handleResendOtp = async () => {
     if (!pendingChallengeToken || otpResending || isSubmitting || otpCountdown > 0) return;
     if (isTurnstileEnabled && !turnstileToken) {
-      setOtpError('Vui lòng xác nhận Cloudflare trước khi gửi lại OTP.');
+      setOtpError('Vui lòng chờ xác minh bảo mật hoàn tất trước khi gửi lại OTP.');
       return;
     }
     setOtpResending(true);
