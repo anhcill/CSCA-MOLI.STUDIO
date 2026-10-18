@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { FiArrowRight, FiAward, FiBook, FiChevronLeft, FiChevronRight, FiStar, FiTarget, FiTrendingUp, FiUsers } from 'react-icons/fi';
+import { FiArrowRight, FiAward, FiChevronLeft, FiChevronRight, FiTarget, FiTrendingUp } from 'react-icons/fi';
 import { useLanguage } from '@/context/LanguageContext';
 
 const SLIDE_COPY = [
@@ -169,20 +169,6 @@ const SLIDES = BANNER_IMAGES.map((image, index) => ({
   accentColor: image.accentColor,
 }));
 
-const QUICK_STATS = [
-  { icon: FiUsers, value: '10k+', labelKey: 'home.stats.students' },
-  { icon: FiBook, value: '500+', labelKey: 'home.stats.exams' },
-  { icon: FiStar, value: '95%', labelKey: 'home.stats.passRate' },
-];
-
-const SUBJECT_PILLS = [
-  { labelKey: 'subject.math', href: '/toan/de-mo-phong', isStation: false },
-  { labelKey: 'subject.physics', href: '/vat-ly', isStation: false },
-  { labelKey: 'subject.chemistry', href: '/hoa', isStation: false },
-  { labelKey: 'subject.chineseSoc', href: '/tiengtrung-xahoi', isStation: false },
-  { labelKey: 'nav.studyStation', href: '/tram-dong-luc', isStation: true },
-];
-
 export default function Banner() {
   const { t, pick } = useLanguage();
   const [current, setCurrent] = useState(0);
@@ -286,99 +272,43 @@ export default function Banner() {
 
       <div className="relative z-10 flex h-full items-center">
         <div className="mx-auto w-full max-w-7xl px-4 sm:px-8 md:px-12 lg:px-16">
-          <div className="grid grid-cols-1 items-center gap-8 lg:grid-cols-12">
-            <div className="max-w-2xl opacity-100 transition-all delay-100 duration-700 lg:col-span-7">
-              <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-white/30 bg-white/15 px-5 py-2 backdrop-blur-md">
-                <Icon className="text-white" size={15} />
-                <span className="text-sm font-semibold text-white">{pick(slide.badge)}</span>
-              </div>
-
-              <h1 className="mb-4 text-2xl font-black leading-tight tracking-tight text-white xs:text-3xl sm:text-4xl md:mb-5 md:text-5xl lg:text-6xl">
-                {pick(slide.title)}
-              </h1>
-
-              <p className="mb-6 text-base font-light leading-relaxed text-white/80 sm:text-lg md:mb-8 md:text-xl">
-                {pick(slide.subtitle)}
-              </p>
-
-              <div className="flex flex-wrap gap-3">
-                <Link
-                  href={slide.ctaHref}
-                  className="flex items-center gap-2 rounded-xl bg-white px-6 py-3 text-sm font-bold text-gray-900 shadow-2xl transition-all hover:scale-105 hover:bg-gray-100 active:scale-95 sm:px-8 sm:py-4 sm:text-base"
-                >
-                  {pick(slide.cta)} <FiArrowRight size={18} />
-                </Link>
-                <Link
-                  href="/tram-dong-luc"
-                  className="group flex items-center gap-2 rounded-xl border border-amber-400/60 bg-gradient-to-r from-amber-500/25 to-orange-500/25 px-5 py-3 text-sm font-bold text-white shadow-xl backdrop-blur-md transition-all hover:scale-105 hover:from-amber-500/40 hover:to-orange-500/40 active:scale-95 sm:px-6 sm:py-4 sm:text-base"
-                >
-                  <span className="relative flex h-2 w-2">
-                    <span className="relative inline-flex h-2 w-2 rounded-full bg-amber-400" />
-                  </span>
-                  <span>Trạm Động Lực</span>
-                  <span className="rounded bg-amber-500 px-1.5 py-0.5 text-[9px] font-black uppercase text-white shadow-sm">BẢO TRÌ 🛠️</span>
-                </Link>
-                <Link
-                  href="/register"
-                  className="flex items-center gap-2 rounded-xl border border-white/40 bg-white/10 px-6 py-3 text-sm font-semibold text-white backdrop-blur-sm transition-all hover:bg-white/20 sm:px-8 sm:py-4 sm:text-base"
-                >
-                  {t('home.hero.signup')}
-                </Link>
-              </div>
+          <div className="max-w-3xl opacity-100 transition-all delay-100 duration-700">
+            <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-white/30 bg-white/15 px-5 py-2 backdrop-blur-md">
+              <Icon className="text-white" size={15} />
+              <span className="text-sm font-semibold text-white">{pick(slide.badge)}</span>
             </div>
 
-            <div className="hidden justify-end md:flex lg:col-span-5">
-              <div className="w-80 rounded-3xl border border-white/25 bg-white/10 p-7 shadow-2xl backdrop-blur-xl">
-                <div className="mb-6 flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/20">
-                    <FiAward className="text-white" size={20} />
-                  </div>
-                  <div>
-                    <p className="text-sm font-bold text-white">{t('home.hero.platform')}</p>
-                    <p className="text-xs text-white/60">{t('home.hero.platformDesc')}</p>
-                  </div>
-                </div>
+            <h1 className="mb-4 text-2xl font-black leading-tight tracking-tight text-white xs:text-3xl sm:text-4xl md:mb-5 md:text-5xl lg:text-6xl">
+              {pick(slide.title)}
+            </h1>
 
-                <div className="mb-6 grid grid-cols-3 gap-3">
-                  {QUICK_STATS.map((stat) => (
-                    <div key={stat.labelKey} className="rounded-2xl border border-white/10 bg-white/10 p-3 text-center">
-                      <stat.icon className="mx-auto mb-1 text-white/70" size={16} />
-                      <p className="text-lg font-black leading-tight text-white">{stat.value}</p>
-                      <p className="text-[10px] leading-tight text-white/55">{t(stat.labelKey)}</p>
-                    </div>
-                  ))}
-                </div>
+            <p className="mb-6 text-base font-light leading-relaxed text-white/80 sm:text-lg md:mb-8 md:text-xl">
+              {pick(slide.subtitle)}
+            </p>
 
-                <div className="mb-6">
-                  <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-white/60">{t('home.hero.subjectCount')}</p>
-                  <div className="flex flex-wrap gap-2">
-                    {SUBJECT_PILLS.map((subject) => (
-                      <Link
-                        key={subject.labelKey}
-                        href={subject.href}
-                        className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
-                          subject.isStation
-                            ? 'border border-amber-400/80 bg-amber-500/30 font-bold text-amber-200 hover:bg-amber-500/50'
-                            : 'border border-white/20 bg-white/15 text-white hover:bg-white/25'
-                        }`}
-                      >
-                        {subject.isStation ? `🛠️ ${t(subject.labelKey)}` : t(subject.labelKey)}
-                      </Link>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-white/60">{t('home.hero.passRate')}</p>
-                  <div className="h-2 w-full rounded-full bg-white/15">
-                    <div className="h-2 w-[95%] rounded-full bg-gradient-to-r from-emerald-400 to-teal-400" />
-                  </div>
-                  <div className="flex justify-between text-[11px] text-white/50">
-                    <span>0%</span>
-                    <span className="font-bold text-emerald-400">{pick(SLIDES[0].badge)}</span>
-                  </div>
-                </div>
-              </div>
+            <div className="flex flex-wrap gap-3">
+              <Link
+                href={slide.ctaHref}
+                className="flex items-center gap-2 rounded-xl bg-white px-6 py-3 text-sm font-bold text-gray-900 shadow-2xl transition-all hover:scale-105 hover:bg-gray-100 active:scale-95 sm:px-8 sm:py-4 sm:text-base"
+              >
+                {pick(slide.cta)} <FiArrowRight size={18} />
+              </Link>
+              <Link
+                href="/tram-dong-luc"
+                className="group flex items-center gap-2 rounded-xl border border-amber-400/60 bg-gradient-to-r from-amber-500/25 to-orange-500/25 px-5 py-3 text-sm font-bold text-white shadow-xl backdrop-blur-md transition-all hover:scale-105 hover:from-amber-500/40 hover:to-orange-500/40 active:scale-95 sm:px-6 sm:py-4 sm:text-base"
+              >
+                <span className="relative flex h-2 w-2">
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-amber-400" />
+                </span>
+                <span>Trạm Động Lực</span>
+                <span className="rounded bg-amber-500 px-1.5 py-0.5 text-[9px] font-black uppercase text-white shadow-sm">BẢO TRÌ 🛠️</span>
+              </Link>
+              <Link
+                href="/register"
+                className="flex items-center gap-2 rounded-xl border border-white/40 bg-white/10 px-6 py-3 text-sm font-semibold text-white backdrop-blur-sm transition-all hover:bg-white/20 sm:px-8 sm:py-4 sm:text-base"
+              >
+                {t('home.hero.signup')}
+              </Link>
             </div>
           </div>
         </div>
