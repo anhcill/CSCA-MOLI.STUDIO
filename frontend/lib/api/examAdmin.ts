@@ -29,6 +29,9 @@ export interface ExamCreateData {
     maxParticipants?: number;
     difficulty_level?: string; // P1: 'easy' | 'medium' | 'hard'
     languageMode?: string;
+    language_mode?: string;
+    explanationLanguageMode?: string;
+    explanation_language_mode?: string;
 }
 
 export interface QuestionData {

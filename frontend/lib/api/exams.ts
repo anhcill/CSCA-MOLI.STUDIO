@@ -27,6 +27,7 @@ export interface Exam {
   shuffle_mode?: boolean;
   vip_tier?: string; // 'basic' | 'vip' | 'premium'
   language_mode?: string;
+  explanation_language_mode?: string;
   exam_type?: string;
   has_exam_pdf?: boolean;
   paper_languages?: string[];

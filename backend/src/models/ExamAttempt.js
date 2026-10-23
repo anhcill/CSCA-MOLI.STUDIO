@@ -766,6 +766,7 @@ const ExamAttempt = {
         e.code as exam_code,
         e.title as exam_title,
         e.language_mode,
+        e.explanation_language_mode,
         e.is_premium,
         e.vip_tier,
         e.total_questions,
@@ -846,6 +847,7 @@ const ExamAttempt = {
         e.code as exam_code,
         e.title as exam_title,
         e.language_mode,
+        e.explanation_language_mode,
         e.end_time AS exam_end_time,
         (e.start_time IS NOT NULL AND (e.end_time IS NULL OR e.end_time > CURRENT_TIMESTAMP)) AS review_locked,
         (e.start_time IS NOT NULL AND EXISTS (

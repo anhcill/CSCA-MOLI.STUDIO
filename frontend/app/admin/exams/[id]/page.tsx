@@ -36,6 +36,7 @@ const LANGUAGE_LABELS: Record<string, string> = {
     zh_vi: 'Trung + Việt',
     en_vi: 'Anh + Việt',
     en_zh: 'Anh + Trung',
+    vi_en_zh: 'Full 3 thứ tiếng (Việt + Trung + Anh)',
 };
 
 interface Answer {
@@ -116,6 +117,7 @@ interface Exam {
     shuffle_mode?: boolean;
     vip_tier?: string;
     language_mode?: string;
+    explanation_language_mode?: string;
 }
 
 interface Subject {
@@ -665,6 +667,7 @@ export default function AdminExamDetailPage() {
         totalPoints: 100, description: '', allow_download: true,
         is_premium: false, shuffle_mode: false, solution_video_url: '',
         solution_description: '', vip_tier: 'basic', is_simulated: false, languageMode: 'zh',
+        explanationLanguageMode: 'vi',
     });
     const [metaDirty, setMetaDirty] = useState(false);
     const [savingMeta, setSavingMeta] = useState(false);
@@ -815,6 +818,7 @@ export default function AdminExamDetailPage() {
                     vip_tier: data.exam.vip_tier || 'basic',
                     is_simulated: data.exam.is_simulated || false,
                     languageMode: data.exam.language_mode || 'zh',
+                    explanationLanguageMode: data.exam.explanation_language_mode || 'vi',
                 });
             }
         } catch (error: any) {
@@ -890,6 +894,7 @@ export default function AdminExamDetailPage() {
                 is_premium: metaForm.is_premium,
                 shuffle_mode: metaForm.shuffle_mode,
                 languageMode: metaForm.languageMode,
+                explanationLanguageMode: metaForm.explanationLanguageMode,
                 solution_video_url: metaForm.solution_video_url,
                 solution_description: metaForm.solution_description,
                 vip_tier: metaForm.vip_tier,
@@ -903,7 +908,8 @@ export default function AdminExamDetailPage() {
                 is_premium: metaForm.is_premium, shuffle_mode: metaForm.shuffle_mode,
                 solution_video_url: metaForm.solution_video_url, solution_description: metaForm.solution_description,
                 vip_tier: metaForm.vip_tier, is_simulated: metaForm.is_simulated,
-                language_mode: metaForm.languageMode }) : prev);
+                language_mode: metaForm.languageMode,
+                explanation_language_mode: metaForm.explanationLanguageMode }) : prev);
             setMetaForm(prev => ({
                 ...prev,
                 subjectId: parsedSubjectId,
@@ -2200,6 +2206,26 @@ export default function AdminExamDetailPage() {
                                             <option value="zh_vi">Trung + Việt</option>
                                             <option value="en_vi">Anh + Việt</option>
                                             <option value="en_zh">Anh + Trung</option>
+                                            <option value="vi_en_zh">Full 3 thứ tiếng (Việt + Trung + Anh)</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Ngôn ngữ hiển thị lời giải</label>
+                                        <select
+                                            value={metaForm.explanationLanguageMode || 'vi'}
+                                            onChange={e => handleMetaChange('explanationLanguageMode', e.target.value)}
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm bg-white"
+                                        >
+                                            <option value="vi">Chỉ tiếng Việt</option>
+                                            <option value="zh">Chỉ tiếng Trung</option>
+                                            <option value="en">Chỉ tiếng Anh</option>
+                                            <option value="vi_zh">Việt + Trung</option>
+                                            <option value="vi_en">Việt + Anh</option>
+                                            <option value="zh_en">Trung + Anh</option>
+                                            <option value="zh_vi">Trung + Việt</option>
+                                            <option value="en_vi">Anh + Việt</option>
+                                            <option value="en_zh">Anh + Trung</option>
+                                            <option value="vi_en_zh">Full 3 thứ tiếng (Việt + Trung + Anh)</option>
                                         </select>
                                     </div>
                                     <div className="md:col-span-2">
@@ -2310,12 +2336,13 @@ export default function AdminExamDetailPage() {
                                 </div>
                             </div>
                         ) : (
-                            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
+                            <div className="grid grid-cols-2 md:grid-cols-6 gap-4 text-sm">
                                 <div><span className="font-semibold text-gray-500">Tên:</span> {exam.title}</div>
                                 <div><span className="font-semibold text-gray-500">TG:</span> {exam.duration} phút</div>
                                 <div><span className="font-semibold text-gray-500">Điểm:</span> {exam.total_points}</div>
                                 <div><span className="font-semibold text-gray-500">VIP:</span> {exam.vip_tier || 'basic'}</div>
-                                <div><span className="font-semibold text-gray-500">Ngôn ngữ:</span> {LANGUAGE_LABELS[exam.language_mode || 'zh'] || exam.language_mode}</div>
+                                <div><span className="font-semibold text-gray-500">Ngôn ngữ đề:</span> {LANGUAGE_LABELS[exam.language_mode || 'zh'] || exam.language_mode}</div>
+                                <div><span className="font-semibold text-gray-500">Ngôn ngữ giải:</span> {LANGUAGE_LABELS[exam.explanation_language_mode || 'vi'] || exam.explanation_language_mode}</div>
                             </div>
                         )}
                     </div>
@@ -2324,7 +2351,7 @@ export default function AdminExamDetailPage() {
                 {/* ── VIEW MODE: Exam Info ── */}
                 {!isEditingExam && (
                     <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
-                        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
+                        <div className="grid grid-cols-2 md:grid-cols-6 gap-4 text-center">
                             <div>
                                 <p className="text-xs text-gray-500 uppercase font-semibold mb-1">Môn học</p>
                                 <p className="font-bold text-gray-900">{exam.subject_name || '—'}</p>
@@ -2342,8 +2369,12 @@ export default function AdminExamDetailPage() {
                                 <p className="font-bold text-gray-900">{exam.total_questions} câu</p>
                             </div>
                             <div>
-                                <p className="text-xs text-gray-500 uppercase font-semibold mb-1">Ngôn ngữ</p>
+                                <p className="text-xs text-gray-500 uppercase font-semibold mb-1">Ngôn ngữ đề</p>
                                 <p className="font-bold text-gray-900">{LANGUAGE_LABELS[exam.language_mode || 'zh'] || exam.language_mode}</p>
+                            </div>
+                            <div>
+                                <p className="text-xs text-gray-500 uppercase font-semibold mb-1">Ngôn ngữ lời giải</p>
+                                <p className="font-bold text-gray-900">{LANGUAGE_LABELS[exam.explanation_language_mode || 'vi'] || exam.explanation_language_mode}</p>
                             </div>
                         </div>
                         {exam.description && (
@@ -3087,8 +3118,9 @@ export default function AdminExamDetailPage() {
                                                     {(q.explanation || q.explanation_cn || q.explanation_en) && (
                                                         <RichMathText
                                                             value={[
-                                                                getExamLanguageText({ vi: q.explanation, zh: q.explanation_cn, en: q.explanation_en }, exam.language_mode).primary,
-                                                                getExamLanguageText({ vi: q.explanation, zh: q.explanation_cn, en: q.explanation_en }, exam.language_mode).secondary,
+                                                                getExamLanguageText({ vi: q.explanation, zh: q.explanation_cn, en: q.explanation_en }, exam.explanation_language_mode || exam.language_mode, { fallback: true }).primary,
+                                                                getExamLanguageText({ vi: q.explanation, zh: q.explanation_cn, en: q.explanation_en }, exam.explanation_language_mode || exam.language_mode, { fallback: true }).secondary,
+                                                                getExamLanguageText({ vi: q.explanation, zh: q.explanation_cn, en: q.explanation_en }, exam.explanation_language_mode || exam.language_mode, { fallback: true }).tertiary,
                                                             ].filter(Boolean).join('\n')}
                                                             readableBreaks
                                                             className="text-base leading-7 text-blue-950"

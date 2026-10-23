@@ -21,7 +21,7 @@ export default function BilingualMathText({
   secondaryClassName = 'mt-1 text-sm text-gray-500 dark:text-gray-400',
   readableBreaks = false,
 }: BilingualMathTextProps) {
-  const selected = getExamLanguageText({ vi: primary, zh: secondary, en: tertiary }, languageMode);
+  const selected = getExamLanguageText({ vi: primary, zh: secondary, en: tertiary }, languageMode, { fallback: true });
   const main = selected.primary;
   if (!main) return null;
 
@@ -30,6 +30,9 @@ export default function BilingualMathText({
       <RichMathText value={main} className={className} readableBreaks={readableBreaks} />
       {hasAltText(main, selected.secondary) && (
         <RichMathText value={selected.secondary} className={secondaryClassName} readableBreaks={readableBreaks} />
+      )}
+      {hasAltText(main, selected.tertiary) && (!selected.secondary || hasAltText(selected.secondary, selected.tertiary)) && (
+        <RichMathText value={selected.tertiary} className={secondaryClassName} readableBreaks={readableBreaks} />
       )}
     </div>
   );

@@ -32,6 +32,11 @@ import InkResultBackground, {
   inkResultTitle,
 } from '@/components/layout/InkResultBackground';
 import { QUESTION_REPORT_TYPES } from '@/lib/questionReports';
+import {
+  isLanguageSelectionAllowed,
+  normalizeExamLanguageMode,
+  normalizeExplanationLanguageMode,
+} from '@/lib/exam/languageMode';
 
 interface AnswerOption {
   key: string;
@@ -79,6 +84,7 @@ interface ExamResult {
   exam_id: number;
   exam_title: string;
   language_mode?: string;
+  explanation_language_mode?: string;
   title_cn?: string;
   subject_name: string;
   total_score: number;
@@ -446,7 +452,16 @@ function ExamResultContent() {
   }
 
   const answers = result.answers ?? [];
-  const languageMode = result.language_mode || 'zh';
+  const baseLanguageMode = normalizeExamLanguageMode(result.language_mode || 'zh', 'zh');
+  const baseExplanationMode = normalizeExplanationLanguageMode(result.explanation_language_mode || 'vi');
+  const storedExamLang = typeof window !== 'undefined' ? localStorage.getItem('csca_selected_exam_lang') : null;
+  const storedExplanationLang = typeof window !== 'undefined' ? localStorage.getItem('csca_selected_explanation_lang') : null;
+  const languageMode = isLanguageSelectionAllowed(storedExamLang, baseLanguageMode, 'zh') && storedExamLang
+    ? storedExamLang
+    : baseLanguageMode;
+  const explanationLanguageMode = isLanguageSelectionAllowed(storedExplanationLang, baseExplanationMode, 'vi') && storedExplanationLang
+    ? storedExplanationLang
+    : baseExplanationMode;
   const totalCorrect = result.total_correct ?? answers.filter(a => a.is_correct).length;
   const totalIncorrect = result.total_incorrect ?? answers.filter(a => a.selected_answer_key && a.is_correct === false).length;
   const totalUnanswered = result.total_unanswered ?? answers.filter(a => !a.selected_answer_key).length;
@@ -1013,7 +1028,7 @@ function ExamResultContent() {
                     )}
 
                     {/* Explanation */}
-                    <QuestionExplanationBlock question={q} languageMode={languageMode} className="mt-4 sm:ml-8" />
+                    <QuestionExplanationBlock question={q} languageMode={explanationLanguageMode} className="mt-4 sm:ml-8" />
 
                     {/* AI buttons */}
                     {!result.is_room_exam && !isEssayQuestion && (

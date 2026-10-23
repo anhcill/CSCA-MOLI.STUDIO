@@ -23,7 +23,14 @@ import RichMathText from '@/components/common/RichMathText';
 import AiAnalyzingOverlay from '@/components/common/AiAnalyzingOverlay';
 import { useExamOffline } from '@/hooks/useExamOffline';
 import { FiWifiOff, FiRefreshCw } from 'react-icons/fi';
-import { getExamLanguageText, normalizeExamLanguageMode } from '@/lib/exam/languageMode';
+import {
+  formatLanguageModeLabel,
+  getAllowedBaseLanguages,
+  getExamLanguageText,
+  isLanguageSelectionAllowed,
+  normalizeExamLanguageMode,
+  normalizeExplanationLanguageMode,
+} from '@/lib/exam/languageMode';
 
 type PendingEssaySave = {
   questionId: number;
@@ -54,6 +61,12 @@ const EXAM_LANGUAGE_OPTIONS = [
     label: 'Tiếng Anh',
     flag: '🇬🇧',
     desc: 'Bản dịch tiếng Anh',
+  },
+  {
+    mode: 'vi',
+    label: 'Tiếng Việt',
+    flag: '🇻🇳',
+    desc: 'Đề thi tiếng Việt',
   },
 ] as const;
 
@@ -549,6 +562,33 @@ export default function ExamPage() {
 
       const response = await examApi.getExamPreflight(examId);
       setPreflight(response);
+      const allowedExamBaseLangs = getAllowedBaseLanguages(response.language_mode, 'zh');
+      const effectiveExpMode = normalizeExplanationLanguageMode(
+        response.explanation_language_mode || response.language_mode,
+      );
+      setExamLanguage((prev) => {
+        if (prev && isLanguageSelectionAllowed(prev, response.language_mode, 'zh')) {
+          return prev;
+        }
+        const defaultExamLang = allowedExamBaseLangs[0] || 'zh';
+        try {
+          localStorage.setItem('csca_selected_exam_lang', defaultExamLang);
+        } catch {
+          // ignore
+        }
+        return defaultExamLang;
+      });
+      setExplanationLanguage((prev) => {
+        if (prev && isLanguageSelectionAllowed(prev, effectiveExpMode, 'vi')) {
+          return prev;
+        }
+        try {
+          localStorage.setItem('csca_selected_explanation_lang', effectiveExpMode);
+        } catch {
+          // ignore
+        }
+        return effectiveExpMode;
+      });
       const availablePaperLanguages = Array.isArray(response.paper_languages) ? response.paper_languages : [];
       const readyPaperLanguages = Array.isArray(response.ready_paper_languages) ? response.ready_paper_languages : [];
       const preferredPaperLanguage = response.in_progress_attempt?.paper_language_mode || response.language_mode || '';
@@ -962,11 +1002,26 @@ export default function ExamPage() {
     const inProgressPaperLanguage = inProgress?.paper_language_mode || '';
     const isResumingPdfAttempt = Boolean(usesPdfLanguageFiles && inProgress && inProgressPaperLanguage);
     const selectedPaperLanguageAvailable = !usesPdfLanguageFiles || availablePaperLanguages.includes(paperLanguageMode);
+    const allowedExamBaseLanguages = getAllowedBaseLanguages(preflight.language_mode, 'zh');
+    const effectiveExplanationMode = preflight.explanation_language_mode || preflight.language_mode || 'vi';
+    const selectedExamLanguageAllowed = Boolean(
+      examLanguage && isLanguageSelectionAllowed(examLanguage, preflight.language_mode, 'zh'),
+    );
+    const selectedExplanationLanguageAllowed = Boolean(
+      explanationLanguage && isLanguageSelectionAllowed(explanationLanguage, effectiveExplanationMode, 'vi'),
+    );
     const languageReady = Boolean(
       usesPdfLanguageFiles
         ? preflight.has_exam_pdf && selectedPaperLanguageAvailable && readyPaperLanguages.includes(paperLanguageMode)
-        : examLanguage && explanationLanguage,
+        : selectedExamLanguageAllowed && selectedExplanationLanguageAllowed,
     );
+    const languageWarningMessage = usesPdfLanguageFiles
+      ? 'Hãy chọn ngôn ngữ có file PDF trước khi bắt đầu.'
+      : examLanguage && !selectedExamLanguageAllowed
+        ? `Đề thi này chỉ hỗ trợ làm bài bằng: ${formatLanguageModeLabel(preflight.language_mode, 'zh')}. Vui lòng chọn đúng ngôn ngữ đề thi!`
+        : explanationLanguage && !selectedExplanationLanguageAllowed
+          ? `Đề thi này chỉ hỗ trợ lời giải bằng: ${formatLanguageModeLabel(effectiveExplanationMode, 'vi')}. Vui lòng chọn đúng ngôn ngữ lời giải!`
+          : 'Vui lòng chọn ngôn ngữ đề thi và lời giải để bắt đầu nha!';
     const leaderboardAvailable = !isOfficialExam || Boolean(
       preflight.end_time && scheduleNow > new Date(preflight.end_time).getTime()
     );
@@ -1067,16 +1122,23 @@ export default function ExamPage() {
                     <p className={`flex items-center gap-2 text-sm font-black ${inkResultTitle}`}>
                       <span>🌐</span> Chọn ngôn ngữ bài thi:
                     </p>
-                    {languageReady && (
+                    {languageReady ? (
                       <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-black text-emerald-600 dark:text-emerald-400">
                         <FiCheck size={12} /> Đã chọn xong
                       </span>
-                    )}
+                    ) : (examLanguage || explanationLanguage) ? (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-rose-500/25 bg-rose-500/10 px-2.5 py-0.5 text-xs font-black text-rose-600 dark:text-rose-400">
+                        <FiAlertCircle size={12} /> Ngôn ngữ chưa hỗ trợ
+                      </span>
+                    ) : null}
                   </div>
 
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     {/* Bảng chọn 1: Ngôn ngữ đề thi */}
                     {(() => {
+                      const visibleExamOptions = EXAM_LANGUAGE_OPTIONS.filter(
+                        (opt) => opt.mode !== 'vi' || allowedExamBaseLanguages.includes('vi') || examLanguage === 'vi',
+                      );
                       const currentOpt = EXAM_LANGUAGE_OPTIONS.find((o) => o.mode === examLanguage);
                       const isOpen = openDropdown === 'exam';
 
@@ -1092,9 +1154,11 @@ export default function ExamPage() {
                             className={`group flex h-12 w-full items-center justify-between gap-2 rounded-2xl border px-3 text-left transition-all duration-200 ${
                               isOpen
                                 ? 'border-[#d52a1e] ring-2 ring-[#d52a1e]/20 bg-[#fffaf2] text-[#4f3521] dark:border-rose-500 dark:ring-rose-500/25 dark:bg-slate-800 dark:text-white'
-                                : currentOpt
-                                  ? 'border-[#ead9bd] bg-[#fffaf2] text-[#4f3521] shadow-sm hover:border-[#d52a1e] dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:hover:border-rose-400 dark:hover:bg-slate-700'
-                                  : 'border-2 border-dashed border-[#d8bd94] bg-[#fffaf2]/60 text-[#9d8a77] hover:border-[#d52a1e] hover:bg-[#fffaf2] dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-300 dark:hover:border-rose-400'
+                                : currentOpt && !selectedExamLanguageAllowed
+                                  ? 'border-rose-400 bg-rose-50/70 text-rose-800 ring-1 ring-rose-400/30 dark:border-rose-500 dark:bg-rose-950/30 dark:text-rose-200'
+                                  : currentOpt
+                                    ? 'border-[#ead9bd] bg-[#fffaf2] text-[#4f3521] shadow-sm hover:border-[#d52a1e] dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:hover:border-rose-400 dark:hover:bg-slate-700'
+                                    : 'border-2 border-dashed border-[#d8bd94] bg-[#fffaf2]/60 text-[#9d8a77] hover:border-[#d52a1e] hover:bg-[#fffaf2] dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-300 dark:hover:border-rose-400'
                             }`}
                           >
                             <div className="flex min-w-0 items-center gap-2">
@@ -1106,6 +1170,11 @@ export default function ExamPage() {
                                   <span className="truncate text-xs sm:text-sm font-black text-[#4f3521] dark:text-white">
                                     {currentOpt.label}
                                   </span>
+                                  {!selectedExamLanguageAllowed && (
+                                    <span className="shrink-0 rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-black text-rose-700 dark:bg-rose-500/20 dark:text-rose-300">
+                                      Chưa hỗ trợ
+                                    </span>
+                                  )}
                                 </>
                               ) : (
                                 <>
@@ -1136,8 +1205,9 @@ export default function ExamPage() {
                               }}
                             >
                               <div className="space-y-1">
-                                {EXAM_LANGUAGE_OPTIONS.map((opt) => {
+                                {visibleExamOptions.map((opt) => {
                                   const isSelected = examLanguage === opt.mode;
+                                  const isAllowed = isLanguageSelectionAllowed(opt.mode, preflight.language_mode, 'zh');
                                   return (
                                     <button
                                       key={opt.mode}
@@ -1145,8 +1215,12 @@ export default function ExamPage() {
                                       onClick={() => handleSelectExamLanguage(opt.mode)}
                                       className={`group flex w-full items-center justify-between gap-2.5 rounded-xl px-3 py-2 text-left transition-all ${
                                         isSelected
-                                          ? 'bg-[#d52a1e] text-white shadow-sm'
-                                          : 'text-[#4f3521] hover:bg-[#f7eedf] dark:text-slate-100 dark:hover:bg-slate-800'
+                                          ? isAllowed
+                                            ? 'bg-[#d52a1e] text-white shadow-sm'
+                                            : 'bg-rose-600 text-white shadow-sm'
+                                          : isAllowed
+                                            ? 'text-[#4f3521] hover:bg-[#f7eedf] dark:text-slate-100 dark:hover:bg-slate-800'
+                                            : 'text-[#4f3521]/75 opacity-80 hover:bg-rose-50 dark:text-slate-300 dark:hover:bg-slate-800'
                                       }`}
                                     >
                                       <div className="flex min-w-0 items-center gap-2.5">
@@ -1176,7 +1250,20 @@ export default function ExamPage() {
                                           </p>
                                         </div>
                                       </div>
-                                      {isSelected && <FiCheck size={16} className="shrink-0 text-white" />}
+                                      <div className="flex shrink-0 items-center gap-1.5">
+                                        <span
+                                          className={`rounded-full px-2 py-0.5 text-[10px] font-black ${
+                                            isSelected
+                                              ? 'bg-white/20 text-white'
+                                              : isAllowed
+                                                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300'
+                                                : 'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300'
+                                          }`}
+                                        >
+                                          {isAllowed ? 'Sẵn sàng' : 'Chưa hỗ trợ'}
+                                        </span>
+                                        {isSelected && <FiCheck size={16} className="shrink-0 text-white" />}
+                                      </div>
                                     </button>
                                   );
                                 })}
@@ -1204,9 +1291,11 @@ export default function ExamPage() {
                             className={`group flex h-12 w-full items-center justify-between gap-2 rounded-2xl border px-3 text-left transition-all duration-200 ${
                               isOpen
                                 ? 'border-[#d52a1e] ring-2 ring-[#d52a1e]/20 bg-[#fffaf2] text-[#4f3521] dark:border-rose-500 dark:ring-rose-500/25 dark:bg-slate-800 dark:text-white'
-                                : currentOpt
-                                  ? 'border-[#ead9bd] bg-[#fffaf2] text-[#4f3521] shadow-sm hover:border-[#d52a1e] dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:hover:border-rose-400 dark:hover:bg-slate-700'
-                                  : 'border-2 border-dashed border-[#d8bd94] bg-[#fffaf2]/60 text-[#9d8a77] hover:border-[#d52a1e] hover:bg-[#fffaf2] dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-300 dark:hover:border-rose-400'
+                                : currentOpt && !selectedExplanationLanguageAllowed
+                                  ? 'border-rose-400 bg-rose-50/70 text-rose-800 ring-1 ring-rose-400/30 dark:border-rose-500 dark:bg-rose-950/30 dark:text-rose-200'
+                                  : currentOpt
+                                    ? 'border-[#ead9bd] bg-[#fffaf2] text-[#4f3521] shadow-sm hover:border-[#d52a1e] dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:hover:border-rose-400 dark:hover:bg-slate-700'
+                                    : 'border-2 border-dashed border-[#d8bd94] bg-[#fffaf2]/60 text-[#9d8a77] hover:border-[#d52a1e] hover:bg-[#fffaf2] dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-300 dark:hover:border-rose-400'
                             }`}
                           >
                             <div className="flex min-w-0 items-center gap-2">
@@ -1218,6 +1307,11 @@ export default function ExamPage() {
                                   <span className="truncate text-xs sm:text-sm font-black text-[#4f3521] dark:text-white">
                                     {currentOpt.label}
                                   </span>
+                                  {!selectedExplanationLanguageAllowed && (
+                                    <span className="shrink-0 rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-black text-rose-700 dark:bg-rose-500/20 dark:text-rose-300">
+                                      Chưa hỗ trợ
+                                    </span>
+                                  )}
                                 </>
                               ) : (
                                 <>
@@ -1250,6 +1344,7 @@ export default function ExamPage() {
                               <div className="space-y-1">
                                 {EXPLANATION_LANGUAGE_OPTIONS.map((opt) => {
                                   const isSelected = explanationLanguage === opt.lang;
+                                  const isAllowed = isLanguageSelectionAllowed(opt.lang, effectiveExplanationMode, 'vi');
                                   return (
                                     <button
                                       key={opt.lang}
@@ -1257,8 +1352,12 @@ export default function ExamPage() {
                                       onClick={() => handleSelectExplanationLanguage(opt.lang)}
                                       className={`group flex w-full items-center justify-between gap-2.5 rounded-xl px-3 py-2 text-left transition-all ${
                                         isSelected
-                                          ? 'bg-[#d52a1e] text-white shadow-sm'
-                                          : 'text-[#4f3521] hover:bg-[#f7eedf] dark:text-slate-100 dark:hover:bg-slate-800'
+                                          ? isAllowed
+                                            ? 'bg-[#d52a1e] text-white shadow-sm'
+                                            : 'bg-rose-600 text-white shadow-sm'
+                                          : isAllowed
+                                            ? 'text-[#4f3521] hover:bg-[#f7eedf] dark:text-slate-100 dark:hover:bg-slate-800'
+                                            : 'text-[#4f3521]/75 opacity-80 hover:bg-rose-50 dark:text-slate-300 dark:hover:bg-slate-800'
                                       }`}
                                     >
                                       <div className="flex min-w-0 items-center gap-2.5">
@@ -1288,7 +1387,20 @@ export default function ExamPage() {
                                           </p>
                                         </div>
                                       </div>
-                                      {isSelected && <FiCheck size={16} className="shrink-0 text-white" />}
+                                      <div className="flex shrink-0 items-center gap-1.5">
+                                        <span
+                                          className={`rounded-full px-2 py-0.5 text-[10px] font-black ${
+                                            isSelected
+                                              ? 'bg-white/20 text-white'
+                                              : isAllowed
+                                                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300'
+                                                : 'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300'
+                                          }`}
+                                        >
+                                          {isAllowed ? 'Sẵn sàng' : 'Chưa hỗ trợ'}
+                                        </span>
+                                        {isSelected && <FiCheck size={16} className="shrink-0 text-white" />}
+                                      </div>
                                     </button>
                                   );
                                 })}
@@ -1366,7 +1478,7 @@ export default function ExamPage() {
               </div>
               {!languageReady && (
                 <p className="mt-4 text-center text-sm font-bold text-rose-500 flex items-center justify-center gap-1.5 animate-pulse">
-                  <FiAlertCircle size={16} /> {usesPdfLanguageFiles ? 'Hãy chọn ngôn ngữ có file PDF trước khi bắt đầu.' : 'Vui lòng chọn ngôn ngữ đề thi và lời giải để bắt đầu nha!'}
+                  <FiAlertCircle size={16} className="shrink-0" /> <span>{languageWarningMessage}</span>
                 </p>
               )}
             </div>
@@ -1418,7 +1530,15 @@ export default function ExamPage() {
   }
 
   const baseLanguageMode = normalizeExamLanguageMode(exam?.language_mode);
-  const activeLanguageMode = examLanguage || baseLanguageMode;
+  const baseExplanationMode = normalizeExplanationLanguageMode(
+    exam?.explanation_language_mode || exam?.language_mode,
+  );
+  const activeLanguageMode = examLanguage && isLanguageSelectionAllowed(examLanguage, baseLanguageMode, 'zh')
+    ? examLanguage
+    : baseLanguageMode;
+  const activeExplanationMode = explanationLanguage && isLanguageSelectionAllowed(explanationLanguage, baseExplanationMode, 'vi')
+    ? explanationLanguage
+    : baseExplanationMode;
   const currentQuestion = processedQuestions[currentQuestionIndex] as any;
   const currentQuestionAnswer = selectedAnswers[currentQuestion?.id];
   const questionText = getExamText({
@@ -1436,7 +1556,7 @@ export default function ExamPage() {
     vi: currentFeedback?.explanation,
     zh: currentFeedback?.explanation_cn,
     en: currentFeedback?.explanation_en,
-  }, explanationLanguage === 'all' ? baseLanguageMode : (explanationLanguage || baseLanguageMode));
+  }, activeExplanationMode);
   const answeredCount = questions.reduce(
     (count, question) => count + (hasAnsweredValue(selectedAnswers[question.id]) ? 1 : 0),
     0,
