@@ -36,6 +36,16 @@ export interface AdminRememberedDevice {
     revoked_at?: string | null;
 }
 
+export interface AdminActiveSession {
+    id: number;
+    device_type: 'mobile' | 'desktop';
+    device_info?: string | null;
+    ip_address?: string | null;
+    last_active?: string | null;
+    expires_at?: string | null;
+    created_at?: string | null;
+}
+
 export interface AdminActivity {
     id: number;
     user_id: number;
@@ -227,7 +237,7 @@ export const adminApi = {
 
     async getUserDevices(userId: number) {
         const response = await axios.get(`/admin/users/${userId}/devices`);
-        return response.data as { success: boolean; data: { policy: { paid: boolean; maxDevices: number | null }; rememberedDevices: AdminRememberedDevice[]; activeSessions: Array<Record<string, unknown>>; user: Record<string, unknown> } };
+        return response.data as { success: boolean; data: { policy: { paid: boolean; maxDevices: number | null }; rememberedDevices: AdminRememberedDevice[]; activeSessions: AdminActiveSession[]; user: Record<string, unknown> } };
     },
 
     async revokeUserDevice(userId: number, deviceId: number) {

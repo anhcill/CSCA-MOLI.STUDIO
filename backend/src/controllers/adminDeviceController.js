@@ -10,16 +10,23 @@ async function listDevices(req, res) {
   const userId = userIdOf(req);
   if (!Number.isInteger(userId) || userId < 1) return res.status(400).json({ success: false, message: "User không hợp lệ." });
   try {
-    const [userResult, devices, sessions, paid] = await Promise.all([
+    const [userResult, paid] = await Promise.all([
       db.query(`SELECT id, email, full_name, role, is_active, is_banned, ban_reason,
                        COALESCE(device_limit_attempts, 0) AS device_limit_attempts,
                        device_limit_locked_at
                 FROM users WHERE id = $1`, [userId]),
-      DeviceSessionService.getRememberedDevices(userId, { includeRevoked: true }),
-      DeviceSessionService.getActiveSessions(userId),
       hasPaidEntitlementHistory(userId),
     ]);
     if (!userResult.rows[0]) return res.status(404).json({ success: false, message: "User không tồn tại." });
+
+    // Existing paid sessions become visible as remembered devices immediately,
+    // without waiting for the user to sign in again after this feature shipped.
+    if (paid) await DeviceSessionService.hydrateRememberedDevices(userId);
+
+    const [devices, sessions] = await Promise.all([
+      DeviceSessionService.getRememberedDevices(userId, { includeRevoked: true }),
+      DeviceSessionService.getActiveSessions(userId),
+    ]);
     return res.json({
       success: true,
       data: {
