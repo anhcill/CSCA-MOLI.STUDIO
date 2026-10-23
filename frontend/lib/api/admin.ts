@@ -24,6 +24,18 @@ export interface AdminUser {
     total_actions: number;
 }
 
+export interface AdminRememberedDevice {
+    id: number;
+    deviceKey: string;
+    device_type: 'mobile' | 'desktop';
+    device_info?: string | null;
+    browser?: string;
+    ip_address?: string | null;
+    first_seen_at?: string;
+    last_seen_at?: string;
+    revoked_at?: string | null;
+}
+
 export interface AdminActivity {
     id: number;
     user_id: number;
@@ -211,6 +223,21 @@ export const adminApi = {
             params: { page, limit }
         });
         return response.data;
+    },
+
+    async getUserDevices(userId: number) {
+        const response = await axios.get(`/admin/users/${userId}/devices`);
+        return response.data as { success: boolean; data: { policy: { paid: boolean; maxDevices: number | null }; rememberedDevices: AdminRememberedDevice[]; activeSessions: Array<Record<string, unknown>>; user: Record<string, unknown> } };
+    },
+
+    async revokeUserDevice(userId: number, deviceId: number) {
+        const response = await axios.delete(`/admin/users/${userId}/devices/${deviceId}`);
+        return response.data as { success: boolean; message: string };
+    },
+
+    async resetUserDevices(userId: number) {
+        const response = await axios.post(`/admin/users/${userId}/devices/reset`);
+        return response.data as { success: boolean; message: string };
     },
 
     // Get online users count

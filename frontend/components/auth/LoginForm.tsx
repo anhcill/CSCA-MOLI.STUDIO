@@ -336,7 +336,20 @@ export default function LoginForm() {
         await completeAuthData(response.data);
       }
     } catch (error: any) {
+      if (error.response?.data?.code === 'DEVICE_LIMIT_LOCKED') {
+        const data = error.response.data.data;
+        setErrors({
+          general: `${error.response.data.message || 'Tài khoản đã bị khóa do vượt giới hạn thiết bị.'} Liên hệ quản trị viên hoặc Zalo ${data?.contactPhone || '0812352005'}.`,
+        });
+        return;
+      }
       if (error.response?.data?.code === 'DEVICE_LIMIT_REACHED' && error.response?.data?.data) {
+        if (error.response.data.data.paidPolicy) {
+          setErrors({
+            general: `${error.response.data.message || 'Tài khoản đã đủ 2 thiết bị.'} Liên hệ quản trị viên hoặc Zalo ${error.response.data.data.contactPhone || '0812352005'}.`,
+          });
+          return;
+        }
         setDeviceLimitData(error.response.data.data as DeviceLimitData);
         setDeviceApprovalMessage('');
         setDeviceApprovalError('');

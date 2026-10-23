@@ -12,6 +12,8 @@ import {
   FiSearch, FiEdit2, FiX, FiCheck, FiStar, FiShield,
   FiEye, FiLock, FiUnlock, FiActivity
 } from 'react-icons/fi';
+import { FiMonitor } from 'react-icons/fi';
+import type { AdminRememberedDevice } from '@/lib/api/admin';
 
 interface User {
   id: number;
@@ -40,6 +42,25 @@ interface UserActivity {
   user_email?: string;
 }
 interface ActivityPagination { currentPage: number; totalPages: number; totalActivities: number; limit: number; }
+
+function DeviceModal({ user, devices, paid, onClose, onRevoke, onReset }: { user: User; devices: AdminRememberedDevice[]; paid: boolean; onClose: () => void; onRevoke: (id: number) => void; onReset: () => void }) {
+  const active = devices.filter(device => !device.revoked_at);
+  return <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+    <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl">
+      <div className="flex items-center justify-between border-b px-6 py-4">
+        <div><h2 className="font-bold text-gray-900">Thiết bị của {user.full_name}</h2><p className="text-xs text-gray-500">{paid ? 'Chính sách mua: tối đa 2 thiết bị' : 'Luồng thiết bị hiện tại'}</p></div>
+        <button onClick={onClose} className="rounded-xl p-2 text-gray-500 hover:bg-gray-100"><FiX size={18} /></button>
+      </div>
+      <div className="space-y-3 p-6">
+        {active.length === 0 ? <p className="text-sm text-gray-500">Chưa có thiết bị ghi nhớ.</p> : active.map(device => <div key={device.id} className="flex items-center justify-between rounded-xl border border-gray-200 p-3">
+          <div className="min-w-0"><p className="font-semibold text-gray-800">{device.device_type === 'mobile' ? 'Điện thoại' : 'Máy tính'}</p><p className="truncate text-xs text-gray-500">{device.browser || device.device_info || 'Thiết bị'} · IP {device.ip_address || '—'}</p><p className="text-xs text-gray-400">Hoạt động: {device.last_seen_at ? new Date(device.last_seen_at).toLocaleString('vi-VN') : '—'}</p></div>
+          <button onClick={() => onRevoke(device.id)} className="ml-3 shrink-0 rounded-lg bg-red-50 px-3 py-2 text-xs font-bold text-red-700 hover:bg-red-100">Xóa thiết bị</button>
+        </div>)}
+        <div className="flex justify-end gap-2 border-t pt-4"><button onClick={onReset} className="rounded-xl bg-amber-600 px-4 py-2 text-sm font-bold text-white hover:bg-amber-700">Xóa tất cả + mở khóa</button><button onClick={onClose} className="rounded-xl border px-4 py-2 text-sm">Đóng</button></div>
+      </div>
+    </div>
+  </div>;
+}
 
 const ACTION_LABELS: Record<string, string> = {
   login: 'Đăng nhập', logout: 'Đăng xuất', register: 'Đăng ký',
@@ -142,6 +163,8 @@ export default function AdminUsersPage() {
   const [activities, setActivities] = useState<UserActivity[]>([]);
   const [activityPage, setActivityPage] = useState(1);
   const [activityLoading, setActivityLoading] = useState(false);
+  const [deviceUser, setDeviceUser] = useState<User | null>(null);
+  const [deviceData, setDeviceData] = useState<{ devices: AdminRememberedDevice[]; paid: boolean } | null>(null);
   const [activityPagination, setActivityPagination] = useState<ActivityPagination>({ currentPage: 1, totalPages: 1, totalActivities: 0, limit: 20 });
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -206,10 +229,32 @@ export default function AdminUsersPage() {
     setActivityLoading(true);
     try {
       const res = await axios.get(`/admin/users/${u.id}/activities`, { params: { page: 1, limit: 20 } });
-      setActivities(res.data.data || []);
+      // The admin endpoint returns activities at the top level (not under data).
+      setActivities(res.data.activities || res.data.data || []);
       setActivityPagination(res.data.pagination || { currentPage: 1, totalPages: 1, totalActivities: 0, limit: 20 });
     } catch { setActivities([]); }
     finally { setActivityLoading(false); }
+  };
+
+  const handleViewDevices = async (u: User) => {
+    setDeviceUser(u);
+    try {
+      const result = await adminApi.getUserDevices(u.id);
+      setDeviceData({ devices: result.data.rememberedDevices || [], paid: result.data.policy.paid });
+    } catch { setDeviceData({ devices: [], paid: false }); }
+  };
+
+  const handleRevokeDevice = async (deviceId: number) => {
+    if (!deviceUser || !confirm('Xóa thiết bị này khỏi tài khoản?')) return;
+    await adminApi.revokeUserDevice(deviceUser.id, deviceId);
+    await handleViewDevices(deviceUser);
+  };
+
+  const handleResetDevices = async () => {
+    if (!deviceUser || !confirm('Xóa toàn bộ thiết bị ghi nhớ và mở khóa tài khoản?')) return;
+    await adminApi.resetUserDevices(deviceUser.id);
+    await handleViewDevices(deviceUser);
+    alert('Đã reset thiết bị và mở khóa.');
   };
 
   const handleLoadMoreActivity = async (page: number) => {
@@ -217,7 +262,8 @@ export default function AdminUsersPage() {
     setActivityLoading(true);
     try {
       const res = await axios.get(`/admin/users/${activityUser.id}/activities`, { params: { page, limit: 20 } });
-      setActivities(prev => page === 1 ? (res.data.data || []) : [...prev, ...(res.data.data || [])]);
+      const nextActivities = res.data.activities || res.data.data || [];
+      setActivities(prev => page === 1 ? nextActivities : [...prev, ...nextActivities]);
       setActivityPagination(res.data.pagination || { currentPage: 1, totalPages: 1, totalActivities: 0, limit: 20 });
       setActivityPage(page);
     } catch { /* ignore */ }
@@ -353,7 +399,7 @@ export default function AdminUsersPage() {
                     {new Date(u.created_at).toLocaleDateString('vi-VN')}
                   </td>
                   <td className="px-5 py-4">
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex items-center gap-1">
                       {canManageAdminScopes && (
                         <button onClick={() => openRoleEditor(u)} title="Sửa vai trò"
                           className="p-2 rounded-lg hover:bg-violet-100 text-gray-500 hover:text-violet-600 transition-colors">
@@ -363,6 +409,11 @@ export default function AdminUsersPage() {
                       <button onClick={() => handleViewActivity(u)} title="Xem hoạt động"
                         className="p-2 rounded-lg hover:bg-blue-100 text-gray-500 hover:text-blue-600 transition-colors">
                         <FiActivity size={14} />
+                      </button>
+                      <button onClick={() => handleViewDevices(u)} title="Quản lý thiết bị" aria-label="Quản lý thiết bị"
+                        className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg hover:bg-cyan-100 text-cyan-700 hover:text-cyan-800 text-xs font-bold transition-colors whitespace-nowrap">
+                        <FiMonitor size={14} />
+                        Thiết bị
                       </button>
                       <button onClick={() => handleToggleStatus(u)} title={u.is_active !== false ? 'Khóa' : 'Mở khóa'}
                         className="p-2 rounded-lg hover:bg-amber-100 text-gray-500 hover:text-amber-600 transition-colors">
@@ -453,6 +504,7 @@ export default function AdminUsersPage() {
           onLoadMore={handleLoadMoreActivity}
         />
       )}
+      {deviceUser && deviceData && <DeviceModal user={deviceUser} devices={deviceData.devices} paid={deviceData.paid} onClose={() => { setDeviceUser(null); setDeviceData(null); }} onRevoke={handleRevokeDevice} onReset={handleResetDevices} />}
     </AdminLayout>
   );
 }

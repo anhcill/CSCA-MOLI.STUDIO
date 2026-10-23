@@ -4,6 +4,7 @@ const adminController = require("../controllers/adminController");
 const adminAnalyticsController = require("../controllers/adminAnalyticsController");
 const adminCampaignController = require("../controllers/adminCampaignController");
 const adminBackupController = require("../controllers/adminBackupController");
+const adminDeviceController = require("../controllers/adminDeviceController");
 const {
 	authenticate,
 	authorizePermission,
@@ -53,6 +54,9 @@ router.get(
 // User management
 router.get("/users", authorizePermission("users.manage"), adminController.getUsers);
 router.get("/users/:userId/activities", authorizePermission("users.manage"), adminController.getUserActivities);
+router.get("/users/:userId/devices", authorizePermission("users.manage"), adminDeviceController.listDevices);
+router.delete("/users/:userId/devices/:deviceId", authorizePermission("users.manage"), adminDeviceController.revokeDevice);
+router.post("/users/:userId/devices/reset", authorizePermission("users.manage"), adminDeviceController.resetDevicesAndUnlock);
 router.get("/roles", authorizePermission("admin.super"), adminController.getAdminRoleOptions);
 router.put("/users/:userId/status", authorizePermission("users.manage"), adminController.updateUserStatus);
 router.delete(

@@ -108,6 +108,15 @@ router.get("/sessions", authenticate, async (req, res) => {
 
 router.delete("/sessions/:jti", authenticate, async (req, res) => {
   try {
+    if (await DeviceSessionService.hasPaidDevicePolicy(req.user.id)) {
+      return res.status(403).json({
+        success: false,
+        code: "DEVICE_ADMIN_ONLY",
+        message: "Tài khoản đã mua nội dung. Chỉ quản trị viên mới có thể xóa thiết bị đã nhớ.",
+        contactPhone: "0812352005",
+        contactUrl: "https://zalo.me/0812352005",
+      });
+    }
     const removed = await DeviceSessionService.removeSession(req.params.jti, req.user.id);
     if (!removed) {
       return res.status(404).json({ success: false, message: "Không tìm thấy thiết bị" });
@@ -120,6 +129,15 @@ router.delete("/sessions/:jti", authenticate, async (req, res) => {
 
 router.delete("/sessions", authenticate, async (req, res) => {
   try {
+    if (await DeviceSessionService.hasPaidDevicePolicy(req.user.id)) {
+      return res.status(403).json({
+        success: false,
+        code: "DEVICE_ADMIN_ONLY",
+        message: "Tài khoản đã mua nội dung. Chỉ quản trị viên mới có thể xóa thiết bị đã nhớ.",
+        contactPhone: "0812352005",
+        contactUrl: "https://zalo.me/0812352005",
+      });
+    }
     const removed = await DeviceSessionService.removeAllUserSessions(req.user.id, { exceptJti: req.user.jti });
     res.json({ success: true, message: "Đã đăng xuất tất cả thiết bị khác", data: { removed } });
   } catch (error) {

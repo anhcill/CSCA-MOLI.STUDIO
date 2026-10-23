@@ -1168,6 +1168,7 @@ async function runOptimizations() {
       "065_study_station_and_room_chats.sql",
       "066_pdf_answer_keys_by_language.sql",
       "071_exam_explanation_language_mode.sql",
+      "072_paid_device_policy.sql",
       "20260714_create_seo_blog_posts.sql",
       "20260714_create_seo_blog_ideas.sql",
       "20260714_remove_seo_blog_bold_markers.sql",

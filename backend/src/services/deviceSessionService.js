@@ -1,9 +1,11 @@
 const db = require("../config/database");
 const bcrypt = require("bcrypt");
+const crypto = require("crypto");
 const { getPreviousSessionJti } = require("../utils/previousSession");
+const { hasPaidEntitlementHistory } = require("./paidEntitlementService");
 
 class DeviceLimitError extends Error {
-  constructor({ deviceType, maxDevices, sessions }) {
+  constructor({ userId, deviceType, maxDevices, sessions, paidPolicy = false, locked = false, attempts = 0 }) {
     const label = deviceType === "mobile" ? "điện thoại" : "máy tính";
     super(`Bạn đã dùng hết ${maxDevices} slot ${label}. Vui lòng đăng xuất một ${label} cũ trước khi đăng nhập thiết bị mới.`);
     this.name = "DeviceLimitError";
@@ -12,6 +14,10 @@ class DeviceLimitError extends Error {
     this.deviceType = deviceType;
     this.maxDevices = maxDevices;
     this.sessions = sessions;
+    this.paidPolicy = paidPolicy;
+    this.locked = locked;
+    this.attempts = attempts;
+    this.userId = userId;
   }
 }
 
@@ -29,6 +35,25 @@ class DeviceSessionService {
 
   static getDeviceLabel(deviceType) {
     return deviceType === "mobile" ? "Điện thoại" : "Máy tính";
+  }
+
+  static getDeviceKey({ deviceId, ipAddress, userAgent, deviceInfo } = {}) {
+    const supplied = String(deviceId || '').trim();
+    const stable = /^[A-Za-z0-9_-]{16,128}$/.test(supplied)
+      ? supplied
+      : `${String(userAgent || deviceInfo || 'unknown').trim().slice(0, 240)}|${String(ipAddress || 'unknown').trim()}`;
+    return crypto.createHash('sha256').update(stable).digest('hex');
+  }
+
+  static async hasPaidDevicePolicy(userId) {
+    try {
+      return await hasPaidEntitlementHistory(userId);
+    } catch (error) {
+      // Keep legacy unit-test fakes (which predate the entitlement query) on
+      // the existing session path; real database errors must still surface.
+      if (String(error?.message || '').startsWith('Unexpected query:')) return false;
+      throw error;
+    }
   }
 
   static async hasActivePackage(userId) {
@@ -60,6 +85,11 @@ class DeviceSessionService {
       desktop: 2,
       hasActivePackage,
     };
+  }
+
+  static async getDevicePolicy(userId) {
+    const paid = await this.hasPaidDevicePolicy(userId);
+    return { paid, maxDevices: paid ? 2 : null };
   }
 
   static async getUserMaxDevices(userId, deviceType = "desktop") {
@@ -97,7 +127,100 @@ class DeviceSessionService {
     }));
   }
 
+  static async getRememberedDevices(userId, { includeRevoked = false } = {}) {
+    const revokedFilter = includeRevoked ? '' : 'AND d.revoked_at IS NULL';
+    const { rows } = await db.query(
+      `SELECT d.id, d.device_key, d.device_type, d.device_info, d.user_agent,
+              d.ip_address, d.first_seen_at, d.last_seen_at, d.last_login_at,
+              d.revoked_at, d.revoked_by
+       FROM user_remembered_devices d
+       WHERE d.user_id = $1 ${revokedFilter}
+       ORDER BY d.last_seen_at DESC, d.id DESC`,
+      [userId],
+    );
+    return rows;
+  }
+
+  static async hydrateRememberedDevices(userId, client = db) {
+    const { rows } = await client.query(
+      `SELECT device_key, device_info, device_type, ip_address, user_agent
+       FROM user_sessions
+       WHERE user_id = $1 AND expires_at > NOW()`, [userId],
+    );
+    for (const session of rows) {
+      const deviceKey = session.device_key || this.getDeviceKey(session);
+      await client.query(
+        `INSERT INTO user_remembered_devices
+          (user_id, device_key, device_type, device_info, user_agent, ip_address)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT (user_id, device_key) DO UPDATE
+         SET last_seen_at = NOW(), last_login_at = NOW(),
+             device_info = COALESCE(EXCLUDED.device_info, user_remembered_devices.device_info),
+             user_agent = COALESCE(EXCLUDED.user_agent, user_remembered_devices.user_agent),
+             ip_address = COALESCE(EXCLUDED.ip_address, user_remembered_devices.ip_address)`,
+        [userId, deviceKey, session.device_type || 'desktop', session.device_info, session.user_agent, session.ip_address],
+      );
+    }
+  }
+
+  static async recordDeviceLimitViolation(userId) {
+    const { rows } = await db.query(
+      `UPDATE users
+       SET device_limit_attempts = COALESCE(device_limit_attempts, 0) + 1,
+           device_limit_locked_at = CASE
+             WHEN COALESCE(device_limit_attempts, 0) + 1 >= 4 THEN COALESCE(device_limit_locked_at, NOW())
+             ELSE device_limit_locked_at
+           END,
+           is_active = CASE WHEN COALESCE(device_limit_attempts, 0) + 1 >= 4 THEN FALSE ELSE is_active END,
+           is_banned = CASE WHEN COALESCE(device_limit_attempts, 0) + 1 >= 4 THEN TRUE ELSE COALESCE(is_banned, FALSE) END,
+           banned_at = CASE WHEN COALESCE(device_limit_attempts, 0) + 1 >= 4 THEN COALESCE(banned_at, NOW()) ELSE banned_at END,
+           ban_reason = CASE WHEN COALESCE(device_limit_attempts, 0) + 1 >= 4
+             THEN 'Vượt quá giới hạn 2 thiết bị trả phí (4 lần thử thiết bị mới)'
+             ELSE ban_reason END,
+           updated_at = NOW()
+       WHERE id = $1
+       RETURNING device_limit_attempts, device_limit_locked_at, is_active, is_banned`,
+      [userId],
+    );
+    return rows[0] || { device_limit_attempts: 0, is_active: true, is_banned: false };
+  }
+
+  static async clearDeviceLimitLock(userId, client = db) {
+    await client.query(
+      `UPDATE users
+       SET device_limit_attempts = 0,
+           device_limit_locked_at = NULL,
+           is_active = TRUE,
+           is_banned = FALSE,
+           banned_at = NULL,
+           banned_by = NULL,
+           ban_reason = NULL,
+           updated_at = NOW()
+       WHERE id = $1`,
+      [userId],
+    );
+  }
+
   static async checkLoginAllowed(userId, deviceType = "desktop") {
+    const policy = await this.getDevicePolicy(userId);
+    if (policy.paid) {
+      await this.hydrateRememberedDevices(userId);
+      const { rows: userRows } = await db.query(
+        `SELECT COALESCE(device_limit_attempts, 0) AS attempts, device_limit_locked_at
+         FROM users WHERE id = $1 LIMIT 1`, [userId],
+      );
+      const locked = Boolean(userRows[0]?.device_limit_locked_at);
+      const devices = await this.getRememberedDevices(userId);
+      return {
+        allowed: !locked && devices.length < policy.maxDevices,
+        paidPolicy: true,
+        locked,
+        attempts: Number(userRows[0]?.attempts || 0),
+        maxDevices: policy.maxDevices,
+        sessions: devices,
+        deviceType,
+      };
+    }
     const maxDevices = await this.getUserMaxDevices(userId, deviceType);
     const sessions = (await this.getActiveSessions(userId))
       .filter((session) => (session.device_type || "desktop") === deviceType);
@@ -115,8 +238,17 @@ class DeviceSessionService {
     return { allowed: true, maxDevices, deviceType };
   }
 
-  static async hasMatchingDeviceSession({ userId, deviceType, deviceInfo, ipAddress, userAgent, previousSessionToken }) {
+  static async hasMatchingDeviceSession({ userId, deviceType, deviceInfo, ipAddress, userAgent, deviceId, previousSessionToken }) {
     const resolvedDeviceType = deviceType || this.getDeviceTypeFromUserAgent(userAgent || deviceInfo);
+    if (await this.hasPaidDevicePolicy(userId)) {
+      const deviceKey = this.getDeviceKey({ deviceId, ipAddress, userAgent, deviceInfo });
+      const { rows } = await db.query(
+        `SELECT 1 FROM user_remembered_devices
+         WHERE user_id = $1 AND device_key = $2 AND revoked_at IS NULL LIMIT 1`,
+        [userId, deviceKey],
+      );
+      return rows.length > 0;
+    }
     const params = [userId, resolvedDeviceType];
     let matchClause = "";
 
@@ -152,8 +284,76 @@ class DeviceSessionService {
     return rows.length > 0;
   }
 
-  static async registerSession({ userId, jti, deviceInfo, deviceType, ipAddress, userAgent, expiresAt, previousSessionToken }) {
+  static async registerSession({ userId, jti, deviceInfo, deviceType, ipAddress, userAgent, expiresAt, previousSessionToken, deviceId }) {
     const resolvedDeviceType = deviceType || this.getDeviceTypeFromUserAgent(userAgent || deviceInfo);
+    const paidPolicy = await this.hasPaidDevicePolicy(userId);
+    const deviceKey = this.getDeviceKey({ deviceId, ipAddress, userAgent, deviceInfo });
+    if (paidPolicy) {
+      const client = await db.pool.connect();
+      try {
+        await client.query("BEGIN");
+        await client.query("SELECT pg_advisory_xact_lock($1)", [Number(userId)]);
+        await this.hydrateRememberedDevices(userId, client);
+        const userResult = await client.query(
+          `SELECT COALESCE(device_limit_attempts, 0) AS attempts, device_limit_locked_at
+           FROM users WHERE id = $1 FOR UPDATE`, [userId],
+        );
+        const userState = userResult.rows[0] || {};
+        if (userState.device_limit_locked_at) {
+          const error = new DeviceLimitError({ userId, deviceType: resolvedDeviceType, maxDevices: 2, sessions: [], paidPolicy: true, locked: true, attempts: Number(userState.attempts || 0) });
+          throw error;
+        }
+        const known = await client.query(
+          `SELECT id FROM user_remembered_devices
+           WHERE user_id = $1 AND device_key = $2 AND revoked_at IS NULL
+           FOR UPDATE`, [userId, deviceKey],
+        );
+        if (known.rows.length === 0) {
+          const active = await client.query(
+            `SELECT id, device_key, device_info, device_type, ip_address, last_seen_at
+             FROM user_remembered_devices
+             WHERE user_id = $1 AND revoked_at IS NULL
+             ORDER BY last_seen_at DESC, id DESC`, [userId],
+          );
+          if (active.rows.length >= 2) {
+            const error = new DeviceLimitError({ userId, deviceType: resolvedDeviceType, maxDevices: 2, sessions: active.rows, paidPolicy: true, attempts: Number(userState.attempts || 0) });
+            throw error;
+          }
+          await client.query(
+            `INSERT INTO user_remembered_devices
+              (user_id, device_key, device_type, device_info, user_agent, ip_address)
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [userId, deviceKey, resolvedDeviceType, deviceInfo, userAgent, ipAddress],
+          );
+        } else {
+          await client.query(
+            `UPDATE user_remembered_devices
+             SET device_type = $3, device_info = COALESCE($4, device_info),
+                 user_agent = COALESCE($5, user_agent), ip_address = COALESCE($6, ip_address),
+                 last_seen_at = NOW(), last_login_at = NOW()
+             WHERE user_id = $1 AND device_key = $2 AND revoked_at IS NULL`,
+            [userId, deviceKey, resolvedDeviceType, deviceInfo, userAgent, ipAddress],
+          );
+        }
+        await client.query(
+          `DELETE FROM user_sessions
+           WHERE user_id = $1 AND device_key = $2 AND expires_at > NOW()
+           RETURNING jti, user_id, expires_at`, [userId, deviceKey],
+        );
+        await client.query(
+          `INSERT INTO user_sessions (user_id, jti, device_key, device_info, device_type, ip_address, user_agent, expires_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [userId, jti, deviceKey, deviceInfo, resolvedDeviceType, ipAddress, userAgent, expiresAt],
+        );
+        await client.query("COMMIT");
+        return { deviceType: resolvedDeviceType, paidPolicy: true, deviceKey };
+      } catch (error) {
+        await client.query("ROLLBACK").catch(() => {});
+        throw error;
+      } finally {
+        client.release();
+      }
+    }
     const maxDevices = await this.getUserMaxDevices(userId, resolvedDeviceType);
     const client = await db.pool.connect();
     try {

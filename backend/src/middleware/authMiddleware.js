@@ -22,7 +22,8 @@ const getFreshAuthUser = async (userId) => {
        GROUP BY e.user_id
      )
      SELECT
-       u.id, u.email, u.role, u.is_active,
+       u.id, u.email, u.role, u.is_active, u.is_banned, u.ban_reason,
+       u.device_limit_locked_at, COALESCE(u.device_limit_attempts, 0) AS device_limit_attempts,
        CASE WHEN active.user_id IS NOT NULL THEN true ELSE u.is_vip END AS is_vip,
        CASE
          WHEN active.user_id IS NULL THEN COALESCE(u.subscription_tier, 'basic')
@@ -120,6 +121,14 @@ const authMiddleware = async (req, res, next) => {
         return res.status(401).json({ success: false, message: "User not found" });
       }
       if (freshUser.is_active === false) {
+        if (freshUser.device_limit_locked_at) {
+          return res.status(403).json({
+            success: false,
+            code: "DEVICE_LIMIT_LOCKED",
+            message: "Tài khoản đã bị khóa do vượt quá số lần thử thiết bị mới. Vui lòng liên hệ quản trị viên hoặc Zalo 0812352005.",
+            data: { attempts: Number(freshUser.device_limit_attempts || 4), contactPhone: "0812352005", contactUrl: "https://zalo.me/0812352005" },
+          });
+        }
         return res.status(403).json({ success: false, message: "Account disabled" });
       }
 

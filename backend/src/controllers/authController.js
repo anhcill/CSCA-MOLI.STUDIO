@@ -360,6 +360,11 @@ function getClientIp(req) {
   );
 }
 
+function getClientDeviceId(req) {
+  const value = String(req.headers['x-device-id'] || '').trim();
+  return /^[A-Za-z0-9_-]{16,128}$/.test(value) ? value : null;
+}
+
 // ─── Token generation ─────────────────────────────────────────────────────────
 const generateToken = (payload) => {
   const jti = payload?.jti || crypto.randomBytes(16).toString("hex"); // unique token ID
@@ -475,7 +480,19 @@ const createDeviceLimitPayload = (error) => ({
     requestToken: error.requestToken || null,
     approveUrl: error.approveUrl || null,
     expiresAt: error.expiresAt || null,
+    paidPolicy: Boolean(error.paidPolicy),
+    attempts: Number(error.attempts || 0),
+    adminOnly: Boolean(error.paidPolicy),
+    contactPhone: "0812352005",
+    contactUrl: "https://zalo.me/0812352005",
   },
+});
+
+const createDeviceLimitLockedPayload = (attempts = 4) => ({
+  success: false,
+  code: "DEVICE_LIMIT_LOCKED",
+  message: "Tài khoản đã bị khóa do vượt quá số lần thử thiết bị mới. Vui lòng liên hệ quản trị viên hoặc Zalo 0812352005.",
+  data: { attempts, contactPhone: "0812352005", contactUrl: "https://zalo.me/0812352005" },
 });
 
 const isDeviceLimitError = (error) => error?.code === "DEVICE_LIMIT_REACHED";
@@ -518,6 +535,7 @@ const completeDeviceLoginRequest = async (req, request) => {
     ipAddress: request.new_ip_address || getClientIp(req),
     userAgent: request.new_user_agent || req.get("User-Agent"),
     expiresAt,
+    deviceId: getClientDeviceId(req),
   });
 
   await DeviceSessionService.markLoginRequestCompleted(request.challenge_token);
@@ -551,9 +569,21 @@ const completeLoginForUser = async (req, user, deviceInfo = "Unknown", activityA
       userAgent: req.get("User-Agent"),
       expiresAt,
       previousSessionToken: req.get("X-Previous-Session"),
+      deviceId: getClientDeviceId(req),
     });
   } catch (error) {
     if (!isDeviceLimitError(error)) throw error;
+    if (error.paidPolicy) {
+      const state = await DeviceSessionService.recordDeviceLimitViolation(user.id);
+      if (state.device_limit_locked_at) {
+        await DeviceSessionService.removeAllUserSessions(user.id).catch(() => {});
+        const locked = new Error(createDeviceLimitLockedPayload(Number(state.device_limit_attempts || 4)).message);
+        locked.statusCode = 403;
+        locked.code = "DEVICE_LIMIT_LOCKED";
+        throw locked;
+      }
+      throw error;
+    }
     const deviceRequest = await DeviceSessionService.createLoginRequest({
       userId: user.id,
       deviceType: error.deviceType || DeviceSessionService.getDeviceTypeFromUserAgent(req.get("User-Agent")),
@@ -792,6 +822,12 @@ const login = async (req, res) => {
         .json({ success: false, message: "Tên đăng nhập hoặc mật khẩu không đúng" });
     }
 
+    const deviceLock = user?.id
+      ? (await db.query(`SELECT device_limit_locked_at, device_limit_attempts FROM users WHERE id = $1`, [user.id])).rows[0]
+      : null;
+    if (deviceLock?.device_limit_locked_at) {
+      return res.status(403).json(createDeviceLimitLockedPayload(Number(deviceLock.device_limit_attempts || 4)));
+    }
     if (!user.is_active) {
       return res
         .status(403)
@@ -819,19 +855,40 @@ const login = async (req, res) => {
     clearAttempts(identifier);
 
     const deviceType = DeviceSessionService.getDeviceTypeFromUserAgent(req.get('User-Agent'));
+    const deviceId = getClientDeviceId(req);
     const hasMatchingDeviceSession = await DeviceSessionService.hasMatchingDeviceSession({
       userId: user.id,
       deviceType,
       deviceInfo: req.get('User-Agent')?.substring(0, 200) || 'Unknown',
       ipAddress: getClientIp(req),
       userAgent: req.get('User-Agent'),
+      deviceId,
       previousSessionToken: req.get('X-Previous-Session'),
     });
     const loginAllowed = await DeviceSessionService.checkLoginAllowed(user.id, deviceType);
+    if (!isAdminUser(user) && loginAllowed.paidPolicy && loginAllowed.locked) {
+      return res.status(403).json(createDeviceLimitLockedPayload(Number(loginAllowed.attempts || 4)));
+    }
     // Admins must finish email OTP + Authenticator before receiving a device
     // replacement challenge. This prevents email-only replacement from
     // bypassing the stronger admin MFA requirement.
     if (!isAdminUser(user) && !loginAllowed.allowed && !hasMatchingDeviceSession) {
+      if (loginAllowed.paidPolicy) {
+        const state = await DeviceSessionService.recordDeviceLimitViolation(user.id);
+        if (state.device_limit_locked_at) {
+          await DeviceSessionService.removeAllUserSessions(user.id).catch(() => {});
+          return res.status(403).json(createDeviceLimitLockedPayload(Number(state.device_limit_attempts || 4)));
+        }
+        return res.status(409).json(createDeviceLimitPayload({
+          code: "DEVICE_LIMIT_REACHED",
+          message: "Tài khoản đã đủ 2 thiết bị. Chỉ quản trị viên mới có thể xóa thiết bị đã nhớ.",
+          paidPolicy: true,
+          attempts: Number(state.device_limit_attempts || 0),
+          deviceType,
+          maxDevices: 2,
+          sessions: loginAllowed.sessions,
+        }));
+      }
       const deviceRequest = await DeviceSessionService.createLoginRequest({
         userId: user.id,
         deviceType,
@@ -1339,6 +1396,9 @@ const facebookAuthCallback = async (req, res) => {
     );
   } catch (error) {
     console.error('Facebook auth callback error:', error.message);
+    if (error?.code === "DEVICE_LIMIT_LOCKED") {
+      return res.status(403).json(createDeviceLimitLockedPayload(Number(error.attempts || 4)));
+    }
     if (isDeviceLimitError(error)) {
       return res.redirect(
         buildRedirectWithHash(redirectTarget, {
@@ -1451,6 +1511,9 @@ const googleAuth = async (req, res) => {
       data,
     });
   } catch (error) {
+    if (error?.code === "DEVICE_LIMIT_LOCKED") {
+      return res.status(403).json(createDeviceLimitLockedPayload(Number(error.attempts || 4)));
+    }
     if (isDeviceLimitError(error)) {
       return res.status(409).json(createDeviceLimitPayload(error));
     }
@@ -1675,6 +1738,7 @@ const verifyOtpController = async (req, res) => {
       userAgent: req.get('User-Agent'),
       expiresAt,
       previousSessionToken: req.get('X-Previous-Session'),
+      deviceId: getClientDeviceId(req),
     });
 
     const token = generateToken(buildTokenPayload({ ...user, jti, subscription_tier: user.subscription_tier || 'basic' }));
@@ -1708,7 +1772,14 @@ const verifyOtpController = async (req, res) => {
       },
     });
   } catch (error) {
+    if (error?.code === "DEVICE_LIMIT_LOCKED") {
+      return res.status(403).json(createDeviceLimitLockedPayload(Number(error.attempts || 4)));
+    }
     if (isDeviceLimitError(error)) {
+      if (error.paidPolicy) {
+        const state = await DeviceSessionService.recordDeviceLimitViolation(error.userId || 0).catch(() => null);
+        if (state?.device_limit_locked_at) return res.status(403).json(createDeviceLimitLockedPayload(Number(state.device_limit_attempts || 4)));
+      }
       return res.status(409).json(createDeviceLimitPayload(error));
     }
     console.error('Verify OTP error:', error);
@@ -1770,6 +1841,9 @@ const adminMfaSetupConfirm = async (req, res) => {
       backupCodes: result.backupCodes,
     });
   } catch (error) {
+    if (error?.code === "DEVICE_LIMIT_LOCKED") {
+      return res.status(403).json(createDeviceLimitLockedPayload(Number(error.attempts || 4)));
+    }
     if (isDeviceLimitError(error)) {
       return res.status(409).json(createDeviceLimitPayload(error));
     }
@@ -1804,6 +1878,9 @@ const adminMfaVerify = async (req, res) => {
       data,
     });
   } catch (error) {
+    if (error?.code === "DEVICE_LIMIT_LOCKED") {
+      return res.status(403).json(createDeviceLimitLockedPayload(Number(error.attempts || 4)));
+    }
     if (isDeviceLimitError(error)) {
       return res.status(409).json(createDeviceLimitPayload(error));
     }

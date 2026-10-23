@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { getPreviousSessionToken, rememberPreviousSession } from './previousSession';
+import { getDeviceIdentity } from './deviceIdentity';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
@@ -65,6 +66,8 @@ const axiosInstance = axios.create({
 // Request interceptor - Add token to requests (OPTIMIZED)
 axiosInstance.interceptors.request.use(
   (config) => {
+    const deviceId = getDeviceIdentity();
+    if (deviceId) config.headers['X-Device-Id'] = deviceId;
     if (config.url?.startsWith('/auth/')) {
       const previousSessionToken = getPreviousSessionToken();
       if (previousSessionToken) config.headers['X-Previous-Session'] = previousSessionToken;

@@ -148,6 +148,9 @@ const AdminController = {
                     u.full_name,
                     u.role,
                     u.is_active,
+                    COALESCE(u.is_vip, FALSE) AS is_vip,
+                    COALESCE(u.subscription_tier, 'basic') AS subscription_tier,
+                    u.vip_expires_at,
                     u.created_at,
                     (SELECT COUNT(*) FROM exam_attempts WHERE user_id = u.id) AS total_attempts,
                     COALESCE(
@@ -161,7 +164,8 @@ const AdminController = {
                 LEFT JOIN user_roles ur ON ur.user_id = u.id
                 LEFT JOIN roles r ON r.id = ur.role_id
                 ${usersWhereClause}
-                GROUP BY u.id, u.email, u.full_name, u.role, u.is_active, u.created_at
+                GROUP BY u.id, u.email, u.full_name, u.role, u.is_active,
+                         u.is_vip, u.subscription_tier, u.vip_expires_at, u.created_at
                 ORDER BY u.created_at DESC
                 LIMIT $1 OFFSET $2
             `;
