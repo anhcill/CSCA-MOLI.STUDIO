@@ -34,7 +34,7 @@ interface ExamSession {
 }
 
 const NOTICE_KEY_PREFIX = 'moly:exam-countdown-notice:v2';
-const FIRST_ELIGIBLE_KEY_PREFIX = 'moly:exam-countdown-notice:first-eligible-at:v1';
+const FIRST_ELIGIBLE_KEY_PREFIX = 'moly:exam-countdown-notice:first-eligible-at:v2';
 const DAY_MS = 24 * 60 * 60 * 1000;
 const SESSION_WINDOW_MS = 48 * 60 * 60 * 1000;
 const URGENT_WINDOW_MS = DAY_MS;

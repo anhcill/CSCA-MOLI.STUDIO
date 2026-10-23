@@ -1,9 +1,15 @@
 import { io, Socket } from 'socket.io-client';
+import { clearStoredAuth } from './utils/axios';
 
 const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'http://localhost:5000';
 
 let socket: Socket | null = null;
 let reconnectAttempts = 0;
+const REVOKED_SESSION_MESSAGES = [
+  'Token has been revoked',
+  'Session has been revoked',
+  'Authentication failed',
+];
 
 type MessageHandler = (message: unknown) => void;
 type DeleteMessageHandler = (data: { messageId: number; senderId: number }) => void;
@@ -62,6 +68,14 @@ export function initSocket(): Socket {
   socket.on('connect_error', (err) => {
     reconnectAttempts++;
     console.warn(`[Socket] Connection error (attempt ${reconnectAttempts}):`, err.message);
+    if (REVOKED_SESSION_MESSAGES.some((message) => err.message.includes(message))) {
+      clearStoredAuth();
+      socket?.disconnect();
+      socket = null;
+      if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
+    }
   });
 
   // ─── Message events ─────────────────────────────────────────────────────────

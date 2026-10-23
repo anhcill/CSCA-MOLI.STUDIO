@@ -38,6 +38,8 @@ export default function ClientShell({ children }: { children: React.ReactNode })
   const [nationalDayTheme, setNationalDayTheme] = useState(isNationalDayThemeActive);
   const { isAuthenticated, token, user } = useAuthStore();
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
+  const [welcomeSettingsReady, setWelcomeSettingsReady] = useState(false);
+  const [welcomeSettingsRevision, setWelcomeSettingsRevision] = useState(0);
 
   // Keep query-dependent shell behavior without useSearchParams(), which would
   // force the entire root Suspense boundary into client-side rendering.
@@ -168,20 +170,28 @@ export default function ClientShell({ children }: { children: React.ReactNode })
   // Sync public site settings (welcome, etc.) from backend
   useEffect(() => {
     if (!mounted) return;
+    let cancelled = false;
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
     fetch(`${apiUrl}/settings/public`)
       .then((res) => (res.ok ? res.json() : null))
       .then((json) => {
         if (json?.data?.welcome_settings) {
           saveCachedWelcomeSettings(json.data.welcome_settings);
+          if (!cancelled) setWelcomeSettingsRevision((revision) => revision + 1);
         }
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setWelcomeSettingsReady(true);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [mounted]);
 
   // First-time login welcome modal check (reset for all users via versioning)
   useEffect(() => {
-    if (!mounted || !isAuthenticated || !user) return;
+    if (!mounted || !welcomeSettingsReady || !isAuthenticated || !user) return;
     if (pathname?.startsWith('/admin')) return;
 
     try {
@@ -195,7 +205,7 @@ export default function ClientShell({ children }: { children: React.ReactNode })
         setShowWelcomeModal(true);
       }
     } catch {}
-  }, [mounted, isAuthenticated, user, pathname]);
+  }, [mounted, welcomeSettingsReady, welcomeSettingsRevision, isAuthenticated, user, pathname]);
 
   const handleWelcomeDismiss = () => {
     setShowWelcomeModal(false);
