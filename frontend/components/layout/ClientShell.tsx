@@ -158,7 +158,7 @@ export default function ClientShell({ children }: { children: React.ReactNode })
   const showPwaBanner = isAuthenticated && !isAdmin && !isAuth && !isExam && !isGame && !isChat;
   const showOnlineClassAnnouncement = !isAdmin && !isAuth && !isExam && !isGame && !isChat;
   const showNotificationPrompt = isAuthenticated && !isAdmin && !isAuth && !isExam && !isGame && !isChat;
-  const showExamCountdownNotice = !isAdmin && !isAuth && !isExam && !isGame && !isChat;
+  const showExamCountdownNotice = isAuthenticated && !isAdmin && !isAuth && !isExam && !isGame && !isChat;
   const showUpdateToast = isAuthenticated && !isChat;
   const moliPetPosition = 'left';
 
@@ -222,8 +222,8 @@ export default function ClientShell({ children }: { children: React.ReactNode })
       {showMoliPet && mounted && !isVideoCommerce && <MoliPet defaultPosition={moliPetPosition} />}
       {showDailyGift && mounted && !isVideoCommerce && <DailyGiftBox />}
       {showNationalDayGreeting && mounted && !isVideoCommerce && <NationalDayGreeting />}
-      {showOnlineClassAnnouncement && mounted && !isVideoCommerce && <OnlineClassAnnouncement />}
-      {showExamCountdownNotice && mounted && !isVideoCommerce && <ExamCountdownNotice />}
+      {showOnlineClassAnnouncement && mounted && !isVideoCommerce && !showWelcomeModal && <OnlineClassAnnouncement />}
+      {showExamCountdownNotice && mounted && !isVideoCommerce && !showWelcomeModal && <ExamCountdownNotice />}
       {mounted && showNotificationPrompt && !isVideoCommerce && <NotificationPermissionPrompt />}
       {mounted && showUpdateToast && (
         <UpdateToast

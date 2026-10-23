@@ -8,6 +8,7 @@ const ANNOUNCEMENT_VERSION = 'online-classes-2026-09';
 const HIDDEN_VERSION_KEY = 'moli:online-class-announcement:hidden-version';
 const SNOOZED_UNTIL_KEY = 'moli:online-class-announcement:snoozed-until';
 const SNOOZE_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
+const ANNOUNCEMENT_DELAY_MS = 90 * 1000;
 const ANNOUNCEMENT_BACKGROUND = 'https://res.cloudinary.com/dvrgrmais/image/upload/v1785245197/csca/course-library/hero-learning-web.webp';
 
 export default function OnlineClassAnnouncement() {
@@ -22,8 +23,24 @@ export default function OnlineClassAnnouncement() {
     if (Number.isFinite(snoozedUntil) && snoozedUntil > Date.now()) return;
     if (Number.isFinite(snoozedUntil)) localStorage.removeItem(SNOOZED_UNTIL_KEY);
 
-    const timer = window.setTimeout(() => setVisible(true), 700);
-    return () => window.clearTimeout(timer);
+    let cancelled = false;
+    let timer: number | undefined;
+
+    const showWhenAvailable = () => {
+      if (cancelled) return;
+      const anotherDialog = document.querySelector('[role="dialog"][aria-modal="true"]');
+      if (anotherDialog) {
+        timer = window.setTimeout(showWhenAvailable, 1500);
+        return;
+      }
+      setVisible(true);
+    };
+
+    timer = window.setTimeout(showWhenAvailable, ANNOUNCEMENT_DELAY_MS);
+    return () => {
+      cancelled = true;
+      if (timer) window.clearTimeout(timer);
+    };
   }, []);
 
   const dismiss = (hidePermanently = doNotShowAgain) => {

@@ -34,6 +34,7 @@ interface ExamSession {
 }
 
 const NOTICE_KEY_PREFIX = 'moly:exam-countdown-notice:v2';
+const FIRST_ELIGIBLE_KEY_PREFIX = 'moly:exam-countdown-notice:first-eligible-at:v1';
 const DAY_MS = 24 * 60 * 60 * 1000;
 const SESSION_WINDOW_MS = 48 * 60 * 60 * 1000;
 const URGENT_WINDOW_MS = DAY_MS;
@@ -187,6 +188,7 @@ export default function ExamCountdownNotice() {
   const storageBase = `${NOTICE_KEY_PREFIX}:${user?.id || 'guest'}`;
   const frequencyKey = `${storageBase}:frequency`;
   const lastShownKey = `${storageBase}:last-shown-at`;
+  const firstEligibleKey = `${FIRST_ELIGIBLE_KEY_PREFIX}:${user?.id || 'guest'}`;
 
   const closeNotice = useCallback(() => {
     setFrequencyMenuOpen(false);
@@ -196,13 +198,11 @@ export default function ExamCountdownNotice() {
   useEffect(() => {
     let cancelled = false;
     let openTimer: number | undefined;
-    let retryCount = 0;
 
     const openWhenAvailable = () => {
       if (cancelled) return;
       const anotherDialog = document.querySelector('[role="dialog"][aria-modal="true"]');
-      if (anotherDialog && retryCount < 8) {
-        retryCount += 1;
+      if (anotherDialog) {
         openTimer = window.setTimeout(openWhenAvailable, 1500);
         return;
       }
@@ -217,6 +217,18 @@ export default function ExamCountdownNotice() {
 
       if (cancelled) return;
       const currentTime = Date.now();
+      const storedFirstEligibleAt = Number(readStorage(firstEligibleKey));
+      if (!Number.isFinite(storedFirstEligibleAt) || storedFirstEligibleAt <= 0) {
+        const firstEligibleAt = currentTime + DAY_MS;
+        writeStorage(firstEligibleKey, String(firstEligibleAt));
+        openTimer = window.setTimeout(() => void load(), DAY_MS);
+        return;
+      }
+      if (storedFirstEligibleAt > currentTime) {
+        openTimer = window.setTimeout(() => void load(), storedFirstEligibleAt - currentTime);
+        return;
+      }
+
       const session = selectOfficialSession(currentTime);
       if (!session) return;
       const lastShownAt = Number(readStorage(lastShownKey) || 0);
@@ -233,7 +245,7 @@ export default function ExamCountdownNotice() {
       cancelled = true;
       if (openTimer) window.clearTimeout(openTimer);
     };
-  }, [frequencyKey, lastShownKey, user?.id]);
+  }, [firstEligibleKey, frequencyKey, lastShownKey, user?.id]);
 
   useEffect(() => {
     if (!open || sessionEndsAt === null) return;
