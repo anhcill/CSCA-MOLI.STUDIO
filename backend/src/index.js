@@ -128,6 +128,7 @@ app.use(
       "X-Requested-With",
       "X-Integration-Key",
       "X-Previous-Session",
+      "X-Device-Id",
     ],
   }),
 );
