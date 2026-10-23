@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import AdminLayout from '@/components/layout/AdminLayout';
 import { useAuthStore } from '@/lib/store/authStore';
@@ -68,12 +68,30 @@ interface VipPackage {
   original_price?: number | null;
   price_note?: string | null;
   original_price_note?: string | null;
+  subject_prices?: Record<string, number> | null;
+  allowed_subjects?: string[];
+  requires_subject_choice?: boolean;
   description: string;
   features: string[];
   is_active: boolean;
   sort_order: number;
   created_at: string;
 }
+
+interface UserSearchResult {
+  id: number;
+  email: string;
+  full_name: string;
+  is_active?: boolean;
+}
+
+const SUBJECT_LABELS: Record<string, string> = {
+  MATH: 'Toán',
+  PHYSICS: 'Vật lý',
+  CHEMISTRY: 'Hóa học',
+  CHINESE_SOC: 'Tiếng Trung Xã hội',
+  CHINESE_SCI: 'Tiếng Trung Tự nhiên',
+};
 
 interface Pagination {
   page: number;
@@ -145,11 +163,17 @@ export default function AdminVipPage() {
   // ── Grant modal ───────────────────────────────────────
   const [showGrantModal, setShowGrantModal] = useState(false);
   const [grantEmail, setGrantEmail] = useState('');
+  const [selectedGrantUser, setSelectedGrantUser] = useState<UserSearchResult | null>(null);
+  const [grantUserResults, setGrantUserResults] = useState<UserSearchResult[]>([]);
+  const [grantUserSearching, setGrantUserSearching] = useState(false);
+  const [showGrantUserResults, setShowGrantUserResults] = useState(false);
   const [grantPackageId, setGrantPackageId] = useState('');
+  const [grantSubjectCode, setGrantSubjectCode] = useState('');
   const [grantCustomDays, setGrantCustomDays] = useState('');
   const [grantTier, setGrantTier] = useState<'vip' | 'premium'>('vip');
   const [grantReason, setGrantReason] = useState('');
   const [grantLoading, setGrantLoading] = useState(false);
+  const grantUserSearchRequest = useRef(0);
 
   // ── Package edit modal ─────────────────────────────────
   const [editingPkg, setEditingPkg] = useState<VipPackage | null>(null);
@@ -182,6 +206,33 @@ export default function AdminVipPage() {
     else if (activeTab === 'packages') loadPackages();
     else if (activeTab === 'comparison') loadFeatures();
   }, [activeTab, usersPage, usersFilter, usersSearch, txPage, txStatus, txSearch, pkgsPage]);
+
+  useEffect(() => {
+    if (!showGrantModal || selectedGrantUser || grantEmail.trim().length < 2) {
+      grantUserSearchRequest.current += 1;
+      setGrantUserResults([]);
+      setGrantUserSearching(false);
+      return;
+    }
+
+    const requestId = ++grantUserSearchRequest.current;
+    const timer = window.setTimeout(async () => {
+      setGrantUserSearching(true);
+      try {
+        const data = await adminApi.getUsers({ page: 1, limit: 8, search: grantEmail.trim() });
+        if (grantUserSearchRequest.current === requestId) {
+          setGrantUserResults(data.users || []);
+          setShowGrantUserResults(true);
+        }
+      } catch {
+        if (grantUserSearchRequest.current === requestId) setGrantUserResults([]);
+      } finally {
+        if (grantUserSearchRequest.current === requestId) setGrantUserSearching(false);
+      }
+    }, 350);
+
+    return () => window.clearTimeout(timer);
+  }, [grantEmail, selectedGrantUser, showGrantModal]);
 
   const loadStats = async () => {
     try {
@@ -268,6 +319,9 @@ export default function AdminVipPage() {
 
   const handleGrantVip = async () => {
     if (!grantEmail) return alert('Vui lòng nhập Email người dùng');
+    if (!selectedGrantUser || selectedGrantUser.email !== grantEmail.trim()) {
+      return alert('Vui lòng chọn đúng người dùng từ kết quả tìm kiếm');
+    }
     if (!grantPackageId && !grantCustomDays) return alert('Vui lòng chọn gói VIP hoặc nhập số ngày tùy chỉnh');
     setGrantLoading(true);
     try {
@@ -277,6 +331,7 @@ export default function AdminVipPage() {
       };
       if (grantPackageId) {
         payload.packageId = parseInt(grantPackageId);
+        if (grantSubjectCode) payload.selectedSubjectCode = grantSubjectCode;
       } else {
         payload.durationDays = parseInt(grantCustomDays);
         payload.tier = grantTier;
@@ -284,7 +339,10 @@ export default function AdminVipPage() {
       await axios.post(`/admin/vip/users/grant`, payload);
       setShowGrantModal(false);
       setGrantEmail('');
+      setSelectedGrantUser(null);
+      setGrantUserResults([]);
       setGrantPackageId('');
+      setGrantSubjectCode('');
       setGrantCustomDays('');
       setGrantTier('vip');
       setGrantReason('');
@@ -893,27 +951,83 @@ export default function AdminVipPage() {
               </button>
             </div>
             <div className="p-5 space-y-4">
-              <div>
+              <div className="relative">
                 <label className="block text-sm font-semibold text-gray-700 mb-1.5">Email người dùng *</label>
                 <input
                   type="email"
                   value={grantEmail}
-                  onChange={e => setGrantEmail(e.target.value)}
-                  placeholder="VD: user@gmail.com"
-                  className="w-full border rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-violet-500 outline-none" />
+                  onChange={e => {
+                    setGrantEmail(e.target.value);
+                    setSelectedGrantUser(null);
+                    setShowGrantUserResults(true);
+                  }}
+                  onFocus={() => setShowGrantUserResults(true)}
+                  placeholder="Gõ email hoặc tên người dùng"
+                  autoComplete="off"
+                  className={`w-full border rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-violet-500 outline-none ${selectedGrantUser ? 'border-emerald-400 bg-emerald-50/40' : ''}`} />
+                {selectedGrantUser && (
+                  <p className="mt-1.5 text-xs font-semibold text-emerald-600">
+                    Đã chọn: {selectedGrantUser.full_name || 'Chưa đặt tên'}
+                  </p>
+                )}
+                {!selectedGrantUser && showGrantUserResults && grantEmail.trim().length >= 2 && (
+                  <div className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border border-gray-200 bg-white p-1 shadow-xl">
+                    {grantUserSearching ? (
+                      <p className="px-3 py-2.5 text-sm text-gray-400">Đang tìm người dùng...</p>
+                    ) : grantUserResults.length > 0 ? (
+                      grantUserResults.map(result => (
+                        <button
+                          key={result.id}
+                          type="button"
+                          onClick={() => {
+                            setGrantEmail(result.email);
+                            setSelectedGrantUser(result);
+                            setShowGrantUserResults(false);
+                          }}
+                          className="flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left hover:bg-violet-50">
+                          <span className="min-w-0">
+                            <span className="block truncate text-sm font-semibold text-gray-800">{result.full_name || 'Chưa đặt tên'}</span>
+                            <span className="block truncate text-xs text-gray-500">{result.email}</span>
+                          </span>
+                          {result.is_active === false && <span className="shrink-0 text-[10px] font-bold text-red-500">Đã khóa</span>}
+                        </button>
+                      ))
+                    ) : (
+                      <p className="px-3 py-2.5 text-sm text-gray-400">Không tìm thấy người dùng</p>
+                    )}
+                  </div>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1.5">Chọn gói VIP</label>
                 <select
-                  value={grantPackageId}
-                  onChange={e => { setGrantPackageId(e.target.value); setGrantCustomDays(''); }}
+                  value={grantPackageId ? `${grantPackageId}${grantSubjectCode ? `:${grantSubjectCode}` : ''}` : ''}
+                  onChange={e => {
+                    const [packageId, subjectCode = ''] = e.target.value.split(':');
+                    setGrantPackageId(packageId);
+                    setGrantSubjectCode(subjectCode);
+                    setGrantCustomDays('');
+                  }}
                   className="w-full border rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-violet-500 outline-none bg-white">
                   <option value="">— Chọn từ danh sách gói —</option>
-                  {packages.map(pkg => (
-                    <option key={pkg.id} value={pkg.id}>
-                      {pkg.name} — {(pkg.tier || 'vip').toUpperCase()} — {pkg.duration_days} ngày — {pkg.price.toLocaleString('vi-VN')}đ
-                    </option>
-                  ))}
+                  {packages.filter(pkg => pkg.is_active).flatMap(pkg => {
+                    const subjects = (pkg.allowed_subjects || []).filter(subject => subject !== '*');
+                    if (pkg.requires_subject_choice && subjects.length > 0) {
+                      return subjects.map(subject => {
+                        const subjectPrice = Number(pkg.subject_prices?.[subject]) || pkg.price;
+                        return (
+                          <option key={`${pkg.id}:${subject}`} value={`${pkg.id}:${subject}`}>
+                            {pkg.name} - {SUBJECT_LABELS[subject] || subject} — {(pkg.tier || 'vip').toUpperCase()} — {pkg.duration_days} ngày — {subjectPrice.toLocaleString('vi-VN')}đ
+                          </option>
+                        );
+                      });
+                    }
+                    return [(
+                      <option key={pkg.id} value={pkg.id}>
+                        {pkg.name} — {(pkg.tier || 'vip').toUpperCase()} — {pkg.duration_days} ngày — {pkg.price.toLocaleString('vi-VN')}đ
+                      </option>
+                    )];
+                  })}
                 </select>
               </div>
               <div className="text-center text-xs text-gray-400 font-medium">hoặc nhập số ngày tùy chỉnh</div>
@@ -932,7 +1046,7 @@ export default function AdminVipPage() {
                 <input
                   type="number"
                   value={grantCustomDays}
-                  onChange={e => { setGrantCustomDays(e.target.value); setGrantPackageId(''); }}
+                  onChange={e => { setGrantCustomDays(e.target.value); setGrantPackageId(''); setGrantSubjectCode(''); }}
                   placeholder="VD: 7"
                   disabled={!!grantPackageId}
                   className="w-full border rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-violet-500 outline-none disabled:bg-gray-50 disabled:text-gray-400" />

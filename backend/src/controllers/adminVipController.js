@@ -11,6 +11,14 @@ const normalizeTier = (tier) => {
   return 'vip';
 };
 
+const SUBJECT_LABELS = {
+  MATH: 'Toán',
+  PHYSICS: 'Vật lý',
+  CHEMISTRY: 'Hóa học',
+  CHINESE_SOC: 'Tiếng Trung Xã hội',
+  CHINESE_SCI: 'Tiếng Trung Tự nhiên',
+};
+
 const AdminVipController = {
   /**
    * GET /api/admin/vip/users
@@ -131,6 +139,10 @@ const AdminVipController = {
       if (pkg) {
         try {
           allowedSubjects = resolveSelectedSubjects(pkg, selectedSubjectCode || selected_subject_code);
+          if (pkg.requires_subject_choice && allowedSubjects.length === 1) {
+            const subjectCode = allowedSubjects[0];
+            pkgName = `${pkgName} - ${SUBJECT_LABELS[subjectCode] || subjectCode}`;
+          }
         } catch (subjectErr) {
           return res.status(400).json({
             success: false,
@@ -186,7 +198,7 @@ const AdminVipController = {
         );
       }
 
-      UserActivity.log(req.user.id, 'admin.grant_vip', { userId, packageId: pkgId, durationDays: pkgDays, reason, ip: req.ip, userAgent: req.headers['user-agent'] });
+      UserActivity.log(req.user.id, 'admin.grant_vip', { userId, packageId: pkgId, durationDays: pkgDays, allowedSubjects, reason, ip: req.ip, userAgent: req.headers['user-agent'] });
       console.info(`[VIP] ${adminName} granted "${pkgName}" (${pkgDays}d) to user#${userId} (${email}). Reason: ${reason || 'N/A'}`);
       res.json({ success: true, message: `Đã cấp "${pkgName}" (${pkgDays} ngày) cho người dùng ${email}`, data: result.rows[0] });
     } catch (err) {
