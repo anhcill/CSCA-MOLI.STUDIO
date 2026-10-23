@@ -51,6 +51,9 @@ const groupExamsByYear = (items: Exam[]) => {
   return new Map([...map.entries()].sort((a, b) => b[0] - a[0]));
 };
 
+const EXAM_SORT_STORAGE_KEY = 'csca_exam_list_sort';
+const EXAM_HIDE_DONE_STORAGE_KEY = 'csca_exam_list_hide_done';
+
 export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProps) {
   const router = useRouter();
   const { t, format, language } = useLanguage();
@@ -62,8 +65,44 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
   const [filter, setFilter] = useState<FilterType>('all');
   const [examTypeTab, setExamTypeTab] = useState<ExamTypeTab>('regular');
   const [search, setSearch] = useState('');
-  const [sort, setSort] = useState<SortType>('popular');
+  const [sort, setSort] = useState<SortType>('newest');
   const [showDone, setShowDone] = useState(false);
+
+  useEffect(() => {
+    try {
+      const savedSort = localStorage.getItem(EXAM_SORT_STORAGE_KEY) as SortType;
+      if (savedSort && ['newest', 'popular', 'oldest', 'name'].includes(savedSort)) {
+        setSort(savedSort);
+      }
+      const savedHideDone = localStorage.getItem(EXAM_HIDE_DONE_STORAGE_KEY);
+      if (savedHideDone !== null) {
+        setShowDone(savedHideDone === 'true');
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const handleSortChange = (newSort: SortType) => {
+    setSort(newSort);
+    try {
+      localStorage.setItem(EXAM_SORT_STORAGE_KEY, newSort);
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleToggleShowDone = () => {
+    setShowDone((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(EXAM_HIDE_DONE_STORAGE_KEY, String(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  };
   const canAccessExam = (exam: Exam) => canAccessContent(user, getExamTier(exam), exam.subject_code);
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -166,14 +205,20 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
 
     // Sort
     result.sort((a, b) => {
+      const timeA = new Date(a.publish_date || (a as any).created_at || 0).getTime();
+      const timeB = new Date(b.publish_date || (b as any).created_at || 0).getTime();
+
       if (sort === 'popular') {
         const popularityDifference = getPopularityAttemptCount(b) - getPopularityAttemptCount(a);
         if (popularityDifference !== 0) return popularityDifference;
-        return new Date(b.publish_date || 0).getTime() - new Date(a.publish_date || 0).getTime();
+        if (timeB !== timeA) return timeB - timeA;
+        return (b.id || 0) - (a.id || 0);
       } else if (sort === 'newest') {
-        return new Date(b.publish_date || 0).getTime() - new Date(a.publish_date || 0).getTime();
+        if (timeB !== timeA) return timeB - timeA;
+        return (b.id || 0) - (a.id || 0);
       } else if (sort === 'oldest') {
-        return new Date(a.publish_date || 0).getTime() - new Date(b.publish_date || 0).getTime();
+        if (timeA !== timeB) return timeA - timeB;
+        return (a.id || 0) - (b.id || 0);
       } else {
         return (a.title || '').localeCompare(b.title || '');
       }
@@ -664,11 +709,11 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
           <span className="text-xs text-gray-400 font-medium">{t('examList.sort')}</span>
           <select
             value={sort}
-            onChange={e => setSort(e.target.value as SortType)}
+            onChange={e => handleSortChange(e.target.value as SortType)}
             className="text-xs font-semibold border border-rose-100 rounded-lg px-2.5 py-1.5 bg-white/80 text-gray-600 focus:outline-none focus:ring-2 focus:ring-red-300 cursor-pointer"
           >
-            <option value="popular">{t('examList.popular')}</option>
             <option value="newest">{t('examList.newest')}</option>
+            <option value="popular">{t('examList.popular')}</option>
             <option value="oldest">{t('examList.oldest')}</option>
             <option value="name">{t('examList.byName')}</option>
           </select>
@@ -676,7 +721,7 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
 
         {/* Show done toggle */}
         <button
-          onClick={() => setShowDone(v => !v)}
+          onClick={handleToggleShowDone}
           className={`flex w-fit items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
             showDone
               ? 'bg-emerald-50 text-emerald-700 border-emerald-200'

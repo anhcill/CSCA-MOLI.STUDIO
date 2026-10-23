@@ -221,7 +221,7 @@ const Exam = {
             )
           )
         GROUP BY e.id, s.id, u.id
-        ORDER BY popularity_attempt_count DESC, e.publish_date DESC NULLS LAST, e.created_at DESC
+        ORDER BY COALESCE(e.publish_date, e.created_at) DESC, e.id DESC
       `;
       params = [subjectSlug, userId];
     } else {
@@ -300,7 +300,7 @@ const Exam = {
             )
           )
         GROUP BY e.id, s.id, u.id
-        ORDER BY popularity_attempt_count DESC, e.publish_date DESC NULLS LAST, e.created_at DESC
+        ORDER BY COALESCE(e.publish_date, e.created_at) DESC, e.id DESC
       `;
       params = [subjectCode, userId];
     }
