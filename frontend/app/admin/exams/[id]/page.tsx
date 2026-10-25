@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { useAuthStore } from '@/lib/store/authStore';
 import { examAdminApi, AdminExamSourceFile, ApplyExamReviewFixesResult, GenerateMissingExplanationsResult, ImportedExamItem, ImportedQuestionAiReview, ImportedQuestionData, NormalizeFormulaResult, PdfImportPreview, StoredExamReviewResult, TopicPracticeAdminTopic } from '@/lib/api/examAdmin';
 import { hasPermission } from '@/lib/utils/permissions';
@@ -645,6 +646,8 @@ export default function AdminExamDetailPage() {
     const [aiRepeatConfirm, setAiRepeatConfirm] = useState<AiRepeatConfirmState | null>(null);
     const [subjects, setSubjects] = useState<Subject[]>([]);
     const [practiceTopics, setPracticeTopics] = useState<TopicPracticeAdminTopic[]>([]);
+    const [practiceTopicsLoading, setPracticeTopicsLoading] = useState(false);
+    const [practiceTopicsError, setPracticeTopicsError] = useState('');
     const [savedQuestions, setSavedQuestions] = useState<QuestionListItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [editMode, setEditMode] = useState<EditMode>('view');
@@ -800,16 +803,28 @@ export default function AdminExamDetailPage() {
         const selectedSubject = subjects.find(subject => subject.id === Number(metaForm.subjectId));
         if (metaForm.examType !== 'topic_practice' || !selectedSubject) {
             setPracticeTopics([]);
+            setPracticeTopicsLoading(false);
+            setPracticeTopicsError('');
             return;
         }
 
         let cancelled = false;
-        examAdminApi.getTopicPracticeTopics(selectedSubject.code)
+        setPracticeTopicsLoading(true);
+        setPracticeTopicsError('');
+        // Dùng cùng nguồn question_topics với trang quản lý /admin/topic-practice.
+        examAdminApi.getTopicPracticeTopics()
             .then(topics => {
-                if (!cancelled) setPracticeTopics(topics.filter(topic => topic.subject_id === selectedSubject.id));
+                if (!cancelled) {
+                    setPracticeTopics(topics.filter(topic => Number(topic.subject_id) === Number(selectedSubject.id)));
+                }
             })
             .catch(() => {
-                if (!cancelled) setPracticeTopics([]);
+                if (cancelled) return;
+                setPracticeTopics([]);
+                setPracticeTopicsError('Không tải được kho chủ đề.');
+            })
+            .finally(() => {
+                if (!cancelled) setPracticeTopicsLoading(false);
             });
         return () => { cancelled = true; };
     }, [metaForm.examType, metaForm.subjectId, subjects]);
@@ -2216,10 +2231,10 @@ export default function AdminExamDetailPage() {
                                                 }));
                                                 setMetaDirty(true);
                                             }}
-                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm bg-white"
+                                            className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm text-slate-900 outline-none focus:border-red-500 focus:ring-2 focus:ring-red-200 dark:border-slate-600 dark:bg-slate-950 dark:text-white dark:focus:border-red-400 dark:focus:ring-red-500/20"
                                         >
-                                            <option value="mock">Đề mô phỏng / đề thường</option>
-                                            <option value="topic_practice">Luyện theo chủ đề</option>
+                                            <option className="bg-white text-slate-900 dark:bg-slate-950 dark:text-white" value="mock">Đề mô phỏng / đề thường</option>
+                                            <option className="bg-white text-slate-900 dark:bg-slate-950 dark:text-white" value="topic_practice">Luyện theo chủ đề</option>
                                         </select>
                                     </div>
                                     <div>
@@ -2230,11 +2245,11 @@ export default function AdminExamDetailPage() {
                                                 setMetaForm(prev => ({ ...prev, subjectId: parseInt(e.target.value), topicId: 0 }));
                                                 setMetaDirty(true);
                                             }}
-                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm bg-white"
+                                            className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm text-slate-900 outline-none focus:border-red-500 focus:ring-2 focus:ring-red-200 dark:border-slate-600 dark:bg-slate-950 dark:text-white dark:focus:border-red-400 dark:focus:ring-red-500/20"
                                         >
-                                            <option value={0}>Chọn môn học...</option>
+                                            <option className="bg-white text-slate-900 dark:bg-slate-950 dark:text-white" value={0}>Chọn môn học...</option>
                                             {subjects.map(subject => (
-                                                <option key={subject.id} value={subject.id}>{subject.name}</option>
+                                                <option className="bg-white text-slate-900 dark:bg-slate-950 dark:text-white" key={subject.id} value={subject.id}>{subject.name}</option>
                                             ))}
                                         </select>
                                     </div>
@@ -2244,14 +2259,31 @@ export default function AdminExamDetailPage() {
                                             <select
                                                 value={metaForm.topicId}
                                                 onChange={e => handleMetaChange('topicId', Number(e.target.value))}
-                                                className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm bg-white"
+                                                disabled={!metaForm.subjectId || practiceTopicsLoading}
+                                                aria-busy={practiceTopicsLoading}
+                                                className="w-full rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-slate-950 outline-none focus:border-red-500 focus:ring-2 focus:ring-red-200 disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-100 disabled:text-slate-500 dark:border-red-500/50 dark:bg-slate-950 dark:text-white dark:focus:border-red-400 dark:focus:ring-red-500/20 dark:disabled:border-slate-700 dark:disabled:bg-slate-900 dark:disabled:text-slate-400"
                                             >
-                                                <option value={0}>Chọn chủ đề...</option>
+                                                <option className="bg-white text-slate-900 dark:bg-slate-950 dark:text-white" value={0}>
+                                                    {!metaForm.subjectId
+                                                        ? 'Chọn môn học trước'
+                                                        : practiceTopicsLoading
+                                                            ? 'Đang tải chủ đề...'
+                                                            : practiceTopics.length === 0
+                                                                ? 'Môn này chưa có chủ đề'
+                                                                : 'Chọn chủ đề...'}
+                                                </option>
                                                 {practiceTopics.map(topic => (
-                                                    <option key={topic.id} value={topic.id}>{topic.name}</option>
+                                                    <option className="bg-white text-slate-900 dark:bg-slate-950 dark:text-white" key={topic.id} value={topic.id}>{topic.name}</option>
                                                 ))}
                                             </select>
-                                            <p className="mt-1 text-xs text-gray-500">Đề chỉ xuất hiện trong Luyện theo chủ đề và không nằm trong Đề mô phỏng.</p>
+                                            <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+                                                <p className={practiceTopicsError ? 'font-semibold text-red-600 dark:text-red-300' : 'text-slate-500 dark:text-slate-300'}>
+                                                    {practiceTopicsError || 'Danh sách lấy trực tiếp từ kho Chủ đề luyện; đề không nằm trong Đề mô phỏng.'}
+                                                </p>
+                                                <Link href="/admin/topic-practice" className="font-black text-red-600 hover:text-red-700 dark:text-red-300 dark:hover:text-red-200">
+                                                    Quản lý chủ đề →
+                                                </Link>
+                                            </div>
                                         </div>
                                     )}
                                     <div>

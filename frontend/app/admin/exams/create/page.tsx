@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { FiPlus, FiEye, FiX } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
 import QuestionEditor, { QuestionFormData } from '@/components/admin/QuestionEditor';
@@ -148,6 +149,8 @@ export default function CreateExamPage() {
     const [loading, setLoading] = useState(false);
     const [subjects, setSubjects] = useState<Subject[]>([]);
     const [practiceTopics, setPracticeTopics] = useState<Array<{ id: number; name: string; subject_id: number }>>([]);
+    const [practiceTopicsLoading, setPracticeTopicsLoading] = useState(false);
+    const [practiceTopicsError, setPracticeTopicsError] = useState('');
 
     // Exam metadata
     const [examData, setExamData] = useState({
@@ -290,11 +293,32 @@ export default function CreateExamPage() {
         const selectedSubject = subjects.find(subject => subject.id === examData.subjectId);
         if (examData.examType !== 'topic_practice' || !selectedSubject) {
             setPracticeTopics([]);
+            setPracticeTopicsLoading(false);
+            setPracticeTopicsError('');
             return;
         }
-        examAdminApi.getTopicPracticeTopics(selectedSubject.code)
-            .then(data => setPracticeTopics((data || []).map(topic => ({ id: topic.id, name: topic.name, subject_id: topic.subject_id }))))
-            .catch(() => setPracticeTopics([]));
+
+        let cancelled = false;
+        setPracticeTopicsLoading(true);
+        setPracticeTopicsError('');
+        // Dùng đúng kho chủ đề đang được quản lý tại /admin/topic-practice.
+        examAdminApi.getTopicPracticeTopics()
+            .then(data => {
+                if (cancelled) return;
+                setPracticeTopics((data || [])
+                    .filter(topic => Number(topic.subject_id) === Number(selectedSubject.id))
+                    .map(topic => ({ id: topic.id, name: topic.name, subject_id: topic.subject_id })));
+            })
+            .catch(() => {
+                if (cancelled) return;
+                setPracticeTopics([]);
+                setPracticeTopicsError('Không tải được kho chủ đề.');
+            })
+            .finally(() => {
+                if (!cancelled) setPracticeTopicsLoading(false);
+            });
+
+        return () => { cancelled = true; };
     }, [examData.examType, examData.subjectId, subjects]);
 
     // Persist currentExamId to sessionStorage
@@ -917,10 +941,10 @@ export default function CreateExamPage() {
                                     });
                                     setExamMetadataDirty(true);
                                 }}
-                                className="w-full px-4 py-2 bg-white text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 text-slate-900 outline-none focus:border-red-500 focus:ring-2 focus:ring-red-200 dark:border-slate-600 dark:bg-slate-950 dark:text-white dark:focus:border-red-400 dark:focus:ring-red-500/20"
                             >
-                                <option value="mock">Đề mô phỏng / đề thường</option>
-                                <option value="topic_practice">Luyện theo chủ đề</option>
+                                <option className="bg-white text-slate-900 dark:bg-slate-950 dark:text-white" value="mock">Đề mô phỏng / đề thường</option>
+                                <option className="bg-white text-slate-900 dark:bg-slate-950 dark:text-white" value="topic_practice">Luyện theo chủ đề</option>
                             </select>
                         </div>
                         <div>
@@ -950,11 +974,11 @@ export default function CreateExamPage() {
                             <select
                                 value={examData.subjectId}
                                 onChange={(e) => handleSubjectChange(parseInt(e.target.value))}
-                                className="w-full px-4 py-2 bg-white text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 text-slate-900 outline-none focus:border-red-500 focus:ring-2 focus:ring-red-200 dark:border-slate-600 dark:bg-slate-950 dark:text-white dark:focus:border-red-400 dark:focus:ring-red-500/20"
                             >
-                                <option value={0}>Chọn môn học...</option>
+                                <option className="bg-white text-slate-900 dark:bg-slate-950 dark:text-white" value={0}>Chọn môn học...</option>
                                 {Array.isArray(subjects) && subjects.map(subject => (
-                                    <option key={subject.id} value={subject.id}>{subject.name}</option>
+                                    <option className="bg-white text-slate-900 dark:bg-slate-950 dark:text-white" key={subject.id} value={subject.id}>{subject.name}</option>
                                 ))}
                             </select>
                         </div>
@@ -965,13 +989,29 @@ export default function CreateExamPage() {
                                 <select
                                     value={examData.topicId}
                                     onChange={(e) => { setExamData({ ...examData, topicId: Number(e.target.value) }); setExamMetadataDirty(true); }}
-                                    disabled={!examData.subjectId}
-                                    className="w-full px-4 py-2 bg-white text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
+                                    disabled={!examData.subjectId || practiceTopicsLoading}
+                                    aria-busy={practiceTopicsLoading}
+                                    className="w-full rounded-lg border border-red-200 bg-red-50 px-4 py-2 font-semibold text-slate-950 outline-none focus:border-red-500 focus:ring-2 focus:ring-red-200 disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-100 disabled:text-slate-500 dark:border-red-500/50 dark:bg-slate-950 dark:text-white dark:focus:border-red-400 dark:focus:ring-red-500/20 dark:disabled:border-slate-700 dark:disabled:bg-slate-900 dark:disabled:text-slate-400"
                                 >
-                                    <option value={0}>Chọn chủ đề...</option>
-                                    {practiceTopics.map(topic => <option key={topic.id} value={topic.id}>{topic.name}</option>)}
+                                    <option className="bg-white text-slate-900 dark:bg-slate-950 dark:text-white" value={0}>
+                                        {!examData.subjectId
+                                            ? 'Chọn môn học trước'
+                                            : practiceTopicsLoading
+                                                ? 'Đang tải chủ đề...'
+                                                : practiceTopics.length === 0
+                                                    ? 'Môn này chưa có chủ đề'
+                                                    : 'Chọn chủ đề...'}
+                                    </option>
+                                    {practiceTopics.map(topic => <option className="bg-white text-slate-900 dark:bg-slate-950 dark:text-white" key={topic.id} value={topic.id}>{topic.name}</option>)}
                                 </select>
-                                <p className="mt-1 text-xs text-gray-500">Đề này chỉ xuất hiện trong khu Luyện theo chủ đề, không xuất hiện ở Đề mô phỏng.</p>
+                                <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+                                    <p className={practiceTopicsError ? 'font-semibold text-red-600 dark:text-red-300' : 'text-slate-500 dark:text-slate-300'}>
+                                        {practiceTopicsError || 'Danh sách lấy trực tiếp từ kho Chủ đề luyện; đề này không xuất hiện ở Đề mô phỏng.'}
+                                    </p>
+                                    <Link href="/admin/topic-practice" className="font-black text-red-600 hover:text-red-700 dark:text-red-300 dark:hover:text-red-200">
+                                        Quản lý chủ đề →
+                                    </Link>
+                                </div>
                             </div>
                         )}
 
