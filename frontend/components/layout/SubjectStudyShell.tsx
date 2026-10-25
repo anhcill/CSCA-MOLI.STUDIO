@@ -26,6 +26,7 @@ import {
   normalizeContentSubject,
 } from '@/lib/utils/subjectScope';
 import { useLanguage } from '@/context/LanguageContext';
+import { FEATURE_FLAGS } from '@/lib/config/features';
 
 export type SubjectStudySection =
   | 'de-mo-phong'
@@ -130,6 +131,9 @@ export default function SubjectStudyShell({
   const localizedSearchPlaceholder = searchPlaceholder === DEFAULT_SEARCH_PLACEHOLDER
     ? t('course.searchPlaceholder')
     : searchPlaceholder;
+  const visibleSideLinks = SIDE_LINKS.filter(
+    (link) => link.key !== 'luyen-chu-de' || FEATURE_FLAGS.topicPractice,
+  );
 
   useEffect(() => {
     try {
@@ -210,7 +214,7 @@ export default function SubjectStudyShell({
           MOLY
         </Link>
         <nav className="space-y-1.5">
-          {SIDE_LINKS.map((item) => {
+          {visibleSideLinks.map((item) => {
             const Icon = item.icon;
             const active = activeSection === item.key;
             return (
@@ -298,7 +302,7 @@ export default function SubjectStudyShell({
           aria-label="Chức năng môn học"
           className="-mx-4 mb-5 flex gap-2 overflow-x-auto px-4 pb-2 xl:hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
-          {SIDE_LINKS.map((item) => {
+          {visibleSideLinks.map((item) => {
             const Icon = item.icon;
             const active = activeSection === item.key;
             return (
