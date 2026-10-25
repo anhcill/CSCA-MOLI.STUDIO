@@ -686,6 +686,7 @@ const AdminExamController = {
          LEFT JOIN question_totals qt ON qt.exam_id = e.id
          LEFT JOIN attempt_metrics am ON am.exam_id = e.id
          WHERE e.deleted_at IS NULL
+           AND COALESCE(e.exam_type, 'mock') <> 'topic_practice'
            AND e.start_time IS NULL
            AND ($2::text IS NULL OR s.code = $2)
          ORDER BY e.status = 'published' DESC, am.last_practiced_at DESC NULLS LAST, e.created_at DESC`,
@@ -2347,7 +2348,7 @@ const AdminExamController = {
   async createExam(req, res) {
     try {
       // P0: destructure titleCn
-      const { title, titleCn, subjectId, duration, totalPoints, description, descriptionCn, is_premium, solution_video_url, solution_description, shuffle_mode, vip_tier, is_simulated, difficulty_level, languageMode, language_mode, explanationLanguageMode, explanation_language_mode, start_time, end_time, maxParticipants, max_participants } = req.body;
+      const { title, titleCn, subjectId, duration, totalPoints, description, descriptionCn, is_premium, solution_video_url, solution_description, shuffle_mode, vip_tier, is_simulated, difficulty_level, languageMode, language_mode, explanationLanguageMode, explanation_language_mode, start_time, end_time, maxParticipants, max_participants, examType, exam_type, topicId, topic_id } = req.body;
 
       if (!title || !subjectId) {
         return res.status(400).json({ message: "Title and subject required" });
@@ -2373,6 +2374,23 @@ const AdminExamController = {
         return res.status(400).json({ message: 'Lịch thi không hợp lệ.' });
       }
       const parsedMaxParticipants = Math.max(0, Number.parseInt(maxParticipants ?? max_participants ?? 0, 10) || 0);
+      const normalizedExamType = (examType || exam_type) === 'topic_practice' ? 'topic_practice' : 'mock';
+      const parsedTopicId = Number.parseInt(topicId ?? topic_id, 10);
+      if (normalizedExamType === 'topic_practice') {
+        if (hasSchedule) {
+          return res.status(400).json({ message: 'Đề luyện theo chủ đề không dùng lịch Phòng thi.' });
+        }
+        if (!Number.isInteger(parsedTopicId) || parsedTopicId <= 0) {
+          return res.status(400).json({ message: 'Cần chọn chủ đề cho đề luyện theo chủ đề.' });
+        }
+        const topicCheck = await pool.query(
+          'SELECT id FROM question_topics WHERE id = $1 AND subject_id = $2',
+          [parsedTopicId, subjectId],
+        );
+        if (topicCheck.rows.length === 0) {
+          return res.status(400).json({ message: 'Chủ đề không thuộc môn đã chọn.' });
+        }
+      }
 
       // P1: sanitize all text inputs to prevent XSS
       const examCode = `EXAM-${subjectId}-${Date.now()}`;
@@ -2382,8 +2400,8 @@ const AdminExamController = {
       const access = normalizeExamAccess(is_premium, vip_tier);
 
       const result = await pool.query(
-        `INSERT INTO exams (code, title, title_cn, subject_id, duration, total_points, total_questions, description, difficulty_level, language_mode, explanation_language_mode, status, publish_date, is_premium, allow_download, solution_video_url, solution_description, shuffle_mode, vip_tier, is_simulated, created_by, start_time, end_time, max_participants)
-         VALUES ($1, $2, $3, $4, $5, $6, 0, $7, $8, $9, $10, 'draft', NOW(), $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+        `INSERT INTO exams (code, title, title_cn, subject_id, duration, total_points, total_questions, description, difficulty_level, language_mode, explanation_language_mode, status, publish_date, is_premium, allow_download, solution_video_url, solution_description, shuffle_mode, vip_tier, is_simulated, created_by, start_time, end_time, max_participants, exam_type, topic_id)
+         VALUES ($1, $2, $3, $4, $5, $6, 0, $7, $8, $9, $10, 'draft', NOW(), $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
          RETURNING *`,
         [
           examCode,
@@ -2402,11 +2420,13 @@ const AdminExamController = {
           solution_description ? sanitize(solution_description) : null,
           shuffle_mode === true,
           access.vipTier,
-          is_simulated === true,
+          normalizedExamType === 'topic_practice' ? false : is_simulated === true,
           req.user.id,
           parsedStartTime,
           parsedEndTime,
           parsedMaxParticipants,
+          normalizedExamType,
+          normalizedExamType === 'topic_practice' ? parsedTopicId : null,
         ],
       );
 
@@ -2430,7 +2450,7 @@ const AdminExamController = {
     try {
       const { examId } = req.params;
       // P0: destructure titleCn, descriptionCn
-      const { title, titleCn, subjectId, duration, totalPoints, description, difficulty_level, languageMode, language_mode, explanationLanguageMode, explanation_language_mode, status, is_premium, allow_download, solution_video_url, solution_description, shuffle_mode, vip_tier, is_simulated } = req.body;
+      const { title, titleCn, subjectId, duration, totalPoints, description, difficulty_level, languageMode, language_mode, explanationLanguageMode, explanation_language_mode, status, is_premium, allow_download, solution_video_url, solution_description, shuffle_mode, vip_tier, is_simulated, examType, exam_type, topicId, topic_id } = req.body;
       const parsedTotalPoints =
         totalPoints === undefined
           ? undefined
@@ -2447,11 +2467,41 @@ const AdminExamController = {
       const params = [];
       let idx = 1;
       const currentExamResult = await pool.query(
-        "SELECT is_premium, vip_tier, status, start_time, end_time FROM exams WHERE id = $1 AND deleted_at IS NULL",
+        `SELECT is_premium, vip_tier, status, start_time, end_time,
+                subject_id, exam_type, topic_id
+         FROM exams
+         WHERE id = $1 AND deleted_at IS NULL`,
         [examId],
       );
       if (currentExamResult.rows.length === 0) {
         return res.status(404).json({ message: "Exam not found" });
+      }
+      const currentExam = currentExamResult.rows[0];
+      const normalizedExamType = examType !== undefined || exam_type !== undefined
+        ? ((examType || exam_type) === 'topic_practice' ? 'topic_practice' : 'mock')
+        : (currentExam.exam_type || 'mock');
+      const effectiveSubjectId = subjectId !== undefined
+        ? Number.parseInt(subjectId, 10)
+        : Number(currentExam.subject_id);
+      const topicWasProvided = topicId !== undefined || topic_id !== undefined;
+      const requestedTopicId = topicWasProvided
+        ? Number.parseInt(topicId ?? topic_id, 10)
+        : Number(currentExam.topic_id);
+
+      if (normalizedExamType === 'topic_practice') {
+        if (currentExam.start_time || currentExam.end_time) {
+          return res.status(409).json({ message: 'Hãy xóa lịch Phòng thi trước khi chuyển sang Luyện theo chủ đề.' });
+        }
+        if (!Number.isInteger(requestedTopicId) || requestedTopicId <= 0) {
+          return res.status(400).json({ message: 'Cần chọn chủ đề cho đề luyện theo chủ đề.' });
+        }
+        const topicCheck = await pool.query(
+          'SELECT id FROM question_topics WHERE id = $1 AND subject_id = $2',
+          [requestedTopicId, effectiveSubjectId],
+        );
+        if (topicCheck.rows.length === 0) {
+          return res.status(400).json({ message: 'Chủ đề không thuộc môn đã chọn.' });
+        }
       }
       const currentAccess = normalizeExamAccess(currentExamResult.rows[0].is_premium, currentExamResult.rows[0].vip_tier);
       let effectiveAccess = currentAccess;
@@ -2461,7 +2511,15 @@ const AdminExamController = {
         && new Date(currentExamResult.rows[0].start_time) <= new Date()) {
         return res.status(409).json({ message: 'Kỳ thi đã bắt đầu nên không thể đóng đăng ký.' });
       }
-      if (status === 'published' && currentExamResult.rows[0].status !== 'published') {
+      const topicClassificationChanged = normalizedExamType === 'topic_practice'
+        && (examType !== undefined || exam_type !== undefined
+          || topicWasProvided
+          || subjectId !== undefined);
+      const shouldValidatePublishing = status === 'published'
+        && currentExamResult.rows[0].status !== 'published';
+      const shouldValidatePublishedTopicChange = currentExamResult.rows[0].status === 'published'
+        && topicClassificationChanged;
+      if (shouldValidatePublishing || shouldValidatePublishedTopicChange) {
         const readinessResult = await pool.query(
           `SELECT EXISTS (
                     SELECT 1 FROM admin_exam_source_files sf
@@ -2497,7 +2555,20 @@ const AdminExamController = {
           && Number(readiness.question_count) >= 1
           && Number(readiness.answered_count) === Number(readiness.question_count);
 
-        if (currentExamResult.rows[0].start_time) {
+        if (normalizedExamType === 'topic_practice') {
+          if (Number(readiness.question_count) < 1) {
+            return res.status(409).json({
+              message: 'Cần có ít nhất một câu hỏi trước khi đăng đề luyện theo chủ đề.',
+              code: 'TOPIC_PRACTICE_QUESTIONS_REQUIRED',
+            });
+          }
+          if (Number(readiness.answered_count) !== Number(readiness.question_count)) {
+            return res.status(409).json({
+              message: 'Cần nhập đủ đáp án đúng trước khi đăng đề luyện theo chủ đề.',
+              code: 'TOPIC_PRACTICE_ANSWERS_REQUIRED',
+            });
+          }
+        } else if (currentExamResult.rows[0].start_time) {
           if (!currentExamResult.rows[0].end_time) {
             return res.status(409).json({ message: 'Cần đặt đủ giờ bắt đầu và kết thúc trước khi mở đăng ký.' });
           }
@@ -2560,7 +2631,23 @@ const AdminExamController = {
       if (solution_video_url !== undefined) { updates.push(`solution_video_url = $${idx++}`); params.push(solution_video_url ? sanitize(solution_video_url) : null); }
       if (solution_description !== undefined) { updates.push(`solution_description = $${idx++}`); params.push(solution_description ? sanitize(solution_description) : null); }
       if (shuffle_mode !== undefined) { updates.push(`shuffle_mode = $${idx++}`); params.push(shuffle_mode === true); }
-      if (is_simulated !== undefined) { updates.push(`is_simulated = $${idx++}`); params.push(is_simulated === true); }
+      if (normalizedExamType === 'topic_practice') {
+        updates.push('is_simulated = false');
+      } else if (is_simulated !== undefined) {
+        updates.push(`is_simulated = $${idx++}`);
+        params.push(is_simulated === true);
+      }
+      if (examType !== undefined || exam_type !== undefined) {
+        updates.push(`exam_type = $${idx++}`);
+        params.push(normalizedExamType);
+      }
+      if (normalizedExamType === 'topic_practice'
+        && (topicWasProvided || Number(currentExam.topic_id) !== requestedTopicId)) {
+        updates.push(`topic_id = $${idx++}`);
+        params.push(requestedTopicId);
+      } else if (normalizedExamType !== 'topic_practice' && currentExam.topic_id !== null) {
+        updates.push('topic_id = NULL');
+      }
       updates.push(`updated_at = NOW()`);
       params.push(examId);
 
@@ -2571,6 +2658,31 @@ const AdminExamController = {
 
       if (result.rows.length === 0) {
         return res.status(404).json({ message: "Exam not found" });
+      }
+
+      const previousTopicId = Number(currentExam.topic_id);
+      const nextTopicId = Number(result.rows[0].topic_id);
+      if (Number.isInteger(previousTopicId) && previousTopicId > 0
+        && (result.rows[0].exam_type !== 'topic_practice' || previousTopicId !== nextTopicId)) {
+        await pool.query(
+          `DELETE FROM question_topic_mapping qtm
+           USING questions q
+           WHERE qtm.question_id = q.id
+             AND q.exam_id = $1
+             AND qtm.topic_id = $2`,
+          [examId, previousTopicId],
+        );
+      }
+
+      if (result.rows[0].exam_type === 'topic_practice' && result.rows[0].topic_id) {
+        await pool.query(
+          `INSERT INTO question_topic_mapping (question_id, topic_id)
+           SELECT q.id, $2
+           FROM questions q
+           WHERE q.exam_id = $1 AND q.deleted_at IS NULL
+           ON CONFLICT DO NOTHING`,
+          [examId, result.rows[0].topic_id],
+        );
       }
 
       cache.delByPrefix("exams:");
@@ -3782,7 +3894,7 @@ const AdminExamController = {
       const page = parseInt(req.query.page) || 1;
       const limit = parseInt(req.query.limit) || 20;
       const offset = (page - 1) * limit;
-      const type = req.query.type; // 'phong-thi' | 'tu-do' | 'mo-phong' | 'delete-requests' | 'trash' | undefined (all)
+      const type = req.query.type; // 'phong-thi' | 'tu-do' | 'mo-phong' | 'luyen-chu-de' | 'delete-requests' | 'trash' | undefined (all)
       const subject = typeof req.query.subject === "string" ? req.query.subject.trim() : "";
       const access = typeof req.query.access === "string" ? req.query.access.trim().toLowerCase() : "";
 
@@ -3790,13 +3902,15 @@ const AdminExamController = {
       let idx = 1;
       const conditions = ["e.deleted_at IS NULL AND COALESCE(e.deletion_status, 'none') <> 'soft_deleted'"];
       if (type === 'phong-thi') {
-        conditions.push('e.start_time IS NOT NULL');
+        conditions.push("e.start_time IS NOT NULL AND COALESCE(e.exam_type, 'mock') <> 'topic_practice'");
       } else if (type === 'library') {
-        conditions.push('e.start_time IS NULL');
+        conditions.push("e.start_time IS NULL AND COALESCE(e.exam_type, 'mock') <> 'topic_practice'");
       } else if (type === 'tu-do') {
-        conditions.push('e.start_time IS NULL AND e.is_simulated = false');
+        conditions.push("e.start_time IS NULL AND e.is_simulated = false AND COALESCE(e.exam_type, 'mock') <> 'topic_practice'");
       } else if (type === 'mo-phong') {
-        conditions.push('e.start_time IS NULL AND e.is_simulated = true');
+        conditions.push("e.start_time IS NULL AND e.is_simulated = true AND COALESCE(e.exam_type, 'mock') <> 'topic_practice'");
+      } else if (type === 'luyen-chu-de') {
+        conditions.push("e.start_time IS NULL AND e.exam_type = 'topic_practice'");
       } else if (type === 'delete-requests') {
         if (!isSuperAdmin(req)) {
           return res.status(403).json({ message: "Chỉ admin tổng được xem danh sách yêu cầu xóa đề." });
@@ -3843,6 +3957,9 @@ const AdminExamController = {
                     e.is_premium,
                     e.vip_tier,
                     e.is_simulated,
+                    e.exam_type,
+                    e.topic_id,
+                    qt.name as topic_name,
                     e.start_time,
                     e.end_time,
                     e.deleted_at,
@@ -3860,11 +3977,12 @@ const AdminExamController = {
                     COUNT(DISTINCT ea.id) as attempts_count
                 FROM exams e
                 LEFT JOIN subjects s ON e.subject_id = s.id
+                LEFT JOIN question_topics qt ON qt.id = e.topic_id
                 LEFT JOIN exam_attempts ea ON e.id = ea.exam_id
                 LEFT JOIN users requester ON requester.id = e.delete_requested_by
                 LEFT JOIN users deleter ON deleter.id = e.deleted_by
                 ${whereClause}
-                GROUP BY e.id, s.name, s.code, requester.full_name, deleter.full_name
+                GROUP BY e.id, s.name, s.code, qt.name, requester.full_name, deleter.full_name
                 ORDER BY e.created_at DESC
                 LIMIT $${limitParam} OFFSET $${offsetParam}`,
         [...params, limit, offset],
@@ -4225,11 +4343,12 @@ const AdminExamController = {
   // GET /api/admin/exams/counts - Get exam counts by type
   async getCounts(req, res) {
     try {
-      const [total, phongThi, tuDo, moPhong, deleteRequests, trash, bySubject] = await Promise.all([
+      const [total, phongThi, tuDo, moPhong, luyenChuDe, deleteRequests, trash, bySubject] = await Promise.all([
         pool.query("SELECT COUNT(*)::int as count FROM exams WHERE deleted_at IS NULL AND COALESCE(deletion_status, 'none') <> 'soft_deleted'"),
-        pool.query("SELECT COUNT(*)::int as count FROM exams WHERE deleted_at IS NULL AND COALESCE(deletion_status, 'none') <> 'soft_deleted' AND start_time IS NOT NULL"),
-        pool.query("SELECT COUNT(*)::int as count FROM exams WHERE deleted_at IS NULL AND COALESCE(deletion_status, 'none') <> 'soft_deleted' AND start_time IS NULL AND is_simulated = false"),
-        pool.query("SELECT COUNT(*)::int as count FROM exams WHERE deleted_at IS NULL AND COALESCE(deletion_status, 'none') <> 'soft_deleted' AND start_time IS NULL AND is_simulated = true"),
+        pool.query("SELECT COUNT(*)::int as count FROM exams WHERE deleted_at IS NULL AND COALESCE(deletion_status, 'none') <> 'soft_deleted' AND start_time IS NOT NULL AND COALESCE(exam_type, 'mock') <> 'topic_practice'"),
+        pool.query("SELECT COUNT(*)::int as count FROM exams WHERE deleted_at IS NULL AND COALESCE(deletion_status, 'none') <> 'soft_deleted' AND start_time IS NULL AND is_simulated = false AND COALESCE(exam_type, 'mock') <> 'topic_practice'"),
+        pool.query("SELECT COUNT(*)::int as count FROM exams WHERE deleted_at IS NULL AND COALESCE(deletion_status, 'none') <> 'soft_deleted' AND start_time IS NULL AND is_simulated = true AND COALESCE(exam_type, 'mock') <> 'topic_practice'"),
+        pool.query("SELECT COUNT(*)::int as count FROM exams WHERE deleted_at IS NULL AND COALESCE(deletion_status, 'none') <> 'soft_deleted' AND start_time IS NULL AND exam_type = 'topic_practice'"),
         pool.query("SELECT COUNT(*)::int as count FROM exams WHERE deleted_at IS NULL AND deletion_status = 'requested'"),
         pool.query("SELECT COUNT(*)::int as count FROM exams WHERE deleted_at IS NOT NULL OR deletion_status = 'soft_deleted'"),
         pool.query(`
@@ -4246,6 +4365,7 @@ const AdminExamController = {
         phongThi: parseInt(phongThi.rows[0].count),
         tuDo: parseInt(tuDo.rows[0].count),
         moPhong: parseInt(moPhong.rows[0].count),
+        luyenChuDe: parseInt(luyenChuDe.rows[0].count),
         deleteRequests: parseInt(deleteRequests.rows[0].count),
         trash: parseInt(trash.rows[0].count),
         bySubject: bySubject.rows.map((row) => ({
@@ -4267,9 +4387,10 @@ const AdminExamController = {
       const { examId } = req.params;
 
       const examResult = await pool.query(
-        `SELECT e.*, s.name as subject_name, s.code as subject_code
+        `SELECT e.*, s.name as subject_name, s.code as subject_code, qt.name as topic_name
          FROM exams e
          LEFT JOIN subjects s ON e.subject_id = s.id
+         LEFT JOIN question_topics qt ON qt.id = e.topic_id
          WHERE e.id = $1 AND e.deleted_at IS NULL`,
         [examId],
       );
@@ -4415,9 +4536,16 @@ const AdminExamController = {
       try {
         await client.query('BEGIN');
         // Lấy lịch cũ để ghi log diff
-        const oldRes = await client.query('SELECT start_time, end_time FROM exams WHERE id = $1', [examId]);
+        const oldRes = await client.query(
+          'SELECT start_time, end_time, exam_type FROM exams WHERE id = $1',
+          [examId],
+        );
         if (!oldRes.rows[0]) { await client.query('ROLLBACK'); return res.status(404).json({ message: 'Exam not found' }); }
         const old = oldRes.rows[0];
+        if (old.exam_type === 'topic_practice') {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ message: 'Đề luyện theo chủ đề không thể đưa vào Phòng thi.' });
+        }
 
         await client.query(
           `UPDATE exams SET start_time = $1, end_time = $2, max_participants = COALESCE($3, max_participants), updated_at = NOW() WHERE id = $4`,

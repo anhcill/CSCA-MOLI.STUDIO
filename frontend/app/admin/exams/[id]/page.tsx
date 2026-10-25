@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/authStore';
-import { examAdminApi, AdminExamSourceFile, ApplyExamReviewFixesResult, GenerateMissingExplanationsResult, ImportedExamItem, ImportedQuestionAiReview, ImportedQuestionData, NormalizeFormulaResult, PdfImportPreview, StoredExamReviewResult } from '@/lib/api/examAdmin';
+import { examAdminApi, AdminExamSourceFile, ApplyExamReviewFixesResult, GenerateMissingExplanationsResult, ImportedExamItem, ImportedQuestionAiReview, ImportedQuestionData, NormalizeFormulaResult, PdfImportPreview, StoredExamReviewResult, TopicPracticeAdminTopic } from '@/lib/api/examAdmin';
 import { hasPermission } from '@/lib/utils/permissions';
 import { getAdminExamListStateHref } from '@/lib/utils/adminExamListState';
 import axios from '@/lib/utils/axios';
@@ -112,6 +112,9 @@ interface Exam {
     allow_download: boolean;
     is_premium?: boolean;
     is_simulated?: boolean;
+    exam_type?: 'mock' | 'topic_practice' | string;
+    topic_id?: number | null;
+    topic_name?: string | null;
     solution_video_url?: string;
     solution_description?: string;
     shuffle_mode?: boolean;
@@ -641,6 +644,7 @@ export default function AdminExamDetailPage() {
     const [aiHistory, setAiHistory] = useState<ExamAiRun[]>([]);
     const [aiRepeatConfirm, setAiRepeatConfirm] = useState<AiRepeatConfirmState | null>(null);
     const [subjects, setSubjects] = useState<Subject[]>([]);
+    const [practiceTopics, setPracticeTopics] = useState<TopicPracticeAdminTopic[]>([]);
     const [savedQuestions, setSavedQuestions] = useState<QuestionListItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [editMode, setEditMode] = useState<EditMode>('view');
@@ -668,6 +672,8 @@ export default function AdminExamDetailPage() {
         is_premium: false, shuffle_mode: false, solution_video_url: '',
         solution_description: '', vip_tier: 'basic', is_simulated: false, languageMode: 'zh',
         explanationLanguageMode: 'vi',
+        examType: 'mock' as 'mock' | 'topic_practice',
+        topicId: 0,
     });
     const [metaDirty, setMetaDirty] = useState(false);
     const [savingMeta, setSavingMeta] = useState(false);
@@ -790,6 +796,24 @@ export default function AdminExamDetailPage() {
         }
     };
 
+    useEffect(() => {
+        const selectedSubject = subjects.find(subject => subject.id === Number(metaForm.subjectId));
+        if (metaForm.examType !== 'topic_practice' || !selectedSubject) {
+            setPracticeTopics([]);
+            return;
+        }
+
+        let cancelled = false;
+        examAdminApi.getTopicPracticeTopics(selectedSubject.code)
+            .then(topics => {
+                if (!cancelled) setPracticeTopics(topics.filter(topic => topic.subject_id === selectedSubject.id));
+            })
+            .catch(() => {
+                if (!cancelled) setPracticeTopics([]);
+            });
+        return () => { cancelled = true; };
+    }, [metaForm.examType, metaForm.subjectId, subjects]);
+
     const loadExam = async (options: { silent?: boolean } = {}) => {
         try {
             if (!options.silent) setLoading(true);
@@ -819,6 +843,8 @@ export default function AdminExamDetailPage() {
                     is_simulated: data.exam.is_simulated || false,
                     languageMode: data.exam.language_mode || 'zh',
                     explanationLanguageMode: data.exam.explanation_language_mode || 'vi',
+                    examType: data.exam.exam_type === 'topic_practice' ? 'topic_practice' : 'mock',
+                    topicId: Number(data.exam.topic_id) || 0,
                 });
             }
         } catch (error: any) {
@@ -880,6 +906,10 @@ export default function AdminExamDetailPage() {
             alert('Tổng điểm phải lớn hơn 0.');
             return false;
         }
+        if (metaForm.examType === 'topic_practice' && (!Number.isInteger(metaForm.topicId) || metaForm.topicId <= 0)) {
+            alert('Vui lòng chọn chủ đề cho đề luyện.');
+            return false;
+        }
 
         try {
             setSavingMeta(true);
@@ -899,6 +929,8 @@ export default function AdminExamDetailPage() {
                 solution_description: metaForm.solution_description,
                 vip_tier: metaForm.vip_tier,
                 is_simulated: metaForm.is_simulated,
+                examType: metaForm.examType,
+                topicId: metaForm.examType === 'topic_practice' ? metaForm.topicId : undefined,
             });
             const selectedSubject = subjects.find(subject => subject.id === parsedSubjectId);
             const nextAllowDownload = isDownloadAllowedForTier(metaForm.vip_tier, metaForm.is_premium);
@@ -909,7 +941,12 @@ export default function AdminExamDetailPage() {
                 solution_video_url: metaForm.solution_video_url, solution_description: metaForm.solution_description,
                 vip_tier: metaForm.vip_tier, is_simulated: metaForm.is_simulated,
                 language_mode: metaForm.languageMode,
-                explanation_language_mode: metaForm.explanationLanguageMode }) : prev);
+                explanation_language_mode: metaForm.explanationLanguageMode,
+                exam_type: metaForm.examType,
+                topic_id: metaForm.examType === 'topic_practice' ? metaForm.topicId : null,
+                topic_name: metaForm.examType === 'topic_practice'
+                    ? practiceTopics.find(topic => topic.id === metaForm.topicId)?.name || prev.topic_name
+                    : null }) : prev);
             setMetaForm(prev => ({
                 ...prev,
                 subjectId: parsedSubjectId,
@@ -2166,10 +2203,33 @@ export default function AdminExamDetailPage() {
                                             className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm" />
                                     </div>
                                     <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Phân loại đề</label>
+                                        <select
+                                            value={metaForm.examType}
+                                            onChange={e => {
+                                                const examType = e.target.value as 'mock' | 'topic_practice';
+                                                setMetaForm(prev => ({
+                                                    ...prev,
+                                                    examType,
+                                                    topicId: 0,
+                                                    is_simulated: examType === 'topic_practice' ? false : prev.is_simulated,
+                                                }));
+                                                setMetaDirty(true);
+                                            }}
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm bg-white"
+                                        >
+                                            <option value="mock">Đề mô phỏng / đề thường</option>
+                                            <option value="topic_practice">Luyện theo chủ đề</option>
+                                        </select>
+                                    </div>
+                                    <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1">Môn học</label>
                                         <select
                                             value={metaForm.subjectId}
-                                            onChange={e => handleMetaChange('subjectId', parseInt(e.target.value))}
+                                            onChange={e => {
+                                                setMetaForm(prev => ({ ...prev, subjectId: parseInt(e.target.value), topicId: 0 }));
+                                                setMetaDirty(true);
+                                            }}
                                             className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm bg-white"
                                         >
                                             <option value={0}>Chọn môn học...</option>
@@ -2178,6 +2238,22 @@ export default function AdminExamDetailPage() {
                                             ))}
                                         </select>
                                     </div>
+                                    {metaForm.examType === 'topic_practice' && (
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Chủ đề</label>
+                                            <select
+                                                value={metaForm.topicId}
+                                                onChange={e => handleMetaChange('topicId', Number(e.target.value))}
+                                                className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm bg-white"
+                                            >
+                                                <option value={0}>Chọn chủ đề...</option>
+                                                {practiceTopics.map(topic => (
+                                                    <option key={topic.id} value={topic.id}>{topic.name}</option>
+                                                ))}
+                                            </select>
+                                            <p className="mt-1 text-xs text-gray-500">Đề chỉ xuất hiện trong Luyện theo chủ đề và không nằm trong Đề mô phỏng.</p>
+                                        </div>
+                                    )}
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1">Thời gian (phút)</label>
                                         <input type="number" value={metaForm.duration}
@@ -2317,6 +2393,7 @@ export default function AdminExamDetailPage() {
                                         <label className="flex items-center gap-2 cursor-pointer">
                                             <input type="checkbox" checked={metaForm.is_simulated}
                                                 onChange={e => handleMetaChange('is_simulated', e.target.checked)}
+                                                disabled={metaForm.examType === 'topic_practice'}
                                                 className="w-4 h-4" />
                                             <span className="text-sm font-medium text-gray-700">🎯 Đề mô phỏng</span>
                                         </label>
@@ -2338,6 +2415,7 @@ export default function AdminExamDetailPage() {
                         ) : (
                             <div className="grid grid-cols-2 md:grid-cols-6 gap-4 text-sm">
                                 <div><span className="font-semibold text-gray-500">Tên:</span> {exam.title}</div>
+                                <div><span className="font-semibold text-gray-500">Loại:</span> {exam.exam_type === 'topic_practice' ? `Luyện chủ đề${exam.topic_name ? ` · ${exam.topic_name}` : ''}` : 'Đề thường / mô phỏng'}</div>
                                 <div><span className="font-semibold text-gray-500">TG:</span> {exam.duration} phút</div>
                                 <div><span className="font-semibold text-gray-500">Điểm:</span> {exam.total_points}</div>
                                 <div><span className="font-semibold text-gray-500">VIP:</span> {exam.vip_tier || 'basic'}</div>
@@ -2355,6 +2433,11 @@ export default function AdminExamDetailPage() {
                             <div>
                                 <p className="text-xs text-gray-500 uppercase font-semibold mb-1">Môn học</p>
                                 <p className="font-bold text-gray-900">{exam.subject_name || '—'}</p>
+                            </div>
+                            <div>
+                                <p className="text-xs text-gray-500 uppercase font-semibold mb-1">Loại đề</p>
+                                <p className="font-bold text-gray-900">{exam.exam_type === 'topic_practice' ? 'Luyện theo chủ đề' : 'Đề thường / mô phỏng'}</p>
+                                {exam.exam_type === 'topic_practice' && exam.topic_name && <p className="mt-1 text-xs font-semibold text-emerald-700">{exam.topic_name}</p>}
                             </div>
                             <div>
                                 <p className="text-xs text-gray-500 uppercase font-semibold mb-1">Thời gian</p>
@@ -2496,7 +2579,7 @@ export default function AdminExamDetailPage() {
                         </div>
 
                         {/* Simulated toggle */}
-                        <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between">
+                        {exam.exam_type !== 'topic_practice' && <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between">
                             <div>
                                 <p className="text-sm font-semibold flex items-center gap-2 text-gray-700">🎯 Đề mô phỏng</p>
                                 <p className="text-xs text-gray-400">Được phân loại vào kho đề thi mô phỏng</p>
@@ -2511,7 +2594,7 @@ export default function AdminExamDetailPage() {
                                     exam.is_simulated ? 'translate-x-7' : 'translate-x-1'
                                 }`} />
                             </button>
-                        </div>
+                        </div>}
                     </div>
                 )}
 

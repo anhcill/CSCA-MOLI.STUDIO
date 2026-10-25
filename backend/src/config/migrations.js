@@ -1240,6 +1240,7 @@ async function runOptimizations() {
       "066_pdf_answer_keys_by_language.sql",
       "071_exam_explanation_language_mode.sql",
       "072_paid_device_policy.sql",
+      "073_topic_practice_exam_classification.sql",
       "20260714_create_seo_blog_posts.sql",
       "20260714_create_seo_blog_ideas.sql",
       "20260714_remove_seo_blog_bold_markers.sql",

@@ -112,6 +112,12 @@ function ExamResultContent() {
   const searchParams = useSearchParams();
   const examId = parseInt(params.id as string);
   const attemptId = searchParams.get('attemptId');
+  const isTopicPracticeSource = searchParams.get('source') === 'topic-practice';
+  const topicPracticeId = searchParams.get('topicId');
+  const topicPracticeSubject = searchParams.get('subject');
+  const topicPracticeHref = topicPracticeId
+    ? `/luyen-chu-de/chu-de/${topicPracticeId}${topicPracticeSubject ? `?subject=${encodeURIComponent(topicPracticeSubject)}` : ''}`
+    : '/luyen-chu-de';
   const user = useAuthStore((s) => s.user);
   const hasAIAccess = canUseAI(user);
 
@@ -779,15 +785,15 @@ function ExamResultContent() {
                 </button>}
 
                 <button
-                  onClick={() => router.push(result.is_room_exam ? '/exam-room' : '/')}
+                  onClick={() => router.push(result.is_room_exam ? '/exam-room' : isTopicPracticeSource ? topicPracticeHref : '/')}
                   className={`group w-full rounded-2xl p-4 text-left transition-all duration-200 hover:border-[#c99722] hover:shadow-md ${inkResultButtonPanel}`}>
                   <div className="flex items-center gap-3.5">
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#56734a] to-[#789264] shadow-md shadow-green-900/15 transition-transform duration-200 group-hover:scale-105">
                       {result.is_room_exam ? <FiAward className="text-white" size={16} /> : <FiCheckCircle className="text-white" size={16} />}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-black text-[#4f3521] transition-colors group-hover:text-[#b9231a] dark:text-white">{result.is_room_exam ? 'Về sảnh phòng thi' : 'Làm bài mới'}</p>
-                      <p className={`mt-0.5 truncate text-xs ${inkResultMuted}`}>{result.is_room_exam ? 'Xem lịch thi và bảng xếp hạng' : 'Tiếp tục luyện tập với đề khác'}</p>
+                      <p className="text-sm font-black text-[#4f3521] transition-colors group-hover:text-[#b9231a] dark:text-white">{result.is_room_exam ? 'Về sảnh phòng thi' : isTopicPracticeSource ? 'Về chủ đề' : 'Làm bài mới'}</p>
+                      <p className={`mt-0.5 truncate text-xs ${inkResultMuted}`}>{result.is_room_exam ? 'Xem lịch thi và bảng xếp hạng' : isTopicPracticeSource ? 'Chọn đề khác trong cùng chủ đề' : 'Tiếp tục luyện tập với đề khác'}</p>
                     </div>
                     <span className="text-sm font-bold text-[#c99722] transition-transform duration-200 group-hover:translate-x-1">→</span>
                   </div>

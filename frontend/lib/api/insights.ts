@@ -553,11 +553,27 @@ export interface SubjectPracticeTopic {
   topic_name_cn?: string | null;
   description?: string | null;
   question_count: number;
+  exam_count: number;
   practiced_count: number;
   correct_answers: number;
   incorrect_answers: number;
   accuracy: number | null;
   file_count: number;
+}
+
+export interface TopicPracticeExam {
+  exam_id: number;
+  title: string;
+  description?: string | null;
+  duration: number;
+  total_points: number;
+  difficulty_level?: string | null;
+  language_mode?: string | null;
+  publish_date?: string | null;
+  topic_name: string;
+  question_count: number;
+  user_attempt_count: number;
+  user_best_score: number;
 }
 
 export interface TopicPracticeFile {
@@ -648,6 +664,11 @@ export async function getSubjectPracticeTopics(subject: string): Promise<Subject
 
 export async function getTopicPracticeFiles(topicId: number, subject: string): Promise<TopicPracticeFile[]> {
   const res = await axios.get(`${BASE}/actions/topic-files`, { params: { topicId, subject } });
+  return res.data.data;
+}
+
+export async function getTopicPracticeExams(topicId: number, subject: string): Promise<TopicPracticeExam[]> {
+  const res = await axios.get(`${BASE}/actions/topic-exams`, { params: { topicId, subject } });
   return res.data.data;
 }
 

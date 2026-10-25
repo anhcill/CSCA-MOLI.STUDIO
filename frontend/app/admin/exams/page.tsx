@@ -24,6 +24,9 @@ interface Exam {
     created_at: string;
     is_premium?: boolean;
     is_simulated?: boolean;
+    exam_type?: 'mock' | 'topic_practice' | string;
+    topic_id?: number | null;
+    topic_name?: string | null;
     vip_tier?: string;
     solution_video_url?: string;
     solution_description?: string;
@@ -53,6 +56,7 @@ interface ExamCounts {
     phongThi: number;
     tuDo: number;
     moPhong: number;
+    luyenChuDe: number;
     deleteRequests: number;
     trash: number;
     bySubject?: SubjectCount[];
@@ -126,7 +130,7 @@ export default function ExamsPage() {
         if (fromUrl) return parseAdminExamAccessFilter(fromUrl);
         return loadAdminExamListState().access;
     });
-    const [examCounts, setExamCounts] = useState<ExamCounts>({ all: 0, phongThi: 0, tuDo: 0, moPhong: 0, deleteRequests: 0, trash: 0 });
+    const [examCounts, setExamCounts] = useState<ExamCounts>({ all: 0, phongThi: 0, tuDo: 0, moPhong: 0, luyenChuDe: 0, deleteRequests: 0, trash: 0 });
     const [stats, setStats] = useState<ExamStats | null>(null);
     const [topExams, setTopExams] = useState<TopExam[]>([]);
     const [subjectStats, setSubjectStats] = useState<SubjectStat[]>([]);
@@ -796,6 +800,7 @@ export default function ExamsPage() {
                         { value: 'all', label: 'Kho đề', emoji: '📋', count: examCounts.tuDo + examCounts.moPhong },
                         { value: 'mo-phong', label: 'Đề mô phỏng', emoji: '🎯', count: examCounts.moPhong },
                         { value: 'tu-do', label: 'Đề tự do', emoji: '📝', count: examCounts.tuDo },
+                        { value: 'luyen-chu-de', label: 'Luyện theo chủ đề', emoji: '📚', count: examCounts.luyenChuDe },
                         ...(isSuperAdminUser ? [
                                                         { value: 'delete-requests' as AdminExamFilter, label: 'Chờ duyệt xóa', emoji: '⚠', count: examCounts.deleteRequests },
                             { value: 'trash' as AdminExamFilter, label: 'Xóa tạm', emoji: '↩', count: examCounts.trash },
@@ -998,7 +1003,11 @@ export default function ExamsPage() {
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
-                                            {exam.start_time ? (
+                                            {exam.exam_type === 'topic_practice' ? (
+                                                <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-100 text-emerald-700 text-xs font-bold rounded-lg">
+                                                    📚 Luyện chủ đề{exam.topic_name ? ` · ${exam.topic_name}` : ''}
+                                                </span>
+                                            ) : exam.start_time ? (
                                                 <div className="flex flex-wrap items-center gap-1.5">
                                                     <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-100 text-indigo-700 text-xs font-bold rounded-lg">
                                                         🏢 {new Date(exam.start_time).toLocaleDateString('vi-VN')}
@@ -1020,20 +1029,24 @@ export default function ExamsPage() {
                                             )}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm flex gap-2 justify-end">
-                                            <Link
-                                                href={withCurrentExamListState(`/admin/exams/${exam.id}/schedule`)}
-                                                className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded"
-                                                title="Quản lý lịch thi"
-                                            >
-                                                <FiCalendar size={17} />
-                                            </Link>
-                                            <Link
-                                                href={withCurrentExamListState(`/admin/exams/${exam.id}/official`)}
-                                                className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded"
-                                                title="Quan ly thi chinh thuc"
-                                            >
-                                                <FiMonitor size={17} />
-                                            </Link>
+                                            {exam.exam_type !== 'topic_practice' && (
+                                                <>
+                                                    <Link
+                                                        href={withCurrentExamListState(`/admin/exams/${exam.id}/schedule`)}
+                                                        className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded"
+                                                        title="Quản lý lịch thi"
+                                                    >
+                                                        <FiCalendar size={17} />
+                                                    </Link>
+                                                    <Link
+                                                        href={withCurrentExamListState(`/admin/exams/${exam.id}/official`)}
+                                                        className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded"
+                                                        title="Quản lý thi chính thức"
+                                                    >
+                                                        <FiMonitor size={17} />
+                                                    </Link>
+                                                </>
+                                            )}
                                             <button
                                                 onClick={() => router.push(withCurrentExamListState(`/admin/exams/${exam.id}`))}
                                                 className="text-blue-600 hover:text-blue-800"

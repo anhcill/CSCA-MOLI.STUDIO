@@ -81,6 +81,7 @@ const Exam = {
       WHERE e.status = 'published'
         AND e.deleted_at IS NULL
         AND e.start_time IS NULL
+        AND COALESCE(e.exam_type, 'mock') <> 'topic_practice'
         AND NOT (
           EXISTS (
             SELECT 1
@@ -202,6 +203,7 @@ const Exam = {
           AND e.status = 'published'
           AND e.deleted_at IS NULL
           AND e.start_time IS NULL
+          AND COALESCE(e.exam_type, 'mock') <> 'topic_practice'
           AND NOT (
             EXISTS (
               SELECT 1
@@ -281,6 +283,7 @@ const Exam = {
           AND e.status = 'published'
           AND e.deleted_at IS NULL
           AND e.start_time IS NULL
+          AND COALESCE(e.exam_type, 'mock') <> 'topic_practice'
           AND NOT (
             EXISTS (
               SELECT 1

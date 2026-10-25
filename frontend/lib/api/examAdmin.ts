@@ -32,6 +32,8 @@ export interface ExamCreateData {
     language_mode?: string;
     explanationLanguageMode?: string;
     explanation_language_mode?: string;
+    examType?: 'mock' | 'topic_practice';
+    topicId?: number;
 }
 
 export interface QuestionData {
@@ -754,7 +756,7 @@ export const examAdminApi = {
     },
 
     // Get all exams
-    getAllExams: async (page = 1, limit = 20, type?: 'library' | 'phong-thi' | 'tu-do' | 'mo-phong' | 'delete-requests' | 'trash', subject?: string, access?: 'normal' | 'vip') => {
+    getAllExams: async (page = 1, limit = 20, type?: 'library' | 'phong-thi' | 'tu-do' | 'mo-phong' | 'luyen-chu-de' | 'delete-requests' | 'trash', subject?: string, access?: 'normal' | 'vip') => {
         const response = await axios.get('/admin/exams', {
             params: { page, limit, ...(type ? { type } : {}), ...(subject ? { subject } : {}), ...(access ? { access } : {}) }
         });

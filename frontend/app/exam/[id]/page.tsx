@@ -141,7 +141,11 @@ export default function ExamPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useAuthStore();
-  const isTopicPracticeRoute = searchParams.get('workspace') === 'topic';
+  const topicWorkspace = searchParams.get('workspace');
+  const isTopicFileRoute = topicWorkspace === 'topic';
+  const isTopicQuestionRoute = topicWorkspace === 'topic-questions';
+  const topicIdParam = searchParams.get('topicId');
+  const topicSubjectParam = searchParams.get('subject');
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -156,6 +160,16 @@ export default function ExamPage() {
     const n = parseInt(raw as string, 10);
     return Number.isFinite(n) && n > 0 ? n : NaN; // NaN nếu không hợp lệ
   }, [params?.id]);
+
+  const getResultHref = useCallback((nextAttemptId: number) => {
+    const query = new URLSearchParams({ attemptId: String(nextAttemptId) });
+    if (isTopicQuestionRoute) {
+      query.set('source', 'topic-practice');
+      if (topicIdParam) query.set('topicId', topicIdParam);
+      if (topicSubjectParam) query.set('subject', topicSubjectParam);
+    }
+    return `/exam/${examId}/result?${query.toString()}`;
+  }, [examId, isTopicQuestionRoute, topicIdParam, topicSubjectParam]);
 
   const [exam, setExam] = useState<Exam | null>(null);
   const [preflight, setPreflight] = useState<Exam | null>(null);
@@ -265,7 +279,7 @@ export default function ExamPage() {
   const essaySaveTimersRef = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
   const pendingEssaySavesRef = useRef<Record<number, PendingEssaySave>>({});
   const isPdfRoomExam = Boolean(started && exam?.start_time && exam?.has_exam_pdf && !practiceMode);
-  const isTopicPdfPractice = Boolean(started && isTopicPracticeRoute && practiceMode && exam?.has_exam_pdf);
+  const isTopicPdfPractice = Boolean(started && isTopicFileRoute && practiceMode && exam?.has_exam_pdf);
   const violationLimit = isPdfRoomExam ? PDF_ROOM_MAX_VIOLATIONS : DEFAULT_EXAM_MAX_VIOLATIONS;
 
   useEffect(() => {
@@ -453,8 +467,8 @@ export default function ExamPage() {
 
   useEffect(() => {
     if (!queuedSubmit || isOffline || pendingCount > 0 || !attemptId || !examId) return;
-    router.push(`/exam/${examId}/result?attemptId=${attemptId}`);
-  }, [queuedSubmit, isOffline, pendingCount, attemptId, examId, router]);
+    router.push(getResultHref(attemptId));
+  }, [queuedSubmit, isOffline, pendingCount, attemptId, examId, getResultHref, router]);
 
   useEffect(() => {
     if (!offlineNotice || isOffline || pendingCount > 0 || isSyncing) return;
@@ -655,7 +669,7 @@ export default function ExamPage() {
     try {
       setLoading(true);
 
-      const shouldUseTopicPractice = isTopicPracticeRoute || Boolean(options.practice);
+      const shouldUseTopicPractice = isTopicFileRoute || Boolean(options.practice);
       const shouldEnterPdfRoom = Boolean(preflight?.start_time && preflight?.has_exam_pdf && !shouldUseTopicPractice);
       if (shouldEnterPdfRoom) {
         const enteredFullscreen = await fullscreenRequest;
@@ -677,8 +691,8 @@ export default function ExamPage() {
         restart: options.restart,
         practiceMode: shouldUseTopicPractice,
         mode: shouldUseTopicPractice ? 'practice' : options.restart ? 'restart' : 'resume',
-        pdfWorkspace: isTopicPracticeRoute,
-        paperLanguageMode: (isTopicPracticeRoute || Boolean(preflight?.start_time)) ? paperLanguageMode : undefined,
+        pdfWorkspace: isTopicFileRoute,
+        paperLanguageMode: (isTopicFileRoute || Boolean(preflight?.start_time)) ? paperLanguageMode : undefined,
       });
 
       const nextPracticeMode = Boolean(shouldUseTopicPractice || response.practiceMode);
@@ -901,7 +915,7 @@ export default function ExamPage() {
         await document.exitFullscreen().catch(() => {});
       }
       // Redirect to result page
-      router.push(`/exam/${examId}/result?attemptId=${submittingAttemptId}`);
+      router.push(getResultHref(submittingAttemptId));
     } catch (error) {
       console.error('Error submitting exam:', error);
       submitInFlightRef.current = false;
@@ -996,7 +1010,7 @@ export default function ExamPage() {
       preflight.end_time && scheduleNow > new Date(preflight.end_time).getTime()
     );
     const canStartOfficialExam = !isOfficialExam || (officialHasStarted && !officialHasEnded);
-    const usesPdfLanguageFiles = isTopicPracticeRoute || isOfficialExam;
+    const usesPdfLanguageFiles = isTopicFileRoute || isOfficialExam;
     const availablePaperLanguages = Array.isArray(preflight.paper_languages) ? preflight.paper_languages : [];
     const readyPaperLanguages = Array.isArray(preflight.ready_paper_languages) ? preflight.ready_paper_languages : [];
     const inProgressPaperLanguage = inProgress?.paper_language_mode || '';
@@ -1113,7 +1127,7 @@ export default function ExamPage() {
                 </div>
               )}
 
-              {!isOfficialExam && !isTopicPracticeRoute && (
+              {!isOfficialExam && !isTopicFileRoute && (
                 <div
                   ref={languageSelectorRef}
                   className={`relative z-30 mb-4 rounded-3xl p-4 sm:p-5 ${inkResultSoftPanel}`}
@@ -1441,7 +1455,7 @@ export default function ExamPage() {
               )}
 
               <div className="relative z-10 flex flex-col gap-3 sm:flex-row lg:flex-col xl:flex-row">
-                {isTopicPracticeRoute ? (
+                {isTopicFileRoute ? (
                   <button
                     onClick={() => startExam()}
                     disabled={loading || !languageReady}
@@ -1466,7 +1480,7 @@ export default function ExamPage() {
                     <FiPlay size={18} /> {attemptLimitReached ? 'Bạn đã dùng lượt thi' : 'Bắt đầu làm bài'}
                   </button>
                 )}
-                {!isOfficialExam && !isTopicPracticeRoute && (
+                {!isOfficialExam && !isTopicFileRoute && (
                 <button
                   onClick={() => startExam({ practice: true })}
                   disabled={loading || !languageReady}

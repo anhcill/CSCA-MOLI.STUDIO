@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
-import { FiArrowRight, FiBarChart2, FiBookOpen, FiFileText, FiTarget } from 'react-icons/fi';
+import { FiArrowRight, FiBarChart2, FiBookOpen, FiHelpCircle, FiTarget } from 'react-icons/fi';
 import { getSubjectPracticeTopics, type SubjectPracticeTopic } from '@/lib/api/insights';
 import { useAuthStore } from '@/lib/store/authStore';
 
@@ -55,7 +55,7 @@ export default function TopicPracticeCatalog({ subjectSlug, subjectCode, subject
   }, [isAuthenticated, subjectCode]);
 
   const availableTopics = useMemo(
-    () => topics.filter((topic) => Number(topic.file_count) > 0),
+    () => topics.filter((topic) => Number(topic.exam_count) > 0 && Number(topic.question_count) > 0),
     [topics],
   );
 
@@ -64,7 +64,7 @@ export default function TopicPracticeCatalog({ subjectSlug, subjectCode, subject
       <section className="rounded-3xl border border-dashed border-red-200 bg-white/85 px-6 py-14 text-center shadow-sm dark:border-red-500/35 dark:bg-[#111b2d] dark:shadow-none">
         <FiTarget className="mx-auto mb-4 text-4xl text-red-500 dark:text-red-300" />
         <h2 className="text-xl font-black text-slate-950 dark:text-white">Đăng nhập để mở bài luyện theo chủ đề</h2>
-        <p className="mx-auto mt-2 max-w-xl text-sm font-medium leading-6 text-slate-500 dark:text-slate-300">Mỗi môn có kho PDF và đáp án riêng, đồng thời lưu lại tiến độ của bạn.</p>
+        <p className="mx-auto mt-2 max-w-xl text-sm font-medium leading-6 text-slate-500 dark:text-slate-300">Chọn chủ đề và làm câu hỏi trắc nghiệm bằng đúng giao diện đề mô phỏng.</p>
         <Link href="/login" className="mt-5 inline-flex items-center gap-2 rounded-xl bg-red-600 px-5 py-3 text-sm font-black text-white transition hover:bg-red-700">
           Đăng nhập <FiArrowRight />
         </Link>
@@ -80,8 +80,8 @@ export default function TopicPracticeCatalog({ subjectSlug, subjectCode, subject
             <h2 className="text-2xl font-black tracking-tight text-slate-950 dark:text-white sm:text-3xl">Chọn chủ đề {subjectLabel}</h2>
           </div>
           <div className="flex shrink-0 items-center gap-3 rounded-2xl border border-red-100 bg-white/75 px-4 py-3 text-sm dark:border-slate-700 dark:bg-slate-950/45">
-            <FiFileText className="text-xl text-red-600 dark:text-red-300" />
-            <div><strong className="block text-lg font-black text-slate-950 dark:text-white">{availableTopics.length}</strong><span className="text-xs font-semibold text-slate-500 dark:text-slate-300">chủ đề đã có file</span></div>
+            <FiHelpCircle className="text-xl text-red-600 dark:text-red-300" />
+            <div><strong className="block text-lg font-black text-slate-950 dark:text-white">{availableTopics.length}</strong><span className="text-xs font-semibold text-slate-500 dark:text-slate-300">chủ đề có câu hỏi</span></div>
           </div>
         </div>
       </div>
@@ -91,8 +91,8 @@ export default function TopicPracticeCatalog({ subjectSlug, subjectCode, subject
       ) : availableTopics.length === 0 ? (
         <div className="rounded-3xl border border-dashed border-slate-300 bg-white/85 px-6 py-14 text-center dark:border-slate-700 dark:bg-[#111b2d]">
           <FiBookOpen className="mx-auto mb-4 text-4xl text-slate-400 dark:text-slate-500" />
-          <h2 className="text-lg font-black text-slate-900 dark:text-white">Chưa có file luyện cho môn này</h2>
-          <p className="mx-auto mt-2 max-w-lg text-sm font-medium leading-6 text-slate-500 dark:text-slate-300">Khi quản trị viên thêm PDF kèm đáp án cho một chủ đề, file sẽ xuất hiện tại đây.</p>
+          <h2 className="text-lg font-black text-slate-900 dark:text-white">Chưa có câu hỏi luyện cho môn này</h2>
+          <p className="mx-auto mt-2 max-w-lg text-sm font-medium leading-6 text-slate-500 dark:text-slate-300">Khi quản trị viên đăng đề luyện và chọn chủ đề cho môn này, bài luyện sẽ xuất hiện tại đây.</p>
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -110,9 +110,9 @@ export default function TopicPracticeCatalog({ subjectSlug, subjectCode, subject
                   <FiArrowRight className="mt-2 text-xl text-slate-300 transition group-hover:translate-x-1 group-hover:text-red-600 dark:text-slate-600 dark:group-hover:text-red-300" />
                 </div>
                 <h3 className="relative mt-7 line-clamp-2 text-lg font-black leading-6 text-slate-950 dark:text-white">{topic.topic_name}</h3>
-                <p className="relative mt-2 line-clamp-2 min-h-10 text-sm font-medium leading-5 text-slate-500 dark:text-slate-300">{topic.description || 'Mở các file luyện tập tập trung cho chủ đề này.'}</p>
+                <p className="relative mt-2 line-clamp-2 min-h-10 text-sm font-medium leading-5 text-slate-500 dark:text-slate-300">{topic.description || 'Làm bộ câu hỏi lựa chọn tập trung cho chủ đề này.'}</p>
                 <div className="relative mt-5 flex items-center justify-between border-t border-slate-100 pt-4 dark:border-slate-800">
-                  <span className="inline-flex items-center gap-1.5 text-xs font-black text-red-600 dark:text-red-200"><FiFileText /> {topic.file_count} file luyện</span>
+                  <span className="inline-flex items-center gap-1.5 text-xs font-black text-red-600 dark:text-red-200"><FiHelpCircle /> {topic.question_count} câu hỏi</span>
                   {accuracy === null ? <span className="text-xs font-bold text-slate-400 dark:text-slate-400">Chưa làm</span> : <span className="inline-flex items-center gap-1 text-xs font-black text-emerald-600 dark:text-emerald-300"><FiBarChart2 /> {accuracy}%</span>}
                 </div>
               </Link>

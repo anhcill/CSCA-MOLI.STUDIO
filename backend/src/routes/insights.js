@@ -94,6 +94,7 @@ router.get("/actions/wrong-questions", learningActionController.getWrongQuestion
 router.post("/actions/practice/wrong", learningActionController.createWrongPractice);
 router.post("/actions/practice/weak-topic", learningActionController.createWeakTopicPractice);
 router.get("/actions/topics", learningActionController.getSubjectPracticeTopics);
+router.get("/actions/topic-exams", learningActionController.getTopicPracticeExams);
 router.get("/actions/topic-files", learningActionController.getTopicPracticeFiles);
 router.get("/actions/practice/:id", learningActionController.getPracticeSet);
 router.get("/actions/bookmarks", learningActionController.listBookmarks);

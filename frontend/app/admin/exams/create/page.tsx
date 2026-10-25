@@ -147,6 +147,7 @@ export default function CreateExamPage() {
     const { user, isAuthenticated } = useAuthStore();
     const [loading, setLoading] = useState(false);
     const [subjects, setSubjects] = useState<Subject[]>([]);
+    const [practiceTopics, setPracticeTopics] = useState<Array<{ id: number; name: string; subject_id: number }>>([]);
 
     // Exam metadata
     const [examData, setExamData] = useState({
@@ -165,6 +166,8 @@ export default function CreateExamPage() {
         difficulty_level: 'medium',
         languageMode: 'zh',
         explanationLanguageMode: 'vi',
+        examType: 'mock' as 'mock' | 'topic_practice',
+        topicId: 0,
         start_time: '',
         end_time: '',
     });
@@ -283,6 +286,17 @@ export default function CreateExamPage() {
         fetchSubjects();
     }, [isAuthenticated, user, router]);
 
+    useEffect(() => {
+        const selectedSubject = subjects.find(subject => subject.id === examData.subjectId);
+        if (examData.examType !== 'topic_practice' || !selectedSubject) {
+            setPracticeTopics([]);
+            return;
+        }
+        examAdminApi.getTopicPracticeTopics(selectedSubject.code)
+            .then(data => setPracticeTopics((data || []).map(topic => ({ id: topic.id, name: topic.name, subject_id: topic.subject_id }))))
+            .catch(() => setPracticeTopics([]));
+    }, [examData.examType, examData.subjectId, subjects]);
+
     // Persist currentExamId to sessionStorage
     useEffect(() => {
         if (!mounted) return; // Skip on first render
@@ -317,6 +331,10 @@ export default function CreateExamPage() {
     const createExam = async () => {
         if (!examData.title || !examData.subjectId) {
             alert('Vui lòng nhập tên đề thi và chọn môn học');
+            return;
+        }
+        if (examData.examType === 'topic_practice' && !examData.topicId) {
+            alert('Vui lòng chọn chủ đề cho đề luyện');
             return;
         }
 
@@ -358,6 +376,7 @@ export default function CreateExamPage() {
         setExamData(prev => ({
             ...prev,
             subjectId,
+            topicId: 0,
             duration: durationManuallyEdited ? prev.duration : getDefaultExamDurationMinutes(selectedSubject),
         }));
         setExamMetadataDirty(true);
@@ -883,6 +902,28 @@ export default function CreateExamPage() {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Phân loại đề *</label>
+                            <select
+                                value={examData.examType}
+                                onChange={(e) => {
+                                    const examType = e.target.value as 'mock' | 'topic_practice';
+                                    setExamData({
+                                        ...examData,
+                                        examType,
+                                        topicId: 0,
+                                        is_simulated: examType === 'mock' ? examData.is_simulated : false,
+                                        start_time: examType === 'topic_practice' ? '' : examData.start_time,
+                                        end_time: examType === 'topic_practice' ? '' : examData.end_time,
+                                    });
+                                    setExamMetadataDirty(true);
+                                }}
+                                className="w-full px-4 py-2 bg-white text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            >
+                                <option value="mock">Đề mô phỏng / đề thường</option>
+                                <option value="topic_practice">Luyện theo chủ đề</option>
+                            </select>
+                        </div>
+                        <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">Tên đề thi *</label>
                             <input
                                 type="text"
@@ -917,6 +958,22 @@ export default function CreateExamPage() {
                                 ))}
                             </select>
                         </div>
+
+                        {examData.examType === 'topic_practice' && (
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Chủ đề *</label>
+                                <select
+                                    value={examData.topicId}
+                                    onChange={(e) => { setExamData({ ...examData, topicId: Number(e.target.value) }); setExamMetadataDirty(true); }}
+                                    disabled={!examData.subjectId}
+                                    className="w-full px-4 py-2 bg-white text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
+                                >
+                                    <option value={0}>Chọn chủ đề...</option>
+                                    {practiceTopics.map(topic => <option key={topic.id} value={topic.id}>{topic.name}</option>)}
+                                </select>
+                                <p className="mt-1 text-xs text-gray-500">Đề này chỉ xuất hiện trong khu Luyện theo chủ đề, không xuất hiện ở Đề mô phỏng.</p>
+                            </div>
+                        )}
 
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">Thời gian (phút)</label>
@@ -1073,7 +1130,7 @@ export default function CreateExamPage() {
                             <p className="text-xs text-gray-400 mt-1 ml-14">Mỗi lần làm bài, thứ tự câu hỏi và đáp án sẽ được xáo trộn ngẫu nhiên</p>
                         </div>
 
-                        <div className="md:col-span-2">
+                        {examData.examType === 'mock' && <div className="md:col-span-2">
                             <label className="flex items-center gap-3 cursor-pointer select-none">
                                 <div className="relative">
                                     <input
@@ -1090,10 +1147,10 @@ export default function CreateExamPage() {
                                 </div>
                             </label>
                             <p className="text-xs text-gray-400 mt-1 ml-14">Sử dụng cho hệ thống hiển thị trong giao diện lộ trình ôn luyện.</p>
-                        </div>
+                        </div>}
 
                         {/* ── Phòng thi: Schedule ─────────────────────────────────── */}
-                        <div className="md:col-span-2">
+                        {examData.examType === 'mock' && <div className="md:col-span-2">
                             <div className="bg-indigo-50 rounded-xl p-4 border border-indigo-100">
                                 <div className="flex items-center gap-2 mb-3">
                                     <span className="text-base">🏢</span>
@@ -1121,7 +1178,7 @@ export default function CreateExamPage() {
                                     </div>
                                 </div>
                             </div>
-                        </div>
+                        </div>}
 
                         {/* VIP Tier */}
                         <div className="md:col-span-2">

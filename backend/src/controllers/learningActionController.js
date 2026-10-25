@@ -74,6 +74,19 @@ exports.getTopicPracticeFiles = async (req, res) => {
   }
 };
 
+exports.getTopicPracticeExams = async (req, res) => {
+  try {
+    const data = await learningActionService.getTopicPracticeExams(
+      req.user.id,
+      req.query.topicId,
+      req.query.subject,
+    );
+    res.json({ success: true, data });
+  } catch (error) {
+    handleError(res, error, "Get topic practice exams");
+  }
+};
+
 exports.getPracticeSet = async (req, res) => {
   try {
     const data = await learningActionService.getPracticeSet(req.user.id, req.params.id);
