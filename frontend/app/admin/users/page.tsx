@@ -13,7 +13,7 @@ import {
   FiEye, FiLock, FiUnlock, FiActivity
 } from 'react-icons/fi';
 import { FiMonitor } from 'react-icons/fi';
-import type { AdminActiveSession, AdminRememberedDevice } from '@/lib/api/admin';
+import type { AdminRememberedDevice } from '@/lib/api/admin';
 
 interface User {
   id: number;
@@ -43,28 +43,20 @@ interface UserActivity {
 }
 interface ActivityPagination { currentPage: number; totalPages: number; totalActivities: number; limit: number; }
 
-function DeviceModal({ user, devices, sessions, paid, onClose, onRevoke, onReset }: { user: User; devices: AdminRememberedDevice[]; sessions: AdminActiveSession[]; paid: boolean; onClose: () => void; onRevoke: (id: number) => void; onReset: () => void }) {
+function DeviceModal({ user, devices, paid, onClose, onRevoke, onReset }: { user: User; devices: AdminRememberedDevice[]; paid: boolean; onClose: () => void; onRevoke: (id: number) => void; onReset: () => void }) {
   const active = devices.filter(device => !device.revoked_at);
   return <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
     <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl">
       <div className="flex items-center justify-between border-b px-6 py-4">
-        <div><h2 className="font-bold text-gray-900">Thiết bị của {user.full_name}</h2><p className="text-xs text-gray-500">{paid ? 'Thiết bị ghi nhớ cố định: tối đa 2' : user.role === 'admin' ? 'Admin được miễn giới hạn; hiển thị phiên đăng nhập hiện tại' : 'Chưa mua: hiển thị phiên đăng nhập theo luồng hiện tại'}</p></div>
+        <div><h2 className="font-bold text-gray-900">Thiết bị của {user.full_name}</h2><p className="text-xs text-gray-500">{paid ? 'Chính sách mua: tối đa 2 thiết bị' : 'Luồng thiết bị hiện tại'}</p></div>
         <button onClick={onClose} className="rounded-xl p-2 text-gray-500 hover:bg-gray-100"><FiX size={18} /></button>
       </div>
       <div className="space-y-3 p-6">
-        {paid ? (
-          active.length === 0 ? <p className="text-sm text-gray-500">Chưa có thiết bị ghi nhớ.</p> : active.map(device => <div key={device.id} className="flex items-center justify-between rounded-xl border border-gray-200 p-3">
-            <div className="min-w-0"><p className="font-semibold text-gray-800">{device.device_type === 'mobile' ? 'Điện thoại' : 'Máy tính'}</p><p className="truncate text-xs text-gray-500">{device.browser || device.device_info || 'Thiết bị'} · IP {device.ip_address || '—'}</p><p className="text-xs text-gray-400">Hoạt động: {device.last_seen_at ? new Date(device.last_seen_at).toLocaleString('vi-VN') : '—'}</p></div>
-            <button onClick={() => onRevoke(device.id)} className="ml-3 shrink-0 rounded-lg bg-red-50 px-3 py-2 text-xs font-bold text-red-700 hover:bg-red-100">Xóa thiết bị</button>
-          </div>)
-        ) : (
-          sessions.length === 0 ? <p className="text-sm text-gray-500">Không có phiên đăng nhập còn hiệu lực.</p> : sessions.map(session => <div key={session.id} className="rounded-xl border border-gray-200 p-3">
-            <p className="font-semibold text-gray-800">{session.device_type === 'mobile' ? 'Điện thoại' : 'Máy tính'}</p>
-            <p className="truncate text-xs text-gray-500">{session.device_info || 'Thiết bị'} · IP {session.ip_address || '—'}</p>
-            <p className="text-xs text-gray-400">Hoạt động: {session.last_active ? new Date(session.last_active).toLocaleString('vi-VN') : '—'}</p>
-          </div>)
-        )}
-        <div className="flex justify-end gap-2 border-t pt-4"><button onClick={onReset} className="rounded-xl bg-amber-600 px-4 py-2 text-sm font-bold text-white hover:bg-amber-700">{paid ? 'Xóa tất cả + mở khóa' : 'Đăng xuất tất cả thiết bị'}</button><button onClick={onClose} className="rounded-xl border px-4 py-2 text-sm">Đóng</button></div>
+        {active.length === 0 ? <p className="text-sm text-gray-500">Chưa có thiết bị ghi nhớ.</p> : active.map(device => <div key={device.id} className="flex items-center justify-between rounded-xl border border-gray-200 p-3">
+          <div className="min-w-0"><p className="font-semibold text-gray-800">{device.device_type === 'mobile' ? 'Điện thoại' : 'Máy tính'}</p><p className="truncate text-xs text-gray-500">{device.browser || device.device_info || 'Thiết bị'} · IP {device.ip_address || '—'}</p><p className="text-xs text-gray-400">Hoạt động: {device.last_seen_at ? new Date(device.last_seen_at).toLocaleString('vi-VN') : '—'}</p></div>
+          <button onClick={() => onRevoke(device.id)} className="ml-3 shrink-0 rounded-lg bg-red-50 px-3 py-2 text-xs font-bold text-red-700 hover:bg-red-100">Xóa thiết bị</button>
+        </div>)}
+        <div className="flex justify-end gap-2 border-t pt-4"><button onClick={onReset} className="rounded-xl bg-amber-600 px-4 py-2 text-sm font-bold text-white hover:bg-amber-700">Xóa tất cả + mở khóa</button><button onClick={onClose} className="rounded-xl border px-4 py-2 text-sm">Đóng</button></div>
       </div>
     </div>
   </div>;
@@ -172,7 +164,7 @@ export default function AdminUsersPage() {
   const [activityPage, setActivityPage] = useState(1);
   const [activityLoading, setActivityLoading] = useState(false);
   const [deviceUser, setDeviceUser] = useState<User | null>(null);
-  const [deviceData, setDeviceData] = useState<{ devices: AdminRememberedDevice[]; sessions: AdminActiveSession[]; paid: boolean } | null>(null);
+  const [deviceData, setDeviceData] = useState<{ devices: AdminRememberedDevice[]; paid: boolean } | null>(null);
   const [activityPagination, setActivityPagination] = useState<ActivityPagination>({ currentPage: 1, totalPages: 1, totalActivities: 0, limit: 20 });
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -248,8 +240,8 @@ export default function AdminUsersPage() {
     setDeviceUser(u);
     try {
       const result = await adminApi.getUserDevices(u.id);
-      setDeviceData({ devices: result.data.rememberedDevices || [], sessions: result.data.activeSessions || [], paid: result.data.policy.paid });
-    } catch { setDeviceData({ devices: [], sessions: [], paid: false }); }
+      setDeviceData({ devices: result.data.rememberedDevices || [], paid: result.data.policy.paid });
+    } catch { setDeviceData({ devices: [], paid: false }); }
   };
 
   const handleRevokeDevice = async (deviceId: number) => {
@@ -512,7 +504,7 @@ export default function AdminUsersPage() {
           onLoadMore={handleLoadMoreActivity}
         />
       )}
-      {deviceUser && deviceData && <DeviceModal user={deviceUser} devices={deviceData.devices} sessions={deviceData.sessions} paid={deviceData.paid} onClose={() => { setDeviceUser(null); setDeviceData(null); }} onRevoke={handleRevokeDevice} onReset={handleResetDevices} />}
+      {deviceUser && deviceData && <DeviceModal user={deviceUser} devices={deviceData.devices} paid={deviceData.paid} onClose={() => { setDeviceUser(null); setDeviceData(null); }} onRevoke={handleRevokeDevice} onReset={handleResetDevices} />}
     </AdminLayout>
   );
 }

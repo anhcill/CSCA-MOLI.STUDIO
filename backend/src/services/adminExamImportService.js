@@ -12,6 +12,7 @@ const {
   shouldUseRuleBasedPdfParser,
 } = require("./pdfImportPromptService");
 const { repairOcrMathArtifacts, cleanAiGeneratedMathArtifacts } = require("./ocrMathRepairService");
+const { removeTrailingEmptyAnswerMarker } = require("../utils/questionText");
 
 const MAX_POINTS_PER_QUESTION = 100;
 const QUESTION_TYPES = {
@@ -31,6 +32,13 @@ function sanitize(str) {
 function sanitizeExplanation(str) {
   if (typeof str !== "string") return str;
   return str.replace(/\0/g, "").trim();
+}
+
+function sanitizeQuestionText(str, questionType) {
+  const sanitized = sanitize(str);
+  return [QUESTION_TYPES.SINGLE_CHOICE, QUESTION_TYPES.READING_ITEM].includes(questionType)
+    ? removeTrailingEmptyAnswerMarker(sanitized)
+    : sanitized;
 }
 
 function parsePositiveNumber(value, fallback) {
@@ -2898,9 +2906,9 @@ async function insertImportedSingleChoice(client, { examId, question, questionNu
       examId,
       questionNumber,
       QUESTION_TYPES.SINGLE_CHOICE,
-      sanitize(normalizedQuestion.vi),
-      sanitize(normalizedQuestion.cn),
-      normalizedQuestion.en ? sanitize(normalizedQuestion.en) : null,
+      sanitizeQuestionText(normalizedQuestion.vi, QUESTION_TYPES.SINGLE_CHOICE),
+      sanitizeQuestionText(normalizedQuestion.cn, QUESTION_TYPES.SINGLE_CHOICE),
+      normalizedQuestion.en ? sanitizeQuestionText(normalizedQuestion.en, QUESTION_TYPES.SINGLE_CHOICE) : null,
       clamp(parsePositiveNumber(question.points, 1), 0.1, MAX_POINTS_PER_QUESTION),
       question.explanation ? sanitizeExplanation(question.explanation) : null,
       question.explanationCn ? sanitizeExplanation(question.explanationCn) : null,

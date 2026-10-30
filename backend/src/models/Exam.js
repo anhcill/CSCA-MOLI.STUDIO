@@ -1,4 +1,5 @@
 const pool = require("../config/database");
+const { removeTrailingEmptyAnswerMarker } = require("../utils/questionText");
 
 const Exam = {
   // Lấy danh sách sảnh thi (lobby)
@@ -505,6 +506,7 @@ const Exam = {
 
   // Tạo câu hỏi cho đề thi
   async createQuestion(questionData) {
+    const questionType = questionData.question_type || "single_choice";
     const query = `
       INSERT INTO questions (
         exam_id, question_number, question_type,
@@ -518,10 +520,16 @@ const Exam = {
     const values = [
       questionData.exam_id,
       questionData.question_number,
-      questionData.question_type || "single_choice",
-      questionData.question_text,
-      questionData.question_text_cn,
-      questionData.question_text_en,
+      questionType,
+      ["single_choice", "reading_item"].includes(questionType)
+        ? removeTrailingEmptyAnswerMarker(questionData.question_text)
+        : questionData.question_text,
+      ["single_choice", "reading_item"].includes(questionType)
+        ? removeTrailingEmptyAnswerMarker(questionData.question_text_cn)
+        : questionData.question_text_cn,
+      ["single_choice", "reading_item"].includes(questionType)
+        ? removeTrailingEmptyAnswerMarker(questionData.question_text_en)
+        : questionData.question_text_en,
       questionData.question_image_url,
       questionData.explanation,
       questionData.explanation_cn,

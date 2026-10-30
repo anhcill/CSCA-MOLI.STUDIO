@@ -4,7 +4,6 @@ const pool = require("../config/database");
 const Ticket = require("../models/Ticket");
 const { seedLaunchTheoryMaterials } = require("../services/materialSeedService");
 const { seedLaunchVocabulary } = require("../services/vocabularySeedService");
-const { DEFAULT_SETTINGS, ensureSettingsTable } = require("../services/siteSettingsService");
 
 /**
  * Run database optimizations - Add indexes for better performance
@@ -920,76 +919,6 @@ async function runOptimizations() {
       );
     }
 
-    const loginResetEventKey = "force_logout_welcome_reset_2026_10_24";
-    await ensureSettingsTable();
-    const maintenanceClient = await pool.pool.connect();
-    try {
-      await maintenanceClient.query("BEGIN");
-      const claimedEvent = await maintenanceClient.query(
-        `INSERT INTO app_maintenance_events (event_key)
-         VALUES ($1)
-         ON CONFLICT (event_key) DO NOTHING
-         RETURNING event_key`,
-        [loginResetEventKey],
-      );
-
-      if (claimedEvent.rows.length > 0) {
-        const revoked = await maintenanceClient.query(`
-          WITH removed AS (
-            DELETE FROM user_sessions
-            WHERE expires_at > NOW()
-            RETURNING jti, user_id, expires_at
-          ),
-          blacklisted AS (
-            INSERT INTO token_blacklist (token_jti, user_id, expires_at)
-            SELECT jti, user_id, expires_at
-            FROM removed
-            ON CONFLICT (token_jti) DO NOTHING
-            RETURNING 1
-          )
-          SELECT
-            (SELECT COUNT(*)::int FROM removed) AS revoked_count,
-            (SELECT COUNT(*)::int FROM blacklisted) AS blacklisted_count
-        `);
-
-        const welcomeResult = await maintenanceClient.query(
-          `SELECT value FROM site_settings WHERE key = 'welcome_settings' FOR UPDATE`,
-        );
-        let welcomeSettings;
-        try {
-          welcomeSettings = JSON.parse(
-            welcomeResult.rows[0]?.value || DEFAULT_SETTINGS.welcome_settings,
-          );
-        } catch {
-          welcomeSettings = JSON.parse(DEFAULT_SETTINGS.welcome_settings);
-        }
-        const currentVersion = Number(welcomeSettings.version);
-        welcomeSettings.enabled = true;
-        welcomeSettings.version = Number.isFinite(currentVersion) ? currentVersion + 1 : 3;
-
-        await maintenanceClient.query(
-          `INSERT INTO site_settings (key, value, updated_at)
-           VALUES ('welcome_settings', $1, NOW())
-           ON CONFLICT (key) DO UPDATE
-           SET value = EXCLUDED.value, updated_at = NOW()`,
-          [JSON.stringify(welcomeSettings)],
-        );
-
-        const result = revoked.rows[0] || {};
-        console.log(
-          `Login reset applied: revoked ${result.revoked_count || 0} active sessions, ` +
-          `blacklisted ${result.blacklisted_count || 0} tokens, welcome v${welcomeSettings.version}.`,
-        );
-      }
-
-      await maintenanceClient.query("COMMIT");
-    } catch (error) {
-      await maintenanceClient.query("ROLLBACK").catch(() => {});
-      throw error;
-    } finally {
-      maintenanceClient.release();
-    }
-
     // Subscription tier device limits
     await pool.query(`
       ALTER TABLE users
@@ -1238,7 +1167,7 @@ async function runOptimizations() {
       "064_pdf_language_variants.sql",
       "065_study_station_and_room_chats.sql",
       "066_pdf_answer_keys_by_language.sql",
-      "071_exam_explanation_language_mode.sql",
+      "071_remove_trailing_empty_question_markers.sql",
       "072_paid_device_policy.sql",
       "073_topic_practice_exam_classification.sql",
       "20260714_create_seo_blog_posts.sql",

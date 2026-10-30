@@ -42,6 +42,7 @@ const {
   invalidateQuestionAiCache,
   regradeQuestionAnswers,
 } = require("../services/examRegradeService");
+const { removeTrailingEmptyAnswerMarker } = require("../utils/questionText");
 
 // ─── P1 Security: XSS sanitization (strip HTML tags, allow plain text only) ─────
 function sanitize(str) {
@@ -52,6 +53,13 @@ function sanitize(str) {
 function sanitizeExplanation(str) {
   if (typeof str !== "string") return str;
   return str.replace(/\0/g, "").trim();
+}
+
+function sanitizeQuestionText(str, questionType) {
+  const sanitized = sanitize(str);
+  return [QUESTION_TYPES.SINGLE_CHOICE, QUESTION_TYPES.READING_ITEM].includes(questionType)
+    ? removeTrailingEmptyAnswerMarker(sanitized)
+    : sanitized;
 }
 
 function getSafeErrorLog(error) {
@@ -3242,9 +3250,9 @@ const AdminExamController = {
             examId,
             questionNumber,
             qType,
-            sanitize(normQ?.vi || ''),
-            sanitize(normQ?.cn || ''),
-            normQ?.en ? sanitize(normQ.en) : null,
+            sanitizeQuestionText(normQ?.vi || '', qType),
+            sanitizeQuestionText(normQ?.cn || '', qType),
+            normQ?.en ? sanitizeQuestionText(normQ.en, qType) : null,
             parsedPoints,
             explanation ? sanitizeExplanation(explanation) : null,
             explanationCn ? sanitizeExplanation(explanationCn) : null,
@@ -3388,11 +3396,11 @@ const AdminExamController = {
 
         if (normalizedQuestion) {
           fields.push(`question_text = $${idx++}`);
-          vals.push(sanitize(normalizedQuestion.vi));
+          vals.push(sanitizeQuestionText(normalizedQuestion.vi, qType));
           fields.push(`question_text_cn = $${idx++}`);
-          vals.push(sanitize(normalizedQuestion.cn));
+          vals.push(sanitizeQuestionText(normalizedQuestion.cn, qType));
           fields.push(`question_text_en = $${idx++}`);
-          vals.push(normalizedQuestion.en ? sanitize(normalizedQuestion.en) : null);
+          vals.push(normalizedQuestion.en ? sanitizeQuestionText(normalizedQuestion.en, qType) : null);
         }
         if (imageUrl !== undefined) {
           fields.push(`image_url = $${idx++}`);
@@ -3733,8 +3741,8 @@ const AdminExamController = {
                     RETURNING id`,
                     [
                         examId, targetPosition, qType,
-                        sanitize(normQ?.vi || ''), sanitize(normQ?.cn || ''),
-                        normQ?.en ? sanitize(normQ.en) : null,
+                        sanitizeQuestionText(normQ?.vi || '', qType), sanitizeQuestionText(normQ?.cn || '', qType),
+                        normQ?.en ? sanitizeQuestionText(normQ.en, qType) : null,
                         parsedPoints,
                         explanation ? sanitizeExplanation(explanation) : null,
                         explanationCn ? sanitizeExplanation(explanationCn) : null,
@@ -4753,8 +4761,8 @@ const AdminExamController = {
              RETURNING id`,
             [
               examId, questionNumber, QUESTION_TYPES.READING_ITEM,
-              sanitize(normQ?.vi || ''), sanitize(normQ?.cn || ''),
-              normQ?.en ? sanitize(normQ.en) : null,
+              sanitizeQuestionText(normQ?.vi || '', QUESTION_TYPES.READING_ITEM), sanitizeQuestionText(normQ?.cn || '', QUESTION_TYPES.READING_ITEM),
+              normQ?.en ? sanitizeQuestionText(normQ.en, QUESTION_TYPES.READING_ITEM) : null,
               parsedPoints,
               q.explanation ? sanitizeExplanation(q.explanation) : null,
               q.explanationCn ? sanitizeExplanation(q.explanationCn) : null,
@@ -4924,8 +4932,8 @@ const AdminExamController = {
                RETURNING id`,
               [
                 examId, questionNumber, QUESTION_TYPES.READING_ITEM,
-                sanitize(normQ?.vi || ''), sanitize(normQ?.cn || ''),
-                normQ?.en ? sanitize(normQ.en) : null,
+                sanitizeQuestionText(normQ?.vi || '', QUESTION_TYPES.READING_ITEM), sanitizeQuestionText(normQ?.cn || '', QUESTION_TYPES.READING_ITEM),
+                normQ?.en ? sanitizeQuestionText(normQ.en, QUESTION_TYPES.READING_ITEM) : null,
                 parsedPoints,
                 q.explanation ? sanitizeExplanation(q.explanation) : null,
                 q.explanationCn ? sanitizeExplanation(q.explanationCn) : null,
