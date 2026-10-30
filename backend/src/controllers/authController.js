@@ -472,7 +472,7 @@ const buildRefreshPayloadWithMfa = (user, jti = null) => {
 const createDeviceLimitPayload = (error) => ({
   success: false,
   code: "DEVICE_LIMIT_REACHED",
-  message: error.message || "Bạn đã dùng hết slot thiết bị.",
+  message: error.message || (error.paidPolicy ? "Tài khoản của bạn đã đạt giới hạn tối đa 2 thiết bị theo chính sách gói học. Vui lòng liên hệ Admin qua Zalo 0815913408 để được hỗ trợ kiểm tra hoặc cấp quyền thiết bị mới." : "Bạn đã dùng hết slot thiết bị."),
   data: {
     deviceType: error.deviceType,
     maxDevices: error.maxDevices,
@@ -483,16 +483,16 @@ const createDeviceLimitPayload = (error) => ({
     paidPolicy: Boolean(error.paidPolicy),
     attempts: Number(error.attempts || 0),
     adminOnly: Boolean(error.paidPolicy),
-    contactPhone: "0812352005",
-    contactUrl: "https://zalo.me/0812352005",
+    contactPhone: "0815913408",
+    contactUrl: "https://zalo.me/0815913408",
   },
 });
 
 const createDeviceLimitLockedPayload = (attempts = 4) => ({
   success: false,
   code: "DEVICE_LIMIT_LOCKED",
-  message: "Tài khoản đã bị khóa do vượt quá số lần thử thiết bị mới. Vui lòng liên hệ quản trị viên hoặc Zalo 0812352005.",
-  data: { attempts, contactPhone: "0812352005", contactUrl: "https://zalo.me/0812352005" },
+  message: "Tài khoản đã bị tạm khóa do vượt quá số lần thử đăng nhập thiết bị mới. Vui lòng liên hệ Admin qua Zalo 0815913408 để được hỗ trợ mở khóa.",
+  data: { attempts, contactPhone: "0815913408", contactUrl: "https://zalo.me/0815913408" },
 });
 
 const isDeviceLimitError = (error) => error?.code === "DEVICE_LIMIT_REACHED";
@@ -881,7 +881,7 @@ const login = async (req, res) => {
         }
         return res.status(409).json(createDeviceLimitPayload({
           code: "DEVICE_LIMIT_REACHED",
-          message: "Tài khoản đã đủ 2 thiết bị. Chỉ quản trị viên mới có thể xóa thiết bị đã nhớ.",
+          message: "Tài khoản của bạn đã đạt giới hạn tối đa 2 thiết bị theo chính sách gói học. Vui lòng liên hệ Admin qua Zalo 0815913408 để được hỗ trợ kiểm tra hoặc đổi thiết bị.",
           paidPolicy: true,
           attempts: Number(state.device_limit_attempts || 0),
           deviceType,

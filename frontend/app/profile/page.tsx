@@ -493,7 +493,12 @@ export default function ProfilePage() {
       setSessions(nextSessions);
       updateDeviceUsageFromSessions(nextSessions);
       showToast('Đăng xuất thiết bị thành công');
-    } catch {
+    } catch (err: any) {
+      if (err?.response?.data?.code === 'DEVICE_ADMIN_ONLY') {
+        const phone = err?.response?.data?.contactPhone || '0815913408';
+        showToast(`Tài khoản gói học được bảo vệ thiết bị. Vui lòng liên hệ Admin qua Zalo ${phone} để đổi thiết bị.`, 'error');
+        return;
+      }
       showToast('Không thể đăng xuất thiết bị', 'error');
     }
   };
@@ -507,7 +512,12 @@ export default function ProfilePage() {
       setSessions(nextSessions);
       updateDeviceUsageFromSessions(nextSessions);
       showToast('Đã đăng xuất khỏi các thiết bị khác');
-    } catch {
+    } catch (err: any) {
+      if (err?.response?.data?.code === 'DEVICE_ADMIN_ONLY') {
+        const phone = err?.response?.data?.contactPhone || '0815913408';
+        showToast(`Tài khoản gói học được bảo vệ thiết bị. Vui lòng liên hệ Admin qua Zalo ${phone} để đổi thiết bị.`, 'error');
+        return;
+      }
       showToast('Không thể đăng xuất thiết bị khác', 'error');
     }
   };
@@ -1151,6 +1161,20 @@ export default function ProfilePage() {
                         </div>
                       ))}
                     </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-4 text-xs text-blue-900 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <p className="font-medium leading-relaxed">
+                      💡 <span className="font-bold">Chính sách thiết bị:</span> Tài khoản mua gói học được giới hạn tối đa 2 thiết bị. Nếu cần gỡ bỏ hoặc đổi sang thiết bị mới, vui lòng liên hệ Admin qua Zalo <span className="font-bold">0815913408</span>.
+                    </p>
+                    <a
+                      href="https://zalo.me/0815913408"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center justify-center shrink-0 rounded-xl bg-[#0068ff] px-3.5 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-[#0055d4]"
+                    >
+                      Zalo Admin (0815913408)
+                    </a>
                   </div>
 
                   {sessionsLoading ? (

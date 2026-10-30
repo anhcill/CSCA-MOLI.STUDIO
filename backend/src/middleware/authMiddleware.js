@@ -125,8 +125,8 @@ const authMiddleware = async (req, res, next) => {
           return res.status(403).json({
             success: false,
             code: "DEVICE_LIMIT_LOCKED",
-            message: "Tài khoản đã bị khóa do vượt quá số lần thử thiết bị mới. Vui lòng liên hệ quản trị viên hoặc Zalo 0812352005.",
-            data: { attempts: Number(freshUser.device_limit_attempts || 4), contactPhone: "0812352005", contactUrl: "https://zalo.me/0812352005" },
+            message: "Tài khoản đã bị tạm khóa do vượt quá số lần thử đăng nhập thiết bị mới. Vui lòng liên hệ Admin qua Zalo 0815913408 để được hỗ trợ mở khóa.",
+            data: { attempts: Number(freshUser.device_limit_attempts || 4), contactPhone: "0815913408", contactUrl: "https://zalo.me/0815913408" },
           });
         }
         return res.status(403).json({ success: false, message: "Account disabled" });

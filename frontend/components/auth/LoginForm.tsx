@@ -31,7 +31,7 @@ import { useLanguage } from '@/context/LanguageContext';
 import SocialAuthButtons from './SocialAuthButtons';
 import TermsModal from './TermsModal';
 import TurnstileBox, { isTurnstileEnabled } from './TurnstileBox';
-import { FiArrowRight, FiLock, FiMonitor, FiShield, FiUser } from 'react-icons/fi';
+import { FiArrowRight, FiLock, FiMessageCircle, FiMonitor, FiPhone, FiShield, FiUser } from 'react-icons/fi';
 
 export default function LoginForm() {
   const router = useRouter();
@@ -82,6 +82,13 @@ export default function LoginForm() {
   const [deviceOtpSending, setDeviceOtpSending] = useState(false);
   const [selectedDeviceJti, setSelectedDeviceJti] = useState('');
   const [deviceOtpCountdown, setDeviceOtpCountdown] = useState(0);
+  const [deviceLimitNotice, setDeviceLimitNotice] = useState<{
+    isLocked?: boolean;
+    title: string;
+    message: string;
+    phone: string;
+    zaloUrl: string;
+  } | null>(null);
 
   // OTP countdown timer
   useEffect(() => {
@@ -131,6 +138,8 @@ export default function LoginForm() {
     const { name, value } = e.target;
     const sanitized = sanitizeInput(value);
     setFormData((prev) => ({ ...prev, [name]: sanitized }));
+    if (deviceLimitNotice) setDeviceLimitNotice(null);
+    if (errors.general) setErrors((prev) => ({ ...prev, general: undefined }));
     if (errors[name as keyof typeof errors]) {
       setErrors((prev) => ({ ...prev, [name]: undefined }));
     }
@@ -338,18 +347,35 @@ export default function LoginForm() {
     } catch (error: any) {
       if (error.response?.data?.code === 'DEVICE_LIMIT_LOCKED') {
         const data = error.response.data.data;
+        const phone = data?.contactPhone || '0815913408';
+        setDeviceLimitNotice({
+          isLocked: true,
+          title: 'Tài khoản đã bị tạm khóa thiết bị',
+          message: error.response.data.message || 'Tài khoản đã bị tạm khóa do vượt quá số lần thử đăng nhập thiết bị mới. Vui lòng liên hệ Admin qua Zalo để được hỗ trợ mở khóa.',
+          phone,
+          zaloUrl: data?.contactUrl || `https://zalo.me/${phone}`,
+        });
         setErrors({
-          general: `${error.response.data.message || 'Tài khoản đã bị khóa do vượt giới hạn thiết bị.'} Liên hệ quản trị viên hoặc Zalo ${data?.contactPhone || '0812352005'}.`,
+          general: `${error.response.data.message || 'Tài khoản đã bị tạm khóa do vượt giới hạn thiết bị.'} Vui lòng liên hệ Admin qua Zalo ${phone}.`,
         });
         return;
       }
       if (error.response?.data?.code === 'DEVICE_LIMIT_REACHED' && error.response?.data?.data) {
         if (error.response.data.data.paidPolicy) {
+          const phone = error.response.data.data.contactPhone || '0815913408';
+          setDeviceLimitNotice({
+            isLocked: false,
+            title: 'Vượt quá giới hạn thiết bị gói học',
+            message: error.response.data.message || 'Tài khoản của bạn đã đạt giới hạn tối đa 2 thiết bị theo chính sách gói học. Thiết bị mới này chưa được cấp phép đăng nhập.',
+            phone,
+            zaloUrl: error.response.data.data.contactUrl || `https://zalo.me/${phone}`,
+          });
           setErrors({
-            general: `${error.response.data.message || 'Tài khoản đã đủ 2 thiết bị.'} Liên hệ quản trị viên hoặc Zalo ${error.response.data.data.contactPhone || '0812352005'}.`,
+            general: `${error.response.data.message || 'Tài khoản đã đạt giới hạn tối đa thiết bị theo chính sách gói học.'} Vui lòng liên hệ Admin qua Zalo ${phone} để được hỗ trợ.`,
           });
           return;
         }
+        setDeviceLimitNotice(null);
         setDeviceLimitData(error.response.data.data as DeviceLimitData);
         setDeviceApprovalMessage('');
         setDeviceApprovalError('');
@@ -417,7 +443,37 @@ export default function LoginForm() {
       }
       if (response.success) await completeAuthData(response.data);
     } catch (error: any) {
+      if (error.response?.data?.code === 'DEVICE_LIMIT_LOCKED') {
+        const data = error.response.data.data;
+        const phone = data?.contactPhone || '0815913408';
+        setDeviceLimitNotice({
+          isLocked: true,
+          title: 'Tài khoản đã bị tạm khóa thiết bị',
+          message: error.response.data.message || 'Tài khoản đã bị tạm khóa do vượt quá số lần thử đăng nhập thiết bị mới.',
+          phone,
+          zaloUrl: data?.contactUrl || `https://zalo.me/${phone}`,
+        });
+        setErrors({
+          general: `${error.response.data.message || 'Tài khoản đã bị khóa do vượt giới hạn thiết bị.'} Vui lòng liên hệ Admin qua Zalo ${phone}.`,
+        });
+        return;
+      }
       if (error.response?.data?.code === 'DEVICE_LIMIT_REACHED' && error.response?.data?.data) {
+        if (error.response.data.data.paidPolicy) {
+          const phone = error.response.data.data.contactPhone || '0815913408';
+          setDeviceLimitNotice({
+            isLocked: false,
+            title: 'Vượt quá giới hạn thiết bị gói học',
+            message: error.response.data.message || 'Tài khoản của bạn đã đạt giới hạn tối đa 2 thiết bị theo chính sách gói học. Thiết bị mới này chưa được cấp phép đăng nhập.',
+            phone,
+            zaloUrl: error.response.data.data.contactUrl || `https://zalo.me/${phone}`,
+          });
+          setErrors({
+            general: `${error.response.data.message || 'Tài khoản đã đạt giới hạn tối đa thiết bị theo chính sách gói học.'} Vui lòng liên hệ Admin qua Zalo ${phone} để được hỗ trợ.`,
+          });
+          return;
+        }
+        setDeviceLimitNotice(null);
         const limitData = error.response.data.data as DeviceLimitData;
         setDeviceLimitData(limitData);
         setSelectedDeviceJti(limitData.targetSessionJti || '');
@@ -1015,8 +1071,43 @@ export default function LoginForm() {
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-5">
-        {errors.general && (
-          <div className="rounded-2xl border border-red-200 bg-red-50/90 px-4 py-3 text-sm text-red-700">
+        {deviceLimitNotice ? (
+          <div className="rounded-2xl border border-rose-200 bg-rose-50/95 p-4 shadow-sm dark:border-rose-900/60 dark:bg-rose-950/40">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-100 text-rose-600 dark:bg-rose-900/60 dark:text-rose-300">
+                <FiShield size={20} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h4 className="text-sm font-black text-rose-900 dark:text-rose-200">
+                  {deviceLimitNotice.title}
+                </h4>
+                <p className="mt-1 text-xs font-semibold leading-relaxed text-rose-700 dark:text-rose-300">
+                  {deviceLimitNotice.message}
+                </p>
+
+                <div className="mt-3.5 flex flex-wrap items-center gap-2">
+                  <a
+                    href={deviceLimitNotice.zaloUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-[#0068ff] px-3.5 py-2 text-xs font-black text-white shadow-sm transition hover:bg-[#0055d4] active:scale-95"
+                  >
+                    <FiMessageCircle size={15} />
+                    <span>Chat Zalo Admin ({deviceLimitNotice.phone})</span>
+                  </a>
+                  <a
+                    href={`tel:${deviceLimitNotice.phone}`}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-rose-300 bg-white px-3 py-2 text-xs font-bold text-rose-800 transition hover:bg-rose-50 dark:border-rose-800 dark:bg-slate-900 dark:text-rose-200 dark:hover:bg-slate-800 active:scale-95"
+                  >
+                    <FiPhone size={13} />
+                    <span>Gọi {deviceLimitNotice.phone}</span>
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : errors.general ? (
+          <div className="rounded-2xl border border-red-200 bg-red-50/90 px-4 py-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300">
             {errors.general}
             {unverifiedEmail && (
               <button
@@ -1029,7 +1120,7 @@ export default function LoginForm() {
               </button>
             )}
           </div>
-        )}
+        ) : null}
 
         <div>
           <label htmlFor="email" className="mb-2 block text-sm font-black text-[#342a24]">{t('auth.identifier')}</label>

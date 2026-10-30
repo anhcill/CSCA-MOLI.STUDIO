@@ -148,7 +148,7 @@ export default function NotificationBell() {
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={handleOpen}
-        className="relative p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
+        className="relative rounded-xl p-2 text-gray-500 transition-colors hover:bg-gray-100 hover:text-violet-600 dark:text-gray-300 dark:hover:bg-gray-800/70 dark:hover:text-violet-400"
         aria-label="Thông báo"
       >
         <FiBell size={20} />
@@ -160,10 +160,10 @@ export default function NotificationBell() {
       </button>
 
       {open && (
-        <div className="fixed inset-x-3 top-[calc(env(safe-area-inset-top)+4rem)] z-[9999] max-h-[calc(100svh-env(safe-area-inset-top)-5rem)] overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-2xl sm:absolute sm:left-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-80 sm:max-h-none">
+        <div className="fixed inset-x-3 top-[calc(env(safe-area-inset-top)+4rem)] z-[9999] max-h-[calc(100svh-env(safe-area-inset-top)-5rem)] overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-2xl transition-all duration-150 animate-in fade-in slide-in-from-top-2 dark:border-gray-800 dark:bg-gray-900 sm:absolute sm:left-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-88 sm:max-h-none">
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-            <span className="font-semibold text-gray-800 text-sm">Thông báo</span>
+          <div className="flex items-center justify-between border-b border-gray-100 bg-white/95 px-4 py-3 backdrop-blur-md dark:border-gray-800 dark:bg-gray-900/95">
+            <span className="text-sm font-bold text-gray-900 dark:text-white">Thông báo</span>
             <button
               onClick={async () => {
                 setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
@@ -178,57 +178,59 @@ export default function NotificationBell() {
                 }
                 try { await markAllRead(); } catch { /* silent */ }
               }}
-              className="text-xs text-violet-600 hover:text-violet-800 font-medium"
+              className="text-xs font-semibold text-violet-600 transition-colors hover:text-violet-800 dark:text-violet-400 dark:hover:text-violet-300"
             >
               Đọc tất cả
             </button>
           </div>
 
           {/* List */}
-          <div className="max-h-[calc(100svh-env(safe-area-inset-top)-9rem)] overflow-y-auto overscroll-contain divide-y divide-gray-50 sm:max-h-96">
+          <div className="max-h-[calc(100svh-env(safe-area-inset-top)-9rem)] divide-y divide-gray-100 overflow-y-auto overscroll-contain dark:divide-gray-800/80 sm:max-h-96">
             {loading && (
-              <div className="py-8 text-center text-sm text-gray-400">Đang tải...</div>
+              <div className="py-8 text-center text-sm font-medium text-gray-400 dark:text-gray-500">Đang tải...</div>
             )}
             {!loading && notifications.length === 0 && (
-              <div className="py-8 text-center text-sm text-gray-400">
+              <div className="py-8 text-center text-sm font-medium text-gray-400 dark:text-gray-500">
                 Không có thông báo nào
               </div>
             )}
             {!loading && notifications.map(n => (
-                <button
-                  key={n.id}
-                  onClick={() => handleClickNotification(n)}
-                  className={`w-full flex items-start gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors ${!n.is_read ? 'bg-violet-50/60' : ''}`}
-                >
-                  {/* Avatar */}
-                  <img
-                    src={n.actor_avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(n.actor_name || 'U')}&size=36`}
-                    alt={n.actor_name}
-                    className="w-9 h-9 rounded-full object-cover flex-shrink-0 mt-0.5"
-                  />
-                  <div className="flex-1 min-w-0">
-                    {n.type === 'admin_announcement' ? (
-                      <>
-                        <p className="text-xs font-semibold text-gray-900">{n.title || 'Thông báo từ MOLY.STUDIO'}</p>
-                        <p className="mt-1 whitespace-pre-line text-xs leading-snug text-gray-600">{n.message}</p>
-                      </>
-                    ) : (
-                      <p className="text-xs text-gray-700 leading-snug">
-                        <span className="font-semibold text-gray-900">{n.actor_name}</span>
-                        {' '}{TYPE_LABEL[n.type] || 'đã tương tác với bài viết của bạn'}
-                      </p>
-                    )}
-                    {n.post_preview && (
-                      <p className="text-xs text-gray-400 truncate mt-0.5">
-                        "{n.post_preview?.slice(0, 60)}{(n.post_preview?.length ?? 0) > 60 ? '…' : ''}"
-                      </p>
-                    )}
-                    <p className="text-[11px] text-violet-500 mt-1">{timeAgo(n.created_at)}</p>
-                  </div>
-                  {!n.is_read && (
-                    <span className="w-2 h-2 bg-violet-500 rounded-full flex-shrink-0 mt-2" />
+              <button
+                key={n.id}
+                onClick={() => handleClickNotification(n)}
+                className={`w-full flex items-start gap-3 px-4 py-3.5 text-left transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/60 ${
+                  !n.is_read ? 'bg-violet-50/60 dark:bg-violet-950/25' : 'bg-transparent'
+                }`}
+              >
+                {/* Avatar */}
+                <img
+                  src={n.actor_avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(n.actor_name || 'U')}&size=36`}
+                  alt={n.actor_name}
+                  className="mt-0.5 h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-gray-200 dark:ring-gray-700"
+                />
+                <div className="min-w-0 flex-1">
+                  {n.type === 'admin_announcement' ? (
+                    <>
+                      <p className="text-xs font-bold text-gray-900 dark:text-white">{n.title || 'Thông báo từ MOLY.STUDIO'}</p>
+                      <p className="mt-1 whitespace-pre-line text-xs leading-relaxed text-gray-600 dark:text-gray-300">{n.message}</p>
+                    </>
+                  ) : (
+                    <p className="text-xs leading-snug text-gray-700 dark:text-gray-300">
+                      <span className="font-bold text-gray-900 dark:text-white">{n.actor_name}</span>
+                      {' '}{TYPE_LABEL[n.type] || 'đã tương tác với bài viết của bạn'}
+                    </p>
                   )}
-                </button>
+                  {n.post_preview && (
+                    <p className="mt-1 truncate text-xs italic text-gray-400 dark:text-gray-500">
+                      "{n.post_preview?.slice(0, 60)}{(n.post_preview?.length ?? 0) > 60 ? '…' : ''}"
+                    </p>
+                  )}
+                  <p className="mt-1.5 text-[11px] font-semibold text-violet-600 dark:text-violet-400">{timeAgo(n.created_at)}</p>
+                </div>
+                {!n.is_read && (
+                  <span className="mt-2 h-2 w-2 shrink-0 rounded-full bg-violet-600 shadow-sm dark:bg-violet-400" />
+                )}
+              </button>
             ))}
           </div>
         </div>

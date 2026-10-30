@@ -7,7 +7,10 @@ const { hasPaidEntitlementHistory } = require("./paidEntitlementService");
 class DeviceLimitError extends Error {
   constructor({ userId, deviceType, maxDevices, sessions, paidPolicy = false, locked = false, attempts = 0 }) {
     const label = deviceType === "mobile" ? "điện thoại" : "máy tính";
-    super(`Bạn đã dùng hết ${maxDevices} slot ${label}. Vui lòng đăng xuất một ${label} cũ trước khi đăng nhập thiết bị mới.`);
+    const message = paidPolicy
+      ? `Tài khoản của bạn đã đạt giới hạn tối đa ${maxDevices} thiết bị theo chính sách gói học. Vui lòng liên hệ Admin qua Zalo 0815913408 để được hỗ trợ kiểm tra hoặc cấp quyền thiết bị mới.`
+      : `Bạn đã dùng hết ${maxDevices} slot ${label}. Vui lòng đăng xuất một ${label} cũ trước khi đăng nhập thiết bị mới.`;
+    super(message);
     this.name = "DeviceLimitError";
     this.code = "DEVICE_LIMIT_REACHED";
     this.statusCode = 409;
