@@ -123,9 +123,17 @@ export default function AIExamAnalysis({ attemptId, aiAnalysis, aiLoading, onRef
     return (
         <div className="overflow-hidden rounded-2xl border border-purple-200 bg-gradient-to-br from-purple-50 to-blue-50 shadow-sm dark:border-slate-700 dark:bg-slate-900/95 dark:bg-none">
             {/* Header */}
-            <button
+            <div
                 onClick={() => setExpanded(!expanded)}
-                className="w-full flex items-center justify-between p-5 hover:bg-purple-100/50 transition-colors dark:hover:bg-violet-950/40"
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setExpanded(!expanded);
+                    }
+                }}
+                className="w-full flex items-center justify-between p-5 hover:bg-purple-100/50 transition-colors dark:hover:bg-violet-950/40 cursor-pointer select-none"
             >
                 <div className="flex items-center gap-3">
                     <div className="w-9 h-9 bg-purple-600 rounded-xl flex items-center justify-center shadow-md">
@@ -137,13 +145,17 @@ export default function AIExamAnalysis({ attemptId, aiAnalysis, aiLoading, onRef
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
-                    <button onClick={(e) => { e.stopPropagation(); onRefresh(); }}
-                        className="p-2 hover:bg-purple-200 rounded-lg transition-colors dark:hover:bg-violet-900/60" title="Làm mới">
+                    <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); onRefresh(); }}
+                        className="p-2 hover:bg-purple-200 rounded-lg transition-colors dark:hover:bg-violet-900/60"
+                        title="Làm mới"
+                    >
                         <FiRefreshCw size={16} className="text-purple-700" />
                     </button>
                     <FiAlertCircle size={18} className={`text-purple-400 transition-transform ${expanded ? 'rotate-180' : ''}`} />
                 </div>
-            </button>
+            </div>
 
             {expanded && (
                 <div className="px-5 pb-5 space-y-5">
