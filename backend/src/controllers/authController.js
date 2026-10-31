@@ -572,8 +572,11 @@ const completeLoginForUser = async (req, user, deviceInfo = "Unknown", activityA
       deviceId: getClientDeviceId(req),
     });
   } catch (error) {
-    if (!isDeviceLimitError(error)) throw error;
-    if (error.paidPolicy) {
+    if (isAdminUser(user)) {
+      console.warn(`[AUTH] Admin user ${user.id} bypassed DeviceLimitError: ${error.message}`);
+    } else {
+      if (!isDeviceLimitError(error)) throw error;
+      if (error.paidPolicy) {
       const state = await DeviceSessionService.recordDeviceLimitViolation(user.id);
       if (state.device_limit_locked_at) {
         await DeviceSessionService.removeAllUserSessions(user.id).catch(() => {});
@@ -595,6 +598,7 @@ const completeLoginForUser = async (req, user, deviceInfo = "Unknown", activityA
     error.approveUrl = buildDeviceApprovalUrl(deviceRequest.challengeToken);
     error.expiresAt = deviceRequest.expiresAt;
     throw error;
+    }
   }
 
   UserActivity.log(user.id, activityAction, {
@@ -2257,16 +2261,20 @@ const devLogin = async (req, res) => {
 
     const jti = crypto.randomBytes(16).toString("hex");
     const expiresAt = new Date(Date.now() + (parseInt(process.env.JWT_REFRESH_EXPIRES_MS || "604800000", 10)));
-    await DeviceSessionService.registerSession({
-      userId: user.id,
-      jti,
-      deviceInfo: "Local Dev Environment",
-      deviceType: "desktop",
-      ipAddress: getClientIp(req),
-      userAgent: req.get("User-Agent") || "Local Dev",
-      expiresAt,
-      deviceId: getClientDeviceId(req),
-    });
+    try {
+      await DeviceSessionService.registerSession({
+        userId: user.id,
+        jti,
+        deviceInfo: "Local Dev Environment",
+        deviceType: "desktop",
+        ipAddress: getClientIp(req),
+        userAgent: req.get("User-Agent") || "Local Dev",
+        expiresAt,
+        deviceId: getClientDeviceId(req),
+      });
+    } catch (e) {
+      console.warn("[devLogin] registerSession ignored:", e.message);
+    }
 
     const data = await buildCompletedAuthData(user, jti);
     return res.json({

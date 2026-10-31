@@ -48,7 +48,19 @@ class DeviceSessionService {
     return crypto.createHash('sha256').update(stable).digest('hex');
   }
 
+  static async isUserAdmin(userId) {
+    if (!userId) return false;
+    try {
+      const { rows } = await db.query("SELECT role FROM users WHERE id = $1 LIMIT 1", [userId]);
+      const role = rows[0]?.role;
+      return role === "admin" || role === "super_admin" || (typeof role === "string" && role.endsWith("_admin"));
+    } catch {
+      return false;
+    }
+  }
+
   static async hasPaidDevicePolicy(userId) {
+    if (await this.isUserAdmin(userId)) return false;
     try {
       return await hasPaidEntitlementHistory(userId);
     } catch (error) {
@@ -82,6 +94,9 @@ class DeviceSessionService {
   }
 
   static async getDeviceLimits(userId) {
+    if (await this.isUserAdmin(userId)) {
+      return { mobile: 9999, desktop: 9999, hasActivePackage: true };
+    }
     const hasActivePackage = await this.hasActivePackage(userId);
     return {
       mobile: hasActivePackage ? 3 : 2,
@@ -91,11 +106,15 @@ class DeviceSessionService {
   }
 
   static async getDevicePolicy(userId) {
+    if (await this.isUserAdmin(userId)) {
+      return { paid: false, maxDevices: 9999, isAdmin: true };
+    }
     const paid = await this.hasPaidDevicePolicy(userId);
     return { paid, maxDevices: paid ? 2 : null };
   }
 
   static async getUserMaxDevices(userId, deviceType = "desktop") {
+    if (await this.isUserAdmin(userId)) return 9999;
     const limits = await this.getDeviceLimits(userId);
     return limits[deviceType] || limits.desktop;
   }
@@ -167,6 +186,9 @@ class DeviceSessionService {
   }
 
   static async recordDeviceLimitViolation(userId) {
+    if (await this.isUserAdmin(userId)) {
+      return { device_limit_attempts: 0, is_active: true, is_banned: false };
+    }
     const { rows } = await db.query(
       `UPDATE users
        SET device_limit_attempts = COALESCE(device_limit_attempts, 0) + 1,
@@ -205,6 +227,17 @@ class DeviceSessionService {
   }
 
   static async checkLoginAllowed(userId, deviceType = "desktop") {
+    if (await this.isUserAdmin(userId)) {
+      return {
+        allowed: true,
+        paidPolicy: false,
+        locked: false,
+        attempts: 0,
+        maxDevices: 9999,
+        sessions: [],
+        deviceType,
+      };
+    }
     const policy = await this.getDevicePolicy(userId);
     if (policy.paid) {
       await this.hydrateRememberedDevices(userId);
@@ -289,7 +322,17 @@ class DeviceSessionService {
 
   static async registerSession({ userId, jti, deviceInfo, deviceType, ipAddress, userAgent, expiresAt, previousSessionToken, deviceId }) {
     const resolvedDeviceType = deviceType || this.getDeviceTypeFromUserAgent(userAgent || deviceInfo);
-    const paidPolicy = await this.hasPaidDevicePolicy(userId);
+    const isAdmin = await this.isUserAdmin(userId);
+    if (isAdmin) {
+      await db.query(
+        `UPDATE users
+         SET device_limit_attempts = 0,
+             device_limit_locked_at = NULL
+         WHERE id = $1`,
+        [userId]
+      ).catch(() => {});
+    }
+    const paidPolicy = !isAdmin && (await this.hasPaidDevicePolicy(userId));
     const deviceKey = this.getDeviceKey({ deviceId, ipAddress, userAgent, deviceInfo });
     if (paidPolicy) {
       const client = await db.pool.connect();
@@ -318,7 +361,7 @@ class DeviceSessionService {
              WHERE user_id = $1 AND revoked_at IS NULL
              ORDER BY last_seen_at DESC, id DESC`, [userId],
           );
-          if (active.rows.length >= 2) {
+          if (active.rows.length >= 2 && !isAdmin) {
             const error = new DeviceLimitError({ userId, deviceType: resolvedDeviceType, maxDevices: 2, sessions: active.rows, paidPolicy: true, attempts: Number(userState.attempts || 0) });
             throw error;
           }
@@ -427,7 +470,7 @@ class DeviceSessionService {
          ORDER BY last_active DESC`,
         [userId, resolvedDeviceType],
       );
-      if (active.rows.length >= maxDevices) {
+      if (active.rows.length >= maxDevices && !isAdmin) {
         throw new DeviceLimitError({
           deviceType: resolvedDeviceType,
           maxDevices,
