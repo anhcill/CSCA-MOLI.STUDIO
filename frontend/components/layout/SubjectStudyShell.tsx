@@ -3,15 +3,11 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import {
-  FiBell,
   FiChevronLeft,
   FiChevronRight,
   FiClock,
-  FiEdit3,
   FiFileText,
   FiHome,
-  FiLayers,
-  FiSearch,
   FiSettings,
   FiTarget,
   FiTrendingUp,
@@ -50,10 +46,10 @@ interface SubjectStudyShellProps {
   children: React.ReactNode;
   className?: string;
   showFeatureCards?: boolean;
+  headerAction?: React.ReactNode;
 }
 
 const DEFAULT_SUBTITLE = 'Luyện tập theo đề, xem lịch sử điểm và để AI phân tích lộ trình cải thiện sau mỗi lần làm bài.';
-const DEFAULT_SEARCH_PLACEHOLDER = 'Tìm nhanh đề thi... (nhấn / để focus)';
 
 const SIDE_LINKS = [
   { key: 'de-mo-phong', icon: FiHome, labelKey: 'course.section.mockExam', href: 'exam' },
@@ -65,13 +61,6 @@ const SIDE_LINKS = [
   { key: 'ly-thuyet', icon: BsLightbulb, labelKey: 'course.section.theory', href: '/ly-thuyet' },
   { key: 'lo-trinh', icon: FiTrendingUp, labelKey: 'course.section.progress', href: '/lo-trinh' },
   { key: 'cai-dat', icon: FiSettings, labelKey: 'course.section.settings', href: '/profile' },
-] as const;
-
-const FEATURE_CARDS = [
-  { icon: FiFileText, titleKey: 'course.feature.practiceTitle', textKey: 'course.feature.practiceText' },
-  { icon: FiLayers, titleKey: 'course.feature.progressTitle', textKey: 'course.feature.progressText' },
-  { icon: HiOutlineSparkles, titleKey: 'course.feature.aiTitle', textKey: 'course.feature.aiText' },
-  { icon: FiEdit3, titleKey: 'course.feature.realExamTitle', textKey: 'course.feature.realExamText' },
 ] as const;
 
 const SUBJECT_LABEL_KEYS: Record<string, string> = {
@@ -111,10 +100,9 @@ export default function SubjectStudyShell({
   subtitle = DEFAULT_SUBTITLE,
   subjectSlug,
   activeSection,
-  searchPlaceholder = DEFAULT_SEARCH_PLACEHOLDER,
   children,
   className = '',
-  showFeatureCards = false,
+  headerAction,
 }: SubjectStudyShellProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const { t, format } = useLanguage();
@@ -128,9 +116,6 @@ export default function SubjectStudyShell({
   const localizedSubtitle = subtitle === DEFAULT_SUBTITLE
     ? t('course.defaultSubtitle')
     : subtitle;
-  const localizedSearchPlaceholder = searchPlaceholder === DEFAULT_SEARCH_PLACEHOLDER
-    ? t('course.searchPlaceholder')
-    : searchPlaceholder;
   const visibleSideLinks = SIDE_LINKS.filter(
     (link) => link.key !== 'luyen-chu-de' || FEATURE_FLAGS.topicPractice,
   );
@@ -152,12 +137,13 @@ export default function SubjectStudyShell({
   };
 
   return (
-    <div className="relative min-h-screen overflow-x-hidden bg-[#fff8f4] text-slate-900 dark:bg-slate-950">
+    <div className="relative min-h-screen overflow-x-hidden bg-[#fdfaf7] text-slate-800 dark:bg-[#0b1120] dark:text-slate-100">
       <div
-        className="pointer-events-none fixed inset-0 z-0 bg-cover bg-center bg-no-repeat dark:hidden"
+        className="pointer-events-none fixed inset-0 z-0 bg-cover bg-center bg-no-repeat opacity-90 dark:hidden"
         style={{ backgroundImage: "url('/images/study-bg-20260705b.png')" }}
       />
-      <div className="pointer-events-none fixed inset-0 z-0 bg-gradient-to-b from-white/40 via-white/10 to-white/45 dark:hidden" />
+      <div className="pointer-events-none fixed inset-0 z-0 bg-gradient-to-br from-rose-50/45 via-white/35 to-sky-50/45 dark:hidden" />
+      <div className="pointer-events-none fixed inset-0 z-0 hidden dark:block dark:bg-[radial-gradient(ellipse_at_top_right,_rgba(244,63,94,0.09),_transparent_55%),radial-gradient(ellipse_at_bottom_left,_rgba(56,189,248,0.07),_transparent_55%)]" />
       <style>{`
         .subject-study-sidebar {
           width: 16rem;
@@ -185,8 +171,8 @@ export default function SubjectStudyShell({
             max-width: none;
             margin-left: 16rem;
             margin-right: 0;
-            padding-left: 2rem;
-            padding-right: 1.5rem;
+            padding-left: 2.25rem;
+            padding-right: 2.25rem;
           }
 
           .subject-study-main--collapsed {
@@ -194,24 +180,29 @@ export default function SubjectStudyShell({
             max-width: 1600px;
             margin-left: auto;
             margin-right: auto;
-            padding-left: 2rem;
+            padding-left: 2.25rem;
+            padding-right: 2.25rem;
           }
         }
       `}</style>
 
-      <aside className={`subject-study-sidebar fixed inset-y-0 left-0 z-30 hidden border-r border-rose-100/80 bg-white/80 px-4 py-5 shadow-[12px_0_40px_rgba(127,29,29,0.06)] backdrop-blur-xl transition-transform duration-300 ease-out dark:border-slate-800 dark:bg-[#0b1628]/95 dark:shadow-none xl:block ${sidebarCollapsed ? '-translate-x-full' : 'translate-x-0'}`}>
+      <aside className={`subject-study-sidebar fixed inset-y-0 left-0 z-30 hidden border-r border-rose-100/80 bg-white/85 px-4 py-6 shadow-[8px_0_32px_-8px_rgba(15,23,42,0.05)] backdrop-blur-2xl transition-transform duration-300 ease-out dark:border-white/[0.07] dark:bg-[#0f172a]/90 dark:shadow-[8px_0_32px_-8px_rgba(0,0,0,0.45)] xl:block ${sidebarCollapsed ? '-translate-x-full' : 'translate-x-0'}`}>
         <button
           type="button"
           onClick={toggleSidebar}
           aria-label="Thu gọn thanh chức năng"
           title="Thu gọn thanh chức năng"
-          className="absolute -right-4 top-1/2 z-40 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-rose-100 bg-white text-slate-500 shadow-lg transition hover:border-red-200 hover:bg-red-50 hover:text-red-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-red-500/50 dark:hover:bg-red-500/15 dark:hover:text-red-300"
+          className="absolute -right-4 top-1/2 z-40 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-rose-100/90 bg-white text-slate-500 shadow-md transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600 dark:border-slate-700/80 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-rose-500/40 dark:hover:bg-rose-500/15 dark:hover:text-rose-300"
         >
           <FiChevronLeft />
         </button>
-        <Link href="/" className="mb-8 flex items-center gap-2 text-2xl font-black text-red-600">
-          <HiOutlineSparkles className="text-red-600" />
-          MOLY
+        <Link href="/" className="mb-8 flex items-center gap-2.5 px-2 text-2xl font-black tracking-tight">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-rose-500 to-red-600 text-white shadow-sm shadow-rose-500/25">
+            <HiOutlineSparkles className="text-lg" />
+          </span>
+          <span className="bg-gradient-to-r from-rose-600 to-red-500 bg-clip-text text-transparent dark:from-rose-400 dark:to-amber-200">
+            MOLY
+          </span>
         </Link>
         <nav className="space-y-1.5">
           {visibleSideLinks.map((item) => {
@@ -221,10 +212,10 @@ export default function SubjectStudyShell({
               <Link
                 key={item.key}
                 href={getScopedHref(item.href, normalizedSubject)}
-                className={`flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-bold transition ${
+                className={`flex items-center gap-3 rounded-2xl px-3.5 py-3 text-sm font-bold transition-all ${
                   active
-                    ? 'bg-red-50 text-red-600 shadow-sm dark:bg-red-500/15 dark:text-red-300'
-                    : 'text-slate-500 hover:bg-rose-50 hover:text-red-600 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-red-300'
+                    ? 'bg-gradient-to-r from-rose-500/12 via-red-500/8 to-transparent text-rose-600 ring-1 ring-rose-200/70 shadow-sm dark:from-rose-500/20 dark:via-rose-500/10 dark:to-transparent dark:text-rose-300 dark:ring-rose-500/30'
+                    : 'text-slate-500 hover:bg-rose-50/70 hover:text-rose-600 dark:text-slate-400 dark:hover:bg-slate-800/60 dark:hover:text-slate-200'
                 }`}
               >
                 <Icon className="text-base" />
@@ -233,14 +224,17 @@ export default function SubjectStudyShell({
             );
           })}
         </nav>
-        <div className="absolute bottom-5 left-4 right-4 overflow-hidden rounded-2xl border border-rose-100/80 bg-white/70 p-4 shadow-sm backdrop-blur-xl dark:border-slate-700 dark:bg-slate-900/75 dark:shadow-none">
-          <div className="mb-2 text-xs font-black text-red-600">{t('course.aiCompanionTitle')}</div>
+        <div className="absolute bottom-5 left-4 right-4 overflow-hidden rounded-2xl border border-rose-100/90 bg-gradient-to-br from-rose-50/85 via-white/95 to-amber-50/50 p-4 shadow-sm backdrop-blur-xl dark:border-white/[0.08] dark:from-slate-800/85 dark:via-slate-900/90 dark:to-rose-950/30 dark:shadow-none">
+          <div className="mb-1.5 flex items-center gap-1.5 text-xs font-extrabold text-rose-600 dark:text-rose-300">
+            <HiOutlineSparkles className="text-sm" />
+            <span>{t('course.aiCompanionTitle')}</span>
+          </div>
           <p className="text-[11px] font-medium leading-relaxed text-slate-500 dark:text-slate-300">
             {t('course.aiCompanionDesc')}
           </p>
           <Link
             href={buildSubjectScopedHref('/lo-trinh', normalizedSubject || undefined)}
-            className="mt-3 inline-flex rounded-lg bg-red-600 px-3 py-2 text-[11px] font-black text-white shadow-sm transition hover:bg-red-700"
+            className="mt-3 inline-flex items-center gap-1 rounded-xl bg-gradient-to-r from-rose-500 to-red-600 px-3.5 py-2 text-[11px] font-bold text-white shadow-sm shadow-rose-500/20 transition hover:from-rose-600 hover:to-red-700"
           >
             {t('course.exploreNow')} →
           </Link>
@@ -253,54 +247,52 @@ export default function SubjectStudyShell({
           onClick={toggleSidebar}
           aria-label="Mở thanh chức năng"
           title="Mở thanh chức năng"
-          className="fixed left-3 top-1/2 z-40 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-rose-100 bg-white text-slate-700 shadow-xl transition hover:border-red-200 hover:bg-red-50 hover:text-red-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:shadow-none dark:hover:border-red-500/50 dark:hover:bg-red-500/15 dark:hover:text-red-300 xl:flex"
+          className="fixed left-3 top-1/2 z-40 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-rose-100 bg-white text-slate-700 shadow-xl transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:shadow-none dark:hover:border-rose-500/50 dark:hover:bg-rose-500/15 dark:hover:text-rose-300 xl:flex"
         >
           <FiChevronRight />
         </button>
       )}
 
       <main
-        className={`subject-study-main relative z-10 py-4 transition-[margin,width,padding] duration-300 ease-out ${sidebarCollapsed ? 'subject-study-main--collapsed' : ''} ${className}`}
+        className={`subject-study-main relative z-10 py-5 pb-12 transition-[margin,width,padding] duration-300 ease-out ${sidebarCollapsed ? 'subject-study-main--collapsed' : ''} ${className}`}
       >
-        <header className="mb-5 flex flex-col gap-4 rounded-2xl border border-white/80 bg-white/75 px-5 py-4 shadow-[0_10px_30px_rgba(127,29,29,0.08)] backdrop-blur-xl dark:border-slate-800 dark:bg-[#111b2d]/90 dark:shadow-none lg:flex-row lg:items-center">
-          <div className="min-w-0 flex-1">
-            <div className="mb-2 flex flex-wrap items-center gap-3">
-              <BackButton fallbackHref="/" />
-              {subjectMeta && (
-                <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wide text-red-500">
-                  <span>{subjectMeta.icon}</span>
-                  <span>{subjectMeta.label}</span>
-                </div>
-              )}
+        <header className="relative mb-6 overflow-hidden rounded-3xl border border-rose-100/80 bg-white/85 px-5 py-5 shadow-[0_12px_32px_-8px_rgba(15,23,42,0.05)] backdrop-blur-xl dark:border-white/[0.07] dark:bg-[#131c31]/85 dark:shadow-[0_12px_32px_-8px_rgba(0,0,0,0.35)] sm:px-7 sm:py-6">
+          <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-gradient-to-br from-rose-200/35 via-amber-100/25 to-transparent blur-2xl dark:from-rose-500/15 dark:via-sky-500/10 dark:to-transparent" />
+          <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="min-w-0 flex-1">
+              <div className="mb-2.5 flex flex-wrap items-center gap-2.5">
+                <BackButton fallbackHref="/" />
+                {subjectMeta && (
+                  <div className="inline-flex items-center gap-1.5 rounded-full border border-rose-200/70 bg-rose-50/80 px-3.5 py-1 text-xs font-bold tracking-wide text-rose-600 dark:border-rose-500/30 dark:bg-rose-500/15 dark:text-rose-300">
+                    <span>{subjectMeta.icon}</span>
+                    <span>{subjectMeta.label}</span>
+                  </div>
+                )}
+                <span className="hidden items-center gap-1.5 rounded-full border border-sky-200/60 bg-sky-50/70 px-3 py-1 text-[11px] font-semibold text-sky-700 dark:border-sky-500/25 dark:bg-sky-500/10 dark:text-sky-300 sm:inline-flex">
+                  <HiOutlineSparkles className="text-xs" />
+                  CSCA Academic Space
+                </span>
+              </div>
+              <div>
+                <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white sm:text-[28px]">
+                  {localizedTitle}
+                </h1>
+                <p className="mt-1.5 max-w-3xl text-sm font-medium leading-relaxed text-slate-500 dark:text-slate-300">
+                  {localizedSubtitle}
+                </p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-2xl font-black tracking-tight text-slate-950 dark:text-slate-50 sm:text-3xl">
-                {localizedTitle} <span className="text-red-500">⚡</span>
-              </h1>
-              <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-300">{localizedSubtitle}</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3 lg:shrink-0">
-            <div className="hidden min-w-[360px] items-center gap-2 rounded-xl border border-rose-100 bg-white/80 px-4 py-2.5 text-sm text-slate-400 shadow-sm dark:border-slate-700 dark:bg-slate-950/70 dark:text-slate-400 dark:shadow-none lg:flex">
-              <FiSearch />
-              <span>{localizedSearchPlaceholder}</span>
-            </div>
-            <button
-              type="button"
-              aria-label="Thông báo"
-              className="hidden h-10 w-10 items-center justify-center rounded-full border border-rose-100 bg-white/80 text-slate-500 shadow-sm transition hover:text-red-600 dark:border-slate-700 dark:bg-slate-950/70 dark:text-slate-300 dark:shadow-none dark:hover:text-red-300 lg:flex"
-            >
-              <FiBell />
-            </button>
-            <div className="hidden h-10 w-10 items-center justify-center rounded-full bg-red-600 text-sm font-black text-white shadow-sm lg:flex">
-              M
-            </div>
+            {headerAction && (
+              <div className="flex shrink-0 items-center gap-3">
+                {headerAction}
+              </div>
+            )}
           </div>
         </header>
 
         <nav
           aria-label="Chức năng môn học"
-          className="-mx-4 mb-5 flex gap-2 overflow-x-auto px-4 pb-2 xl:hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          className="-mx-4 mb-6 flex gap-2 overflow-x-auto px-4 pb-2 xl:hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
           {visibleSideLinks.map((item) => {
             const Icon = item.icon;
@@ -309,10 +301,10 @@ export default function SubjectStudyShell({
               <Link
                 key={item.key}
                 href={getScopedHref(item.href, normalizedSubject)}
-                className={`flex min-h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-2xl border px-3 py-2 text-xs font-black shadow-sm transition ${
+                className={`flex min-h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-2xl border px-3.5 py-2 text-xs font-bold shadow-sm transition ${
                   active
-                    ? 'border-red-200 bg-red-600 text-white'
-                    : 'border-rose-100 bg-white/80 text-slate-600 hover:border-red-200 hover:bg-red-50 hover:text-red-600 dark:border-slate-700 dark:bg-[#111b2d] dark:text-slate-300 dark:hover:border-red-500/50 dark:hover:bg-red-500/15 dark:hover:text-red-200'
+                    ? 'border-rose-300 bg-gradient-to-r from-rose-500 to-red-600 text-white shadow-rose-500/20'
+                    : 'border-rose-100/90 bg-white/85 text-slate-600 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600 dark:border-white/[0.08] dark:bg-[#131c31]/90 dark:text-slate-300 dark:hover:border-rose-500/40 dark:hover:bg-rose-500/15 dark:hover:text-rose-200'
                 }`}
               >
                 <Icon className="shrink-0 text-sm" />
@@ -323,23 +315,6 @@ export default function SubjectStudyShell({
         </nav>
 
         {children}
-
-        {showFeatureCards && (
-          <section className="mt-5 grid gap-4 md:grid-cols-4">
-            {FEATURE_CARDS.map((item) => {
-              const Icon = item.icon;
-              return (
-                <div key={item.titleKey} className="rounded-2xl border border-rose-100/80 bg-white/75 p-4 shadow-sm backdrop-blur-xl dark:border-slate-800 dark:bg-[#111b2d]/90 dark:shadow-none">
-                  <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-red-50 text-red-600 dark:bg-red-500/15 dark:text-red-300">
-                    <Icon />
-                  </div>
-                  <div className="text-sm font-black text-slate-800 dark:text-slate-100">{t(item.titleKey)}</div>
-                  <p className="mt-1 text-xs font-medium leading-relaxed text-slate-500 dark:text-slate-300">{t(item.textKey)}</p>
-                </div>
-              );
-            })}
-          </section>
-        )}
       </main>
     </div>
   );
