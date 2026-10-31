@@ -1,5 +1,14 @@
-const { Pool } = require("pg");
+process.env.TZ = process.env.TZ || "UTC";
+const { Pool, types } = require("pg");
 require("dotenv").config();
+
+// Railway PostgreSQL runs in Etc/UTC. Parse TIMESTAMP WITHOUT TIME ZONE (OID 1114)
+// as UTC so local machines in UTC+7 do not shift attempt.start_time back by 7 hours.
+types.setTypeParser(1114, (value) => {
+  if (!value) return null;
+  const iso = String(value).includes("T") ? String(value) : String(value).replace(" ", "T");
+  return new Date(iso.endsWith("Z") || /[+-]\d{2}:?\d{2}$/.test(iso) ? iso : `${iso}Z`);
+});
 
 // ====================================
 // PostgreSQL Connection Pool

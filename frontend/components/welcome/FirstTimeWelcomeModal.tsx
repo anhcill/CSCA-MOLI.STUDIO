@@ -46,8 +46,7 @@ export default function FirstTimeWelcomeModal({
     setIsVisible(false);
     if (onClose) {
       onClose();
-    }
-    if (!isPreview) {
+    } else if (!isPreview) {
       router.push('/');
     }
   }, [onClose, isPreview, router]);
@@ -61,9 +60,8 @@ export default function FirstTimeWelcomeModal({
 
     const timer = setInterval(() => {
       setProgress((prev) => {
-        if (prev >= 100) {
+        if (prev + step >= 100) {
           clearInterval(timer);
-          handleDismiss();
           return 100;
         }
         return prev + step;
@@ -71,7 +69,13 @@ export default function FirstTimeWelcomeModal({
     }, intervalMs);
 
     return () => clearInterval(timer);
-  }, [isVisible, config.autoTransitionEnabled, durationSec, handleDismiss]);
+  }, [isVisible, config.autoTransitionEnabled, durationSec]);
+
+  useEffect(() => {
+    if (isVisible && config.autoTransitionEnabled && progress >= 100) {
+      handleDismiss();
+    }
+  }, [isVisible, config.autoTransitionEnabled, progress, handleDismiss]);
 
   useEffect(() => {
     setIsVisible(isOpen);
