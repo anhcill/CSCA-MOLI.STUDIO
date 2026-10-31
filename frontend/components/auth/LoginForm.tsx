@@ -28,6 +28,7 @@ import { useAuthStore } from '@/lib/store/authStore';
 import { getDefaultAdminRoute } from '@/lib/utils/permissions';
 import { sanitizeInput } from '@/lib/utils/security';
 import { useLanguage } from '@/context/LanguageContext';
+import axiosInstance from '@/lib/utils/axios';
 import SocialAuthButtons from './SocialAuthButtons';
 import TermsModal from './TermsModal';
 import TurnstileBox, { isTurnstileEnabled } from './TurnstileBox';
@@ -492,9 +493,14 @@ export default function LoginForm() {
     if (err?.type === 'popup_closed') {
       return;
     }
-    if (err?.type === 'popup_blocked') {
+    if (
+      err?.type === 'popup_blocked' ||
+      err?.type === 'popup_failed_to_open' ||
+      err?.type === 'failed_to_open'
+    ) {
       setErrors({
-        general: 'Trình duyệt đang chặn cửa sổ đăng nhập Google (Pop-up). Vui lòng cho phép Pop-up trên thanh địa chỉ trình duyệt rồi thử lại.',
+        general:
+          'Trình duyệt đang chặn cửa sổ đăng nhập Google (Pop-up). Vui lòng bấm vào biểu tượng [Pop-up bị chặn] trên thanh địa chỉ trình duyệt (bên phải URL), chọn "Luôn cho phép" rồi bấm lại Google.',
       });
       return;
     }
@@ -503,6 +509,26 @@ export default function LoginForm() {
 
   const handleGoogleNotConfigured = () => {
     setErrors({ general: t('auth.googleLoginNotConfigured') });
+  };
+
+  const isDev = process.env.NODE_ENV === 'development' || (typeof window !== 'undefined' && window.location.hostname === 'localhost');
+
+  const handleDevLogin = async () => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    setLoading(true);
+    setErrors({});
+    try {
+      const res = await axiosInstance.post('/auth/dev-login');
+      if (res.data?.success && res.data?.data) {
+        await completeAuthData(res.data.data);
+      }
+    } catch (err: any) {
+      setErrors({ general: err.response?.data?.message || 'Dev login failed' });
+    } finally {
+      setIsSubmitting(false);
+      setLoading(false);
+    }
   };
 
   const handleFacebookLogin = () => {
@@ -1215,6 +1241,19 @@ export default function LoginForm() {
           onGoogleNotConfigured={handleGoogleNotConfigured}
           onFacebookClick={handleFacebookLogin}
         />
+
+        {isDev && (
+          <div className="pt-2">
+            <button
+              type="button"
+              onClick={handleDevLogin}
+              disabled={isSubmitting || isLocked}
+              className="w-full flex items-center justify-center gap-2 rounded-xl border-2 border-dashed border-amber-400 bg-amber-50/80 px-4 py-2.5 text-xs font-black text-amber-900 shadow-sm transition-all hover:bg-amber-100 hover:border-amber-500 active:scale-98"
+            >
+              <span>⚡ [DEV LOCAL] Đăng nhập nhanh Admin (ducanhle28072003@gmail.com)</span>
+            </button>
+          </div>
+        )}
       </form>
       )}
 

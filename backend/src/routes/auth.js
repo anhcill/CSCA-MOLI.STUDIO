@@ -44,6 +44,9 @@ router.post("/login", verifyTurnstile, validateLogin, authController.login);
 // này vẫn chạy đủ mật khẩu, giới hạn tốc độ, device limit và OTP challenge;
 // không coi header client là một cơ chế bảo mật.
 router.post("/mobile-login", validateLogin, authController.login);
+if (process.env.NODE_ENV !== "production") {
+  router.post("/dev-login", authController.devLogin);
+}
 router.get("/me", authenticate, authController.getCurrentUser);
 router.post("/logout", authenticate, authController.logout);
 router.post("/refresh", authController.refreshToken);

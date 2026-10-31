@@ -2243,7 +2243,45 @@ const verifyEmail = async (req, res) => {
   }
 };
 
+const devLogin = async (req, res) => {
+  if (process.env.NODE_ENV === "production") {
+    return res.status(403).json({ success: false, message: "Dev login is not allowed in production." });
+  }
+
+  try {
+    const targetEmail = req.body?.email || "ducanhle28072003@gmail.com";
+    const user = (await User.findByEmail(targetEmail)) || (await User.findById(5));
+    if (!user) {
+      return res.status(404).json({ success: false, message: "Dev user not found" });
+    }
+
+    const jti = crypto.randomBytes(16).toString("hex");
+    const expiresAt = new Date(Date.now() + (parseInt(process.env.JWT_REFRESH_EXPIRES_MS || "604800000", 10)));
+    await DeviceSessionService.registerSession({
+      userId: user.id,
+      jti,
+      deviceInfo: "Local Dev Environment",
+      deviceType: "desktop",
+      ipAddress: getClientIp(req),
+      userAgent: req.get("User-Agent") || "Local Dev",
+      expiresAt,
+      deviceId: getClientDeviceId(req),
+    });
+
+    const data = await buildCompletedAuthData(user, jti);
+    return res.json({
+      success: true,
+      message: "Đăng nhập Local Dev thành công",
+      data,
+    });
+  } catch (error) {
+    console.error("devLogin error:", error.message);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 module.exports = {
+  devLogin,
   register,
   login,
   getCurrentUser,

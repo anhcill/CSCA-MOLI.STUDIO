@@ -105,6 +105,9 @@ app.use(
 // Dynamic origin validator: matches against allowed list, supports subdomains
 const corsOriginValidator = (origin, callback) => {
   if (!origin) return callback(null, true); // allow no-origin (server-to-server)
+  if (process.env.NODE_ENV !== "production" && (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin))) {
+    return callback(null, origin);
+  }
   const allOrigins = [...ALLOWED_ORIGINS, ...extraOrigins];
   const allowed = allOrigins.some(allowed =>
     allowed === origin ||

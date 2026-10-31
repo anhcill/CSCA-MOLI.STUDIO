@@ -1,7 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
-import { useGoogleOAuth } from '@react-oauth/google';
+import { useGoogleLogin, useGoogleOAuth } from '@react-oauth/google';
 import { FaFacebookF } from 'react-icons/fa';
 import { FcGoogle } from 'react-icons/fc';
 import { isGoogleOAuthConfigured } from '@/lib/utils/googleOAuth';
@@ -16,52 +15,6 @@ interface SocialAuthButtonsProps {
   onBeforeSocialAuth?: () => boolean;
 }
 
-declare global {
-  interface Window {
-    google?: {
-      accounts?: {
-        oauth2?: {
-          initTokenClient: (options: {
-            client_id: string;
-            scope: string;
-            prompt?: string;
-            callback: (response: { access_token?: string; error?: string }) => void;
-            error_callback?: (err?: { type?: string; message?: string }) => void;
-          }) => { requestAccessToken: () => void };
-        };
-      };
-    };
-  }
-}
-
-const GOOGLE_SCRIPT_SRC = 'https://accounts.google.com/gsi/client';
-
-function loadGoogleIdentityScript() {
-  if (typeof window === 'undefined') return Promise.resolve();
-  if (window.google?.accounts?.oauth2) return Promise.resolve();
-
-  return new Promise<void>((resolve, reject) => {
-    const existingScript = document.querySelector<HTMLScriptElement>(`script[src="${GOOGLE_SCRIPT_SRC}"]`);
-    if (existingScript) {
-      if (window.google?.accounts?.oauth2) {
-        resolve();
-        return;
-      }
-      existingScript.addEventListener('load', () => resolve(), { once: true });
-      existingScript.addEventListener('error', () => reject(new Error('Google Identity script failed')), { once: true });
-      return;
-    }
-
-    const script = document.createElement('script');
-    script.src = GOOGLE_SCRIPT_SRC;
-    script.async = true;
-    script.defer = true;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error('Google Identity script failed'));
-    document.head.appendChild(script);
-  });
-}
-
 export default function SocialAuthButtons({
   dividerLabel,
   disabled = false,
@@ -74,59 +27,36 @@ export default function SocialAuthButtons({
   const { clientId } = useGoogleOAuth();
   const resolvedClientId = clientId?.trim() || '';
   const isGoogleEnabled = isGoogleOAuthConfigured(resolvedClientId);
-  const buttonClass =
-    'relative flex h-11 w-full min-w-0 items-center justify-center gap-2 rounded-xl border border-[#d8bfa8] bg-white/[0.92] px-3 text-sm font-bold text-[#2d2926] shadow-sm transition-colors hover:border-[#bd8f68] hover:bg-white disabled:cursor-not-allowed disabled:opacity-50';
 
-  useEffect(() => {
-    if (isGoogleEnabled) {
-      loadGoogleIdentityScript().catch(() => {});
-    }
-  }, [isGoogleEnabled]);
+  const googleLogin = useGoogleLogin({
+    onSuccess: (tokenResponse) => {
+      if (tokenResponse.access_token) {
+        onGoogleAccessToken(tokenResponse.access_token);
+      } else {
+        onGoogleError();
+      }
+    },
+    onError: (errorResponse) => {
+      onGoogleError(errorResponse ? { type: errorResponse.error, message: errorResponse.error_description } : undefined);
+    },
+    onNonOAuthError: (nonOAuthError) => {
+      onGoogleError(nonOAuthError ? { type: nonOAuthError.type, message: (nonOAuthError as any).message } : undefined);
+    },
+    prompt: 'select_account',
+  });
 
-  const handleGoogleClick = async () => {
+  const handleGoogleClick = () => {
     if (disabled) return;
     if (onBeforeSocialAuth && !onBeforeSocialAuth()) return;
     if (!isGoogleEnabled) {
       onGoogleNotConfigured();
       return;
     }
-
-    try {
-      if (!window.google?.accounts?.oauth2) {
-        await loadGoogleIdentityScript();
-      }
-
-      const tokenClient = window.google?.accounts?.oauth2?.initTokenClient({
-        client_id: resolvedClientId,
-        scope: 'openid email profile',
-        prompt: 'select_account',
-        callback: (tokenResponse) => {
-          if (tokenResponse.access_token) {
-            onGoogleAccessToken(tokenResponse.access_token);
-            return;
-          }
-          if (tokenResponse.error) {
-            onGoogleError({ type: tokenResponse.error });
-            return;
-          }
-          onGoogleError();
-        },
-        error_callback: (err) => {
-          onGoogleError(err ? { type: err.type, message: err.message } : undefined);
-        },
-      });
-
-      if (!tokenClient) {
-        onGoogleError();
-        return;
-      }
-
-      tokenClient.requestAccessToken();
-    } catch (err: unknown) {
-      const errObj = err as { type?: string; message?: string } | undefined;
-      onGoogleError(errObj ? { type: errObj.type, message: errObj.message } : undefined);
-    }
+    googleLogin();
   };
+
+  const buttonClass =
+    'relative flex h-11 w-full min-w-0 items-center justify-center gap-2 rounded-xl border border-[#d8bfa8] bg-white/[0.92] px-3 text-sm font-bold text-[#2d2926] shadow-sm transition-colors hover:border-[#bd8f68] hover:bg-white disabled:cursor-not-allowed disabled:opacity-50';
 
   return (
     <div className="space-y-4">
