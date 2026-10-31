@@ -160,10 +160,17 @@ export default function NotificationBell() {
       </button>
 
       {open && (
-        <div className="fixed inset-x-3 top-[calc(env(safe-area-inset-top)+4rem)] z-[9999] max-h-[calc(100svh-env(safe-area-inset-top)-5rem)] overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-2xl transition-all duration-150 animate-in fade-in slide-in-from-top-2 dark:border-gray-800 dark:bg-gray-900 sm:absolute sm:left-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-88 sm:max-h-none">
+        <div className="fixed inset-x-3 top-[calc(env(safe-area-inset-top)+4rem)] z-[9999] max-h-[calc(100svh-env(safe-area-inset-top)-5rem)] overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-2xl transition-all duration-150 animate-in fade-in slide-in-from-top-2 dark:border-gray-800 dark:bg-gray-900 sm:absolute sm:left-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-[460px] md:w-[480px] sm:max-h-none">
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-gray-100 bg-white/95 px-4 py-3 backdrop-blur-md dark:border-gray-800 dark:bg-gray-900/95">
-            <span className="text-sm font-bold text-gray-900 dark:text-white">Thông báo</span>
+          <div className="flex items-center justify-between border-b border-gray-100 bg-white/95 px-5 py-3.5 backdrop-blur-md dark:border-gray-800 dark:bg-gray-900/95">
+            <div className="flex items-center gap-2">
+              <span className="text-base font-bold text-gray-900 dark:text-white">Thông báo</span>
+              {unread > 0 && (
+                <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-black text-violet-700 dark:bg-violet-950/60 dark:text-violet-300">
+                  {unread} mới
+                </span>
+              )}
+            </div>
             <button
               onClick={async () => {
                 setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
@@ -185,7 +192,7 @@ export default function NotificationBell() {
           </div>
 
           {/* List */}
-          <div className="max-h-[calc(100svh-env(safe-area-inset-top)-9rem)] divide-y divide-gray-100 overflow-y-auto overscroll-contain bg-white dark:bg-gray-900 dark:divide-gray-800/80 sm:max-h-96">
+          <div className="max-h-[calc(100svh-env(safe-area-inset-top)-9rem)] divide-y divide-gray-100 overflow-y-auto overscroll-contain bg-white dark:bg-gray-900 dark:divide-gray-800/80 sm:max-h-[520px]">
             {loading && (
               <div className="py-8 text-center text-sm font-medium text-gray-400 dark:text-gray-500">Đang tải...</div>
             )}
@@ -198,37 +205,37 @@ export default function NotificationBell() {
               <button
                 key={n.id}
                 onClick={() => handleClickNotification(n)}
-                className={`w-full flex items-start gap-3 px-4 py-3.5 text-left transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/60 ${
+                className={`w-full flex items-start gap-3.5 px-5 py-4 text-left transition-colors hover:bg-gray-50/80 dark:hover:bg-gray-800/60 ${
                   !n.is_read ? 'bg-violet-50/70 dark:bg-violet-950/30' : 'bg-white dark:bg-gray-900'
                 }`}
               >
                 {/* Avatar */}
                 <img
-                  src={n.actor_avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(n.actor_name || 'U')}&size=36`}
+                  src={n.actor_avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(n.actor_name || 'U')}&size=40`}
                   alt={n.actor_name}
-                  className="mt-0.5 h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-gray-200 dark:ring-gray-700"
+                  className="mt-0.5 h-10 w-10 shrink-0 rounded-full object-cover ring-2 ring-gray-200 dark:ring-gray-700 shadow-sm"
                 />
                 <div className="min-w-0 flex-1">
                   {n.type === 'admin_announcement' ? (
                     <>
-                      <p className="text-xs font-bold text-gray-900 dark:text-white">{n.title || 'Thông báo từ MOLY.STUDIO'}</p>
-                      <p className="mt-1 whitespace-pre-line text-xs leading-relaxed text-gray-600 dark:text-gray-300">{n.message}</p>
+                      <p className="text-sm font-bold text-gray-900 dark:text-white leading-snug">{n.title || 'Thông báo từ MOLY.STUDIO'}</p>
+                      <p className="mt-1.5 whitespace-pre-line text-xs sm:text-[13px] leading-relaxed text-gray-600 dark:text-gray-300">{n.message}</p>
                     </>
                   ) : (
-                    <p className="text-xs leading-snug text-gray-700 dark:text-gray-300">
+                    <p className="text-xs sm:text-[13px] leading-snug text-gray-700 dark:text-gray-300">
                       <span className="font-bold text-gray-900 dark:text-white">{n.actor_name}</span>
                       {' '}{TYPE_LABEL[n.type] || 'đã tương tác với bài viết của bạn'}
                     </p>
                   )}
                   {n.post_preview && (
-                    <p className="mt-1 truncate text-xs italic text-gray-400 dark:text-gray-500">
-                      "{n.post_preview?.slice(0, 60)}{(n.post_preview?.length ?? 0) > 60 ? '…' : ''}"
+                    <p className="mt-1.5 truncate text-xs italic text-gray-400 dark:text-gray-500">
+                      "{n.post_preview?.slice(0, 70)}{(n.post_preview?.length ?? 0) > 70 ? '…' : ''}"
                     </p>
                   )}
-                  <p className="mt-1.5 text-[11px] font-semibold text-violet-600 dark:text-violet-400">{timeAgo(n.created_at)}</p>
+                  <p className="mt-2 text-[11px] font-semibold text-violet-600 dark:text-violet-400">{timeAgo(n.created_at)}</p>
                 </div>
                 {!n.is_read && (
-                  <span className="mt-2 h-2 w-2 shrink-0 rounded-full bg-violet-600 shadow-sm dark:bg-violet-400" />
+                  <span className="mt-2.5 h-2 w-2 shrink-0 rounded-full bg-violet-600 shadow-sm dark:bg-violet-400" />
                 )}
               </button>
             ))}
