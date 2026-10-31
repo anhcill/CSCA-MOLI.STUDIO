@@ -185,7 +185,7 @@ export default function NotificationBell() {
           </div>
 
           {/* List */}
-          <div className="max-h-[calc(100svh-env(safe-area-inset-top)-9rem)] divide-y divide-gray-100 overflow-y-auto overscroll-contain dark:divide-gray-800/80 sm:max-h-96">
+          <div className="max-h-[calc(100svh-env(safe-area-inset-top)-9rem)] divide-y divide-gray-100 overflow-y-auto overscroll-contain bg-white dark:bg-gray-900 dark:divide-gray-800/80 sm:max-h-96">
             {loading && (
               <div className="py-8 text-center text-sm font-medium text-gray-400 dark:text-gray-500">Đang tải...</div>
             )}
@@ -199,7 +199,7 @@ export default function NotificationBell() {
                 key={n.id}
                 onClick={() => handleClickNotification(n)}
                 className={`w-full flex items-start gap-3 px-4 py-3.5 text-left transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/60 ${
-                  !n.is_read ? 'bg-violet-50/60 dark:bg-violet-950/25' : 'bg-transparent'
+                  !n.is_read ? 'bg-violet-50/70 dark:bg-violet-950/30' : 'bg-white dark:bg-gray-900'
                 }`}
               >
                 {/* Avatar */}

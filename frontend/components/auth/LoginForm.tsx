@@ -488,7 +488,16 @@ export default function LoginForm() {
     }
   };
 
-  const handleGoogleError = () => {
+  const handleGoogleError = (err?: { type?: string; message?: string }) => {
+    if (err?.type === 'popup_closed') {
+      return;
+    }
+    if (err?.type === 'popup_blocked') {
+      setErrors({
+        general: 'Trình duyệt đang chặn cửa sổ đăng nhập Google (Pop-up). Vui lòng cho phép Pop-up trên thanh địa chỉ trình duyệt rồi thử lại.',
+      });
+      return;
+    }
     setErrors({ general: t('auth.googleLoginFailed') });
   };
 

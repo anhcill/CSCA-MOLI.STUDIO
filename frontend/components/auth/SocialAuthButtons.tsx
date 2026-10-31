@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { useGoogleOAuth } from '@react-oauth/google';
 import { FaFacebookF } from 'react-icons/fa';
 import { FcGoogle } from 'react-icons/fc';
@@ -9,7 +10,7 @@ interface SocialAuthButtonsProps {
   dividerLabel: string;
   disabled?: boolean;
   onGoogleAccessToken: (accessToken: string) => void;
-  onGoogleError: () => void;
+  onGoogleError: (errorDetails?: { type?: string; message?: string }) => void;
   onGoogleNotConfigured: () => void;
   onFacebookClick: () => void;
   onBeforeSocialAuth?: () => boolean;
@@ -25,7 +26,7 @@ declare global {
             scope: string;
             prompt?: string;
             callback: (response: { access_token?: string; error?: string }) => void;
-            error_callback?: () => void;
+            error_callback?: (err?: { type?: string; message?: string }) => void;
           }) => { requestAccessToken: () => void };
         };
       };
@@ -36,11 +37,16 @@ declare global {
 const GOOGLE_SCRIPT_SRC = 'https://accounts.google.com/gsi/client';
 
 function loadGoogleIdentityScript() {
+  if (typeof window === 'undefined') return Promise.resolve();
   if (window.google?.accounts?.oauth2) return Promise.resolve();
 
   return new Promise<void>((resolve, reject) => {
     const existingScript = document.querySelector<HTMLScriptElement>(`script[src="${GOOGLE_SCRIPT_SRC}"]`);
     if (existingScript) {
+      if (window.google?.accounts?.oauth2) {
+        resolve();
+        return;
+      }
       existingScript.addEventListener('load', () => resolve(), { once: true });
       existingScript.addEventListener('error', () => reject(new Error('Google Identity script failed')), { once: true });
       return;
@@ -71,6 +77,12 @@ export default function SocialAuthButtons({
   const buttonClass =
     'relative flex h-11 w-full min-w-0 items-center justify-center gap-2 rounded-xl border border-[#d8bfa8] bg-white/[0.92] px-3 text-sm font-bold text-[#2d2926] shadow-sm transition-colors hover:border-[#bd8f68] hover:bg-white disabled:cursor-not-allowed disabled:opacity-50';
 
+  useEffect(() => {
+    if (isGoogleEnabled) {
+      loadGoogleIdentityScript().catch(() => {});
+    }
+  }, [isGoogleEnabled]);
+
   const handleGoogleClick = async () => {
     if (disabled) return;
     if (onBeforeSocialAuth && !onBeforeSocialAuth()) return;
@@ -80,7 +92,10 @@ export default function SocialAuthButtons({
     }
 
     try {
-      await loadGoogleIdentityScript();
+      if (!window.google?.accounts?.oauth2) {
+        await loadGoogleIdentityScript();
+      }
+
       const tokenClient = window.google?.accounts?.oauth2?.initTokenClient({
         client_id: resolvedClientId,
         scope: 'openid email profile',
@@ -90,9 +105,15 @@ export default function SocialAuthButtons({
             onGoogleAccessToken(tokenResponse.access_token);
             return;
           }
+          if (tokenResponse.error) {
+            onGoogleError({ type: tokenResponse.error });
+            return;
+          }
           onGoogleError();
         },
-        error_callback: () => onGoogleError(),
+        error_callback: (err) => {
+          onGoogleError(err ? { type: err.type, message: err.message } : undefined);
+        },
       });
 
       if (!tokenClient) {
@@ -101,8 +122,9 @@ export default function SocialAuthButtons({
       }
 
       tokenClient.requestAccessToken();
-    } catch {
-      onGoogleError();
+    } catch (err: unknown) {
+      const errObj = err as { type?: string; message?: string } | undefined;
+      onGoogleError(errObj ? { type: errObj.type, message: errObj.message } : undefined);
     }
   };
 
