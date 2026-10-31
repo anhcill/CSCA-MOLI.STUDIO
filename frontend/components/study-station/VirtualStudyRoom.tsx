@@ -64,6 +64,7 @@ export interface RoomParticipant {
   isHost?: boolean;
   isCameraOn: boolean;
   isMicOn: boolean;
+  cameraFrame?: string | null;
   studyDurationMinutes: number;
   statusText: string;
 }
@@ -134,6 +135,28 @@ export default function VirtualStudyRoom() {
 
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
+  const captureCanvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  const captureVideoFrame = useCallback((): string | null => {
+    try {
+      const video = localVideoRef.current;
+      if (!video || !isCameraOn || video.readyState < 2) return null;
+      if (!captureCanvasRef.current && typeof document !== 'undefined') {
+        const canvas = document.createElement('canvas');
+        canvas.width = 240;
+        canvas.height = 135;
+        captureCanvasRef.current = canvas;
+      }
+      const canvas = captureCanvasRef.current;
+      if (!canvas) return null;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return null;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      return canvas.toDataURL('image/jpeg', 0.4);
+    } catch {
+      return null;
+    }
+  }, [isCameraOn]);
 
   // Real Participants in the active room (from backend heartbeat)
   const [peers, setPeers] = useState<RoomParticipant[]>([]);
@@ -513,6 +536,7 @@ export default function VirtualStudyRoom() {
 
     const syncPresenceAndMessages = async () => {
       try {
+        const frameSnapshot = isCameraOn ? captureVideoFrame() : null;
         const [presenceRes, roomMsgs] = await Promise.all([
           syncRoomPresenceApi(roomCode, {
             peerId: myPeerId,
@@ -522,6 +546,7 @@ export default function VirtualStudyRoom() {
             isMicOn,
             statusText: myStatusText,
             isHost: Boolean(isHostUser),
+            cameraFrame: frameSnapshot,
           }),
           getRoomMessages(roomCode),
         ]);
@@ -540,6 +565,7 @@ export default function VirtualStudyRoom() {
               isHost: p.isHost,
               isCameraOn: p.isCameraOn,
               isMicOn: p.isMicOn,
+              cameraFrame: p.cameraFrame || null,
               studyDurationMinutes: 1,
               statusText: p.statusText || 'Đang tập trung học',
             }));
@@ -567,7 +593,7 @@ export default function VirtualStudyRoom() {
     };
 
     syncPresenceAndMessages();
-    const interval = setInterval(syncPresenceAndMessages, 4000);
+    const interval = setInterval(syncPresenceAndMessages, 3500);
     return () => {
       isMounted = false;
       clearInterval(interval);
@@ -583,6 +609,7 @@ export default function VirtualStudyRoom() {
     isCameraOn,
     isMicOn,
     myStatusText,
+    captureVideoFrame,
   ]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
@@ -708,6 +735,11 @@ export default function VirtualStudyRoom() {
                 <span className="rounded-full bg-violet-500/20 px-2.5 py-0.5 text-[10px] font-bold text-violet-300">
                   {activeRoom.subject}
                 </span>
+                {activeRoom.isPrivate && (
+                  <span className="rounded-full bg-amber-500/20 px-2.5 py-0.5 text-[10px] font-bold text-amber-300 ring-1 ring-amber-500/30">
+                    🔒 Phòng kín
+                  </span>
+                )}
               </div>
               <h3 className="mt-1 text-base sm:text-lg font-extrabold text-white">
                 {activeRoom.name}
@@ -992,43 +1024,60 @@ export default function VirtualStudyRoom() {
                   return (
                     <div
                       key={peer.id}
-                      className="relative overflow-hidden rounded-2xl border border-white/10 bg-slate-900 aspect-video shadow-xl"
+                      className={`relative overflow-hidden rounded-2xl border ${
+                        peer.isCameraOn ? 'border-emerald-500/50' : 'border-white/10'
+                      } bg-slate-900 aspect-video shadow-xl`}
                     >
-                      <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-slate-900 via-indigo-950/50 to-slate-950 p-4 text-center">
-                        <div className="relative">
-                          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 text-xl font-black text-white shadow-lg overflow-hidden ring-2 ring-white/15">
-                            {peer.avatar ? (
-                              <img
-                                src={peer.avatar}
-                                alt={peer.name}
-                                className="h-full w-full object-cover"
-                              />
-                            ) : (
-                              peer.name.charAt(0).toUpperCase()
-                            )}
+                      {peer.isCameraOn && peer.cameraFrame ? (
+                        <img
+                          src={peer.cameraFrame}
+                          alt={peer.name}
+                          className="w-full h-full object-cover transition-opacity duration-300"
+                        />
+                      ) : (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-slate-900 via-indigo-950/50 to-slate-950 p-4 text-center">
+                          <div className="relative">
+                            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 text-xl font-black text-white shadow-lg overflow-hidden ring-2 ring-white/15">
+                              {peer.avatar ? (
+                                <img
+                                  src={peer.avatar}
+                                  alt={peer.name}
+                                  className="h-full w-full object-cover"
+                                />
+                              ) : (
+                                peer.name.charAt(0).toUpperCase()
+                              )}
+                            </div>
+                            <span className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 ring-2 ring-slate-900" />
                           </div>
-                          <span className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 ring-2 ring-slate-900" />
-                        </div>
 
-                        <p className="mt-2.5 text-sm font-extrabold text-white flex items-center gap-1.5">
-                          <span>{peer.name}</span>
-                          {peer.isHost && (
-                            <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[9px] font-black text-amber-300 border border-amber-500/30">
-                              Chủ phòng
-                            </span>
-                          )}
-                        </p>
-                        <p className="mt-1 text-xs text-violet-300 font-medium">
-                          {peer.statusText}
-                        </p>
-                      </div>
+                          <p className="mt-2.5 text-sm font-extrabold text-white flex items-center gap-1.5">
+                            <span>{peer.name}</span>
+                            {peer.isHost && (
+                              <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[9px] font-black text-amber-300 border border-amber-500/30">
+                                Chủ phòng
+                              </span>
+                            )}
+                          </p>
+                          <p className="mt-1 text-xs text-violet-300 font-medium">
+                            {peer.statusText}
+                          </p>
+                        </div>
+                      )}
 
                       {/* Top Overlay */}
                       <div className="absolute top-3 left-3 right-3 flex items-center justify-between">
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-black/60 px-3 py-1 text-[11px] font-bold text-white backdrop-blur-md">
-                          <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-                          {peer.name}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-black/60 px-3 py-1 text-[11px] font-bold text-white backdrop-blur-md">
+                            <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                            {peer.name}
+                          </span>
+                          {peer.isCameraOn && (
+                            <span className="rounded-full bg-emerald-500/90 px-2 py-0.5 text-[10px] font-black text-white shadow-sm">
+                              📹 LIVE CAM
+                            </span>
+                          )}
+                        </div>
 
                         <button
                           type="button"
@@ -1047,8 +1096,8 @@ export default function VirtualStudyRoom() {
 
                       {/* Bottom Overlay */}
                       <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between">
-                        <span className="rounded-lg bg-black/60 px-2.5 py-1 text-[11px] text-amber-300 font-medium backdrop-blur-md">
-                          {peer.isCameraOn ? '📹 Đang bật Camera' : '🎧 Chế độ Tập trung'}
+                        <span className="rounded-lg bg-black/60 px-2.5 py-1 text-[11px] text-amber-300 font-medium backdrop-blur-md truncate max-w-[75%]">
+                          {peer.isCameraOn ? `📹 ${peer.statusText}` : '🎧 Chế độ Tập trung'}
                         </span>
                         <span
                           className={`rounded-full p-1.5 backdrop-blur-md ${
@@ -1337,9 +1386,16 @@ export default function VirtualStudyRoom() {
               >
                 <div>
                   <div className="flex items-center justify-between">
-                    <span className="rounded-full bg-violet-600/20 px-2.5 py-0.5 text-[10px] font-black text-violet-300 ring-1 ring-violet-500/30">
-                      {room.subject}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="rounded-full bg-violet-600/20 px-2.5 py-0.5 text-[10px] font-black text-violet-300 ring-1 ring-violet-500/30">
+                        {room.subject}
+                      </span>
+                      {room.isPrivate && (
+                        <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-300 ring-1 ring-amber-500/30">
+                          🔒 Phòng kín
+                        </span>
+                      )}
+                    </div>
                     <div className="flex items-center gap-2">
                       <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-400">
                         <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
@@ -1473,6 +1529,33 @@ export default function VirtualStudyRoom() {
                     </button>
                   ))}
                 </div>
+              </div>
+
+              <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3">
+                <div className="pr-3">
+                  <p className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <FiShield className="text-amber-400" />
+                    <span>Phòng học kín (Riêng tư)</span>
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-slate-400">
+                    Chỉ bạn bè có mã phòng hoặc link mời mới vào được
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={newRoomPrivate}
+                  onClick={() => setNewRoomPrivate((prev) => !prev)}
+                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
+                    newRoomPrivate ? 'bg-violet-600' : 'bg-slate-700'
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                      newRoomPrivate ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-2">

@@ -1,8 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState, Suspense } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, Suspense } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { FiCheckCircle, FiXCircle, FiClock, FiAward, FiHome, FiRotateCw, FiRefreshCw, FiMessageCircle, FiBarChart2, FiBookOpen, FiCpu, FiPrinter, FiZap, FiArrowLeft, FiFlag, FiFileText, FiX } from 'react-icons/fi';
+import { FiCheckCircle, FiXCircle, FiClock, FiAward, FiHome, FiRotateCw, FiRefreshCw, FiMessageCircle, FiBarChart2, FiBookOpen, FiCpu, FiPrinter, FiZap, FiArrowLeft, FiFlag, FiFileText, FiX, FiStar, FiEye } from 'react-icons/fi';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import examApi, { QuestionReportType } from '@/lib/api/exams';
 import { authFetch } from '@/lib/utils/authFetch';
@@ -106,6 +106,95 @@ interface ExamResult {
   exam_end_time?: string | null;
 }
 
+const MISTAKE_NOTEBOOK_STORAGE_KEY = 'moly:mistake_notebook';
+
+type SmartQuestionFilter = 'all' | 'incorrect' | 'unanswered' | 'correct' | 'saved';
+
+interface MistakeNotebookEntry {
+  key: string;
+  questionId?: number;
+  examId: number;
+  attemptId?: number;
+  examTitle: string;
+  subjectName?: string;
+  questionNumber: number;
+  subQuestionNumber?: number;
+  questionText: string;
+  selectedAnswerKey: string | null;
+  correctAnswerKey: string;
+  topicName?: string;
+  difficulty?: string;
+  savedAt: string;
+}
+
+function getMistakeQuestionKey(question: QuestionResult, index: number, examId?: number): string {
+  const qId = question.question_id || question.id;
+  if (qId) return `q-${qId}`;
+  return `exam-${examId || 0}-n-${question.question_number || index + 1}-sub-${question.sub_question_number || 0}`;
+}
+
+function readMistakeNotebookFromStorage(): MistakeNotebookEntry[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = window.localStorage.getItem(MISTAKE_NOTEBOOK_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((item: any): MistakeNotebookEntry | null => {
+        if (!item) return null;
+        if (typeof item === 'string' || typeof item === 'number') {
+          const strKey = typeof item === 'number' ? `q-${item}` : String(item);
+          return {
+            key: strKey,
+            questionId: typeof item === 'number' ? item : undefined,
+            examId: 0,
+            examTitle: '',
+            questionNumber: 0,
+            questionText: '',
+            selectedAnswerKey: null,
+            correctAnswerKey: '',
+            savedAt: new Date().toISOString(),
+          };
+        }
+        if (typeof item === 'object') {
+          const qId = Number(item.questionId ?? item.question_id ?? item.id) || undefined;
+          const key = item.key || (qId ? `q-${qId}` : '');
+          if (!key) return null;
+          return {
+            key: String(key),
+            questionId: qId,
+            examId: Number(item.examId ?? item.exam_id) || 0,
+            attemptId: Number(item.attemptId ?? item.attempt_id) || undefined,
+            examTitle: String(item.examTitle ?? item.exam_title ?? ''),
+            subjectName: item.subjectName ?? item.subject_name ?? undefined,
+            questionNumber: Number(item.questionNumber ?? item.question_number) || 0,
+            subQuestionNumber: Number(item.subQuestionNumber ?? item.sub_question_number) || undefined,
+            questionText: String(item.questionText ?? item.question_text ?? ''),
+            selectedAnswerKey: item.selectedAnswerKey ?? item.selected_answer_key ?? null,
+            correctAnswerKey: String(item.correctAnswerKey ?? item.correct_answer_key ?? ''),
+            topicName: item.topicName ?? item.topic_name ?? undefined,
+            difficulty: item.difficulty ?? undefined,
+            savedAt: String(item.savedAt ?? new Date().toISOString()),
+          };
+        }
+        return null;
+      })
+      .filter((entry): entry is MistakeNotebookEntry => Boolean(entry));
+  } catch {
+    return [];
+  }
+}
+
+function writeMistakeNotebookToStorage(entries: MistakeNotebookEntry[]) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(MISTAKE_NOTEBOOK_STORAGE_KEY, JSON.stringify(entries));
+  } catch (err) {
+    console.error('Failed to write mistake notebook to localStorage:', err);
+  }
+}
+
 function ExamResultContent() {
   const params = useParams();
   const router = useRouter();
@@ -139,6 +228,46 @@ function ExamResultContent() {
   const [openingSolution, setOpeningSolution] = useState(false);
   const [solutionViewerOpen, setSolutionViewerOpen] = useState(false);
   const [comparisonUrls, setComparisonUrls] = useState<{ paper: string; solution: string } | null>(null);
+  const [questionFilter, setQuestionFilter] = useState<SmartQuestionFilter>('all');
+  const [retryMistakeMode, setRetryMistakeMode] = useState(false);
+  const [retryAnswers, setRetryAnswers] = useState<Record<string, string>>({});
+  const [revealedRetryKeys, setRevealedRetryKeys] = useState<Set<string>>(new Set());
+  const [notebookEntries, setNotebookEntries] = useState<MistakeNotebookEntry[]>([]);
+  const reviewSectionAnchorRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const entries = readMistakeNotebookFromStorage();
+    setNotebookEntries(entries);
+    const savedIds = entries
+      .map((item) => item.questionId)
+      .filter((id): id is number => typeof id === 'number' && id > 0);
+    if (savedIds.length > 0) {
+      setSavedWrongQuestions((prev) => {
+        const next = new Set(prev);
+        savedIds.forEach((id) => next.add(id));
+        return next;
+      });
+    }
+  }, []);
+
+  const notebookKeySet = useMemo(() => {
+    const keys = new Set<string>();
+    notebookEntries.forEach((entry) => {
+      if (entry.key) keys.add(entry.key);
+      if (entry.questionId) keys.add(`q-${entry.questionId}`);
+    });
+    savedWrongQuestions.forEach((qId) => keys.add(`q-${qId}`));
+    return keys;
+  }, [notebookEntries, savedWrongQuestions]);
+
+  const isQuestionInMistakeNotebook = useCallback(
+    (question: QuestionResult, index: number) => {
+      const qKey = getMistakeQuestionKey(question, index, result?.exam_id || examId);
+      const qId = question.question_id || question.id;
+      return notebookKeySet.has(qKey) || Boolean(qId && notebookKeySet.has(`q-${qId}`));
+    },
+    [notebookKeySet, result?.exam_id, examId]
+  );
 
   const openChatTab = useCallback(() => {
     setActiveTab('chat');
@@ -287,28 +416,166 @@ function ExamResultContent() {
     setComparisonUrls(null);
   };
 
-  const handleSaveWrongQuestion = async (question: QuestionResult) => {
+  const handleToggleMistakeNotebook = async (question: QuestionResult, index: number) => {
+    const qKey = getMistakeQuestionKey(question, index, result?.exam_id || examId);
     const questionId = question.question_id || question.id;
-    if (!questionId) return;
+    const currentlySaved = isQuestionInMistakeNotebook(question, index);
 
-    try {
-      await saveBookmark({
-        entity_type: 'question',
-        entity_id: questionId,
-        title: `Câu ${question.question_number} - ${result?.exam_title || 'Đề thi'}`,
-        metadata: {
-          attemptId: result?.id,
-          examId: result?.exam_id,
-          selectedAnswer: question.selected_answer_key,
-          correctAnswer: question.correct_answer_key,
-          topic: question.topic_name || question.question_category || null,
-        },
+    if (currentlySaved) {
+      setNotebookEntries((prev) => {
+        const next = prev.filter(
+          (entry) => entry.key !== qKey && !(questionId && entry.questionId === questionId)
+        );
+        writeMistakeNotebookToStorage(next);
+        return next;
       });
-      setSavedWrongQuestions((prev) => new Set(prev).add(questionId));
-    } catch (error) {
-      console.error('Save wrong question error:', error);
-      alert('Không thể lưu câu này lúc này.');
+      if (questionId) {
+        setSavedWrongQuestions((prev) => {
+          const next = new Set(prev);
+          next.delete(questionId);
+          return next;
+        });
+      }
+      return;
     }
+
+    const newEntry: MistakeNotebookEntry = {
+      key: qKey,
+      questionId,
+      examId: result?.exam_id || examId,
+      attemptId: result?.id,
+      examTitle: result?.exam_title || 'Đề thi',
+      subjectName: result?.subject_name,
+      questionNumber: question.question_number || index + 1,
+      subQuestionNumber: question.sub_question_number,
+      questionText: question.question_text || '',
+      selectedAnswerKey: question.selected_answer_key,
+      correctAnswerKey: question.correct_answer_key,
+      topicName: question.topic_name || question.question_category,
+      difficulty: question.difficulty,
+      savedAt: new Date().toISOString(),
+    };
+
+    setNotebookEntries((prev) => {
+      const filtered = prev.filter(
+        (entry) => entry.key !== qKey && !(questionId && entry.questionId === questionId)
+      );
+      const next = [newEntry, ...filtered];
+      writeMistakeNotebookToStorage(next);
+      return next;
+    });
+
+    if (questionId) {
+      setSavedWrongQuestions((prev) => new Set(prev).add(questionId));
+      try {
+        await saveBookmark({
+          entity_type: 'question',
+          entity_id: questionId,
+          title: `Câu ${question.sub_question_number || question.question_number || index + 1} - ${result?.exam_title || 'Đề thi'}`,
+          metadata: {
+            attemptId: result?.id,
+            examId: result?.exam_id,
+            selectedAnswer: question.selected_answer_key,
+            correctAnswer: question.correct_answer_key,
+            topic: question.topic_name || question.question_category || null,
+          },
+        });
+      } catch (error) {
+        // Lưu localStorage đã thành công nên chỉ log nhẹ nếu API bookmark gặp lỗi
+        console.warn('Sync bookmark API warning:', error);
+      }
+    }
+  };
+
+  const handleSaveAllMistakesToNotebook = () => {
+    if (!result?.answers?.length) return;
+    const currentEntries = [...notebookEntries];
+    const existingKeys = new Set(currentEntries.map((e) => e.key));
+    const addedIds: number[] = [];
+
+    result.answers.forEach((q, idx) => {
+      const status = getQuestionReviewStatus(q);
+      if (status !== 'incorrect' && status !== 'unanswered') return;
+      const qKey = getMistakeQuestionKey(q, idx, result.exam_id || examId);
+      const questionId = q.question_id || q.id;
+      if (existingKeys.has(qKey) || (questionId && existingKeys.has(`q-${questionId}`))) return;
+
+      existingKeys.add(qKey);
+      if (questionId) addedIds.push(questionId);
+      currentEntries.unshift({
+        key: qKey,
+        questionId,
+        examId: result.exam_id || examId,
+        attemptId: result.id,
+        examTitle: result.exam_title || 'Đề thi',
+        subjectName: result.subject_name,
+        questionNumber: q.question_number || idx + 1,
+        subQuestionNumber: q.sub_question_number,
+        questionText: q.question_text || '',
+        selectedAnswerKey: q.selected_answer_key,
+        correctAnswerKey: q.correct_answer_key,
+        topicName: q.topic_name || q.question_category,
+        difficulty: q.difficulty,
+        savedAt: new Date().toISOString(),
+      });
+    });
+
+    setNotebookEntries(currentEntries);
+    writeMistakeNotebookToStorage(currentEntries);
+    if (addedIds.length > 0) {
+      setSavedWrongQuestions((prev) => {
+        const next = new Set(prev);
+        addedIds.forEach((id) => next.add(id));
+        return next;
+      });
+    }
+  };
+
+  const handleToggleRetryMistakeMode = () => {
+    setRetryMistakeMode((prev) => {
+      const next = !prev;
+      if (next) {
+        setRetryAnswers({});
+        setRevealedRetryKeys(new Set());
+        if (questionFilter === 'correct') {
+          setQuestionFilter('all');
+        }
+      }
+      return next;
+    });
+  };
+
+  const handleStartQuickRetryMistakes = () => {
+    setActiveTab('review');
+    setRetryMistakeMode(true);
+    setRetryAnswers({});
+    setRevealedRetryKeys(new Set());
+    if (questionFilter === 'correct') {
+      setQuestionFilter('all');
+    }
+    window.setTimeout(() => {
+      reviewSectionAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 50);
+  };
+
+  const handleSelectRetryOption = (qKey: string, optionKey: string) => {
+    setRetryAnswers((prev) => ({
+      ...prev,
+      [qKey]: optionKey,
+    }));
+  };
+
+  const handleResetSingleRetryQuestion = (qKey: string) => {
+    setRetryAnswers((prev) => {
+      const next = { ...prev };
+      delete next[qKey];
+      return next;
+    });
+    setRevealedRetryKeys((prev) => {
+      const next = new Set(prev);
+      next.delete(qKey);
+      return next;
+    });
   };
 
   const openReviewAI = useCallback((question: QuestionResult, mode: ReviewAIMode) => {
@@ -509,6 +776,47 @@ function ExamResultContent() {
       return acc;
     }, {})
   ).sort((a, b) => b.incorrect - a.incorrect);
+
+  const indexedAnswers = answers.map((q, originalIndex) => ({
+    q,
+    originalIndex,
+    status: getQuestionReviewStatus(q),
+    qKey: getMistakeQuestionKey(q, originalIndex, result.exam_id || examId),
+    isSavedInNotebook: isQuestionInMistakeNotebook(q, originalIndex),
+  }));
+
+  const filterCounts = {
+    all: indexedAnswers.length,
+    incorrect: indexedAnswers.filter((item) => item.status === 'incorrect').length,
+    unanswered: indexedAnswers.filter((item) => item.status === 'unanswered').length,
+    correct: indexedAnswers.filter((item) => item.status === 'correct').length,
+    saved: indexedAnswers.filter((item) => item.isSavedInNotebook).length,
+  };
+  const notCorrectCount = filterCounts.incorrect + filterCounts.unanswered;
+
+  const filteredReviewItems = indexedAnswers.filter((item) => {
+    if (retryMistakeMode) {
+      if (questionFilter === 'incorrect') return item.status === 'incorrect';
+      if (questionFilter === 'unanswered') return item.status === 'unanswered';
+      if (questionFilter === 'saved') return item.isSavedInNotebook;
+      return item.status === 'incorrect' || item.status === 'unanswered';
+    }
+    if (questionFilter === 'incorrect') return item.status === 'incorrect';
+    if (questionFilter === 'unanswered') return item.status === 'unanswered';
+    if (questionFilter === 'correct') return item.status === 'correct';
+    if (questionFilter === 'saved') return item.isSavedInNotebook;
+    return true;
+  });
+
+  const retryAttemptedCount = filteredReviewItems.filter(
+    (item) => Boolean(retryAnswers[item.qKey]) || revealedRetryKeys.has(item.qKey)
+  ).length;
+  const retryCorrectCount = filteredReviewItems.filter((item) => {
+    const picked = retryAnswers[item.qKey];
+    if (!picked) return false;
+    const matchedOpt = (item.q.options ?? []).find((o) => o.key === picked);
+    return Boolean(matchedOpt?.is_correct || picked === item.q.correct_answer_key);
+  }).length;
 
   return (
     <InkResultBackground>
@@ -843,6 +1151,85 @@ function ExamResultContent() {
               </div>
             </div>
 
+            {/* 📓 Sổ Tay Câu Sai & Ôn Tập Thông Minh — Quick Banner on Result Tab */}
+            {answers.length > 0 && (
+              <div className="relative overflow-hidden rounded-[26px] border-2 border-[#d6b477] bg-gradient-to-br from-[#fffaf2] via-[#fff5e4] to-[#f9ebd2] p-5 shadow-[0_14px_38px_rgba(129,77,33,0.12)] dark:border-amber-700/50 dark:from-slate-900 dark:via-slate-900 dark:to-amber-950/30 sm:p-6">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="space-y-1.5">
+                    <div className="inline-flex items-center gap-2 rounded-full border border-[#d8b87f] bg-[#fff7e9] px-3 py-1 text-xs font-black text-[#9a681c] dark:border-amber-700/60 dark:bg-amber-950/50 dark:text-amber-300">
+                      <span>📓 Sổ Tay Câu Sai &amp; Ôn Tập Thông Minh</span>
+                      <span className="text-[#c99722]">· Mistake Notebook</span>
+                    </div>
+                    <h2 className="text-lg font-black text-[#4f3521] dark:text-white sm:text-xl">
+                      {notCorrectCount > 0
+                        ? `Bạn có ${notCorrectCount} câu chưa đúng (${filterCounts.incorrect} câu sai, ${filterCounts.unanswered} câu bỏ trống)`
+                        : 'Tuyệt vời! Bạn đã làm đúng toàn bộ các câu hỏi trong đề này'}
+                    </h2>
+                    <p className="text-xs font-medium text-[#7d6957] dark:text-slate-300">
+                      Lưu các câu dễ nhầm vào Sổ tay cá nhân hoặc bật chế độ ẩn đáp án để tự kiểm tra lại ngay trên trang kết quả.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    {notCorrectCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleStartQuickRetryMistakes}
+                        className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-[#b9231a] to-[#d52a1e] px-4 py-3 text-xs font-black text-white shadow-lg shadow-red-900/20 transition hover:from-[#a31d15] hover:to-[#c1241a] sm:text-sm"
+                      >
+                        <FiZap size={16} />
+                        ⚡ Ôn tập lại ngay {notCorrectCount} câu chưa đúng
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveTab('review');
+                        setRetryMistakeMode(false);
+                        setQuestionFilter('saved');
+                        window.setTimeout(() => {
+                          reviewSectionAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }, 50);
+                      }}
+                      className="inline-flex items-center gap-2 rounded-2xl border border-[#d5b477] bg-[#fffaf2] px-4 py-3 text-xs font-black text-[#6f451b] transition hover:border-[#c99722] hover:bg-[#fff3de] dark:border-amber-700/60 dark:bg-slate-800 dark:text-amber-200 dark:hover:bg-slate-700 sm:text-sm"
+                    >
+                      <FiStar size={15} className="text-amber-500" />
+                      ⭐ Đã lưu vào Sổ tay câu sai ({filterCounts.saved})
+                    </button>
+                  </div>
+                </div>
+
+                {/* Quick Filter Pills */}
+                <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-[#ead9bd]/80 pt-3.5 dark:border-slate-800">
+                  {[
+                    { key: 'all' as SmartQuestionFilter, label: `Tất cả (${filterCounts.all})` },
+                    { key: 'incorrect' as SmartQuestionFilter, label: `❌ Câu làm sai (${filterCounts.incorrect})` },
+                    { key: 'unanswered' as SmartQuestionFilter, label: `⚪ Câu bỏ trống (${filterCounts.unanswered})` },
+                    { key: 'correct' as SmartQuestionFilter, label: `✅ Câu làm đúng (${filterCounts.correct})` },
+                    { key: 'saved' as SmartQuestionFilter, label: `⭐ Đã lưu vào Sổ tay câu sai (${filterCounts.saved})` },
+                  ].map((tab) => (
+                    <button
+                      key={tab.key}
+                      type="button"
+                      onClick={() => {
+                        setQuestionFilter(tab.key);
+                        if (tab.key === 'correct' || tab.key === 'all') {
+                          setRetryMistakeMode(false);
+                        }
+                        setActiveTab('review');
+                        window.setTimeout(() => {
+                          reviewSectionAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }, 50);
+                      }}
+                      className="rounded-xl border border-[#dfcba8] bg-white/85 px-3 py-1.5 text-xs font-bold text-[#5c432d] transition hover:border-[#b9231a] hover:text-[#b9231a] dark:border-slate-700 dark:bg-slate-800/90 dark:text-slate-200 dark:hover:border-amber-500 dark:hover:text-amber-300"
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* AI Analysis — chỉ VIP/Pre */}
             {topicBreakdown.length > 0 && (
               <div className={`rounded-[24px] p-6 ${inkResultSoftPanel}`}>
@@ -897,179 +1284,473 @@ function ExamResultContent() {
 
         {/* ── TAB: XEM LẠI BÀI ── */}
         {activeTab === 'review' && (
-          <div className="space-y-4">
+          <div ref={reviewSectionAnchorRef} className="scroll-mt-20 space-y-5">
             {answers.length === 0 ? (
-                                    <div className={`rounded-2xl p-10 text-center ${inkResultMuted} ${inkResultSoftPanel}`}>
+              <div className={`rounded-2xl p-10 text-center ${inkResultMuted} ${inkResultSoftPanel}`}>
                 <p className="text-lg">Không có dữ liệu câu hỏi chi tiết</p>
               </div>
             ) : (
-              answers.map((q, index) => {
-                const status = getQuestionReviewStatus(q);
-                const borderCls = getReviewCardClass(status);
-                const isEssayQuestion = q.question_type === 'essay' || q.question_type === 'translation';
-                const questionId = q.question_id || q.id;
-                const isReported = Boolean(questionId && reportedQuestionIds.has(questionId));
-
-                return (
-                  <div key={index} className={`rounded-xl border-2 p-5 transition-all ${borderCls}`}>
-
-                    {/* Passage */}
-                    {q.passage_text && index === 0 && (
-                      <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-4 dark:bg-purple-950/25 dark:border-purple-900/60">
-                        <p className="text-xs font-bold text-purple-700 mb-2 uppercase tracking-wide dark:text-purple-200">Đoạn văn</p>
-                        <p className="text-gray-800 leading-relaxed dark:text-gray-100">{q.passage_text}</p>
+              <>
+                {/* 📓 Sổ Tay Câu Sai & Ôn Tập Thông Minh (Mistake Notebook) Control Panel */}
+                <section className="rounded-[26px] border-2 border-[#d6b477] bg-gradient-to-br from-[#fffaf2] via-[#fff6e6] to-[#f8ead0] p-5 shadow-[0_14px_38px_rgba(129,77,33,0.12)] no-print dark:border-amber-700/50 dark:from-slate-900 dark:via-slate-900 dark:to-amber-950/25 sm:p-6">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                    <div>
+                      <div className="inline-flex items-center gap-2 rounded-full border border-[#d8b87f] bg-[#fff7e9] px-3 py-1 text-xs font-black text-[#9a681c] dark:border-amber-700/60 dark:bg-amber-950/50 dark:text-amber-300">
+                        <span>📓 Sổ Tay Câu Sai &amp; Ôn Tập Thông Minh</span>
+                        <span className="text-[#c99722]">· Mistake Notebook</span>
                       </div>
-                    )}
-
-                    {/* Question Header */}
-                    <div className="flex items-start gap-3 mb-4">
-                      <div className="flex-shrink-0 mt-0.5">
-                        {status === 'correct' && <FiCheckCircle className="text-green-600" size={22} />}
-                        {status === 'incorrect' && <FiXCircle className="text-red-600" size={22} />}
-                        {status === 'unanswered' && <div className="w-[22px] h-[22px] rounded-full border-2 border-gray-300" />}
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
-                            Câu {q.sub_question_number || q.question_number || index + 1}
-                            {q.difficulty && (
-                              <span className={`ml-2 px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                                q.difficulty === 'easy' ? 'bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-300' :
-                                q.difficulty === 'hard' ? 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300' :
-                                'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
-                              }`}>
-                                {q.difficulty === 'easy' ? 'Dễ' : q.difficulty === 'hard' ? 'Khó' : 'TB'}
-                              </span>
-                            )}
-                          </span>
-                          {status === 'incorrect' && q.selected_answer_key && (
-                            <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded dark:bg-red-950/40 dark:text-red-300">
-                              Bạn: {q.selected_answer_key}
-                            </span>
-                          )}
-                          {(q.topic_name || q.question_category) && (
-                            <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded dark:bg-slate-800 dark:text-slate-300">
-                              {q.topic_name || q.question_category}
-                            </span>
-                          )}
-                          <span className="ml-auto text-xs text-gray-400">{q.points} điểm</span>
-                        </div>
-                        <BilingualMathText
-                          primary={q.question_text}
-                          secondary={q.question_text_cn}
-                          tertiary={q.question_text_en}
-                          languageMode={languageMode}
-                          className="exam-math-readable text-gray-900 font-medium leading-relaxed dark:text-gray-100"
-                        />
-                        <div className="mt-3">
-                          <button
-                            type="button"
-                            onClick={() => setReportQuestion(q)}
-                            disabled={!questionId || isReported}
-                            className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-bold transition-colors ${
-                              isReported
-                                ? 'cursor-default border-emerald-200 bg-emerald-50 text-emerald-700'
-                                : 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 disabled:opacity-50'
-                            }`}
-                          >
-                            {isReported ? <FiCheckCircle size={13} /> : <FiFlag size={13} />}
-                            {isReported ? 'Đã báo lỗi' : 'Báo lỗi'}
-                          </button>
-                        </div>
-                      </div>
+                      <h2 className="mt-2 text-lg font-black text-[#4f3521] dark:text-white sm:text-xl">
+                        Bộ lọc câu hỏi thông minh &amp; Tự kiểm tra lại câu sai
+                      </h2>
+                      <p className="mt-0.5 text-xs font-medium text-[#7d6957] dark:text-slate-300">
+                        Lọc nhanh theo trạng thái bài làm, lưu câu khó vào Sổ tay câu sai hoặc ẩn đáp án để tự làm lại ngay trên trang.
+                      </p>
                     </div>
 
-                    {/* Options */}
-                    <div className="space-y-2 ml-8">
-                      {(q.options ?? []).map((opt) => {
-                        const isCorrect = opt.is_correct;
-                        const isUserPick = q.selected_answer_key === opt.key;
-                        const tone = getOptionToneClass(isCorrect, isUserPick);
+                    <div className="flex flex-wrap items-center gap-2.5">
+                      {notCorrectCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={handleToggleRetryMistakeMode}
+                          className={`inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-xs font-black transition-all sm:text-sm ${
+                            retryMistakeMode
+                              ? 'bg-gradient-to-r from-amber-600 to-red-600 text-white shadow-lg shadow-red-900/25 ring-2 ring-amber-300 dark:ring-amber-500/50'
+                              : 'border-2 border-[#d52a1e] bg-white text-[#b9231a] hover:bg-[#fff0eb] dark:border-rose-500 dark:bg-slate-800 dark:text-rose-300 dark:hover:bg-rose-950/40'
+                          }`}
+                        >
+                          <FiZap size={16} />
+                          {retryMistakeMode
+                            ? `⚡ Đang bật: Ôn tập lại các câu chưa đúng (Ẩn đáp án để tự làm lại)`
+                            : `⚡ Ôn tập lại các câu chưa đúng (Ẩn đáp án để tự làm lại)`}
+                        </button>
+                      )}
 
-                        return (
-                          <div key={opt.key} className={`flex items-start gap-2 p-3 rounded-lg border-2 ${tone.bg} ${tone.border}`}>
-                            <span className={`font-bold text-sm shrink-0 ${tone.text}`}>{opt.key}.</span>
-                            <div className="flex-1">
-                              <BilingualMathText
-                                primary={opt.text}
-                                secondary={opt.text_cn}
-                                tertiary={opt.text_en}
-                                languageMode={languageMode}
-                                className={`exam-math-readable text-sm ${tone.text}`}
-                                secondaryClassName={`mt-1 text-xs ${tone.secondary}`}
-                              />
-                            </div>
-                            {isCorrect && <span className="ml-auto text-green-700 font-bold text-xs shrink-0 dark:text-green-300">✓ Đúng</span>}
-                            {isUserPick && !isCorrect && <span className="ml-auto text-red-700 font-bold text-xs shrink-0 dark:text-red-300">✗ Bạn chọn</span>}
-                          </div>
-                        );
-                      })}
-
-                      {!q.selected_answer_key && (
-                        <p className="text-sm text-gray-400 italic dark:text-gray-500">
-                          Bạn đã bỏ qua · Đáp án đúng: <strong className="text-gray-600 dark:text-gray-300">{q.correct_answer_key}</strong>
-                        </p>
+                      {notCorrectCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={handleSaveAllMistakesToNotebook}
+                          className="inline-flex items-center gap-1.5 rounded-2xl border border-[#d5b477] bg-[#fffaf2] px-3.5 py-2.5 text-xs font-black text-[#6f451b] transition hover:border-[#c99722] hover:bg-[#fff2d9] dark:border-amber-700/60 dark:bg-slate-800 dark:text-amber-200 dark:hover:bg-slate-700"
+                        >
+                          <FiStar size={14} className="text-amber-500" />
+                          ⭐ Lưu tất cả {notCorrectCount} câu chưa đúng vào Sổ tay
+                        </button>
                       )}
                     </div>
+                  </div>
 
-                    {/* Essay/Translation answer display */}
-                    {isEssayQuestion && (
-                      <div className="mt-4 ml-8 space-y-3">
-                        <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 dark:bg-indigo-950/25 dark:border-indigo-900/60">
-                          <p className="text-xs font-bold text-indigo-700 mb-1 dark:text-indigo-200">✍️ Câu trả lời của bạn</p>
-                          <RichMathText value={q.selected_answer_text || 'Chưa trả lời'} className="text-sm text-gray-800 leading-relaxed dark:text-gray-100" />
-                        </div>
-                        <div className="bg-green-50 border border-green-200 rounded-xl p-4 dark:bg-green-950/25 dark:border-green-900/60">
-                          <p className="text-xs font-bold text-green-700 mb-1 dark:text-green-200">✓ Đáp án mẫu</p>
-                          <BilingualMathText
-                            primary={q.correct_answer_text}
-                            secondary={q.correct_answer_text_cn}
-                            tertiary={q.correct_answer_text_en}
-                            languageMode={languageMode}
-                            className="text-sm text-gray-800 dark:text-gray-100"
-                            secondaryClassName="mt-1 text-xs text-green-700 dark:text-green-300"
-                          />
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Explanation */}
-                    <QuestionExplanationBlock question={q} languageMode={explanationLanguageMode} className="mt-4 sm:ml-8" />
-
-                    {/* AI buttons */}
-                    {!result.is_room_exam && !isEssayQuestion && (
-                      <div className="mt-3 ml-8 flex items-center gap-3 flex-wrap">
-                        <ReviewAIButtons
-                          status={status}
-                          onOpen={(mode) => openReviewAI(q, mode)}
-                        />
-                        {status === 'incorrect' && (
-                          <button
-                            onClick={() => handleSaveWrongQuestion(q)}
-                            disabled={Boolean((q.question_id || q.id) && savedWrongQuestions.has((q.question_id || q.id)!))}
-                            className="text-sm text-red-600 hover:text-red-800 font-medium flex items-center gap-1.5 disabled:text-gray-400">
-                            <FiBookOpen size={14} />
-                            {(q.question_id || q.id) && savedWrongQuestions.has((q.question_id || q.id)!)
-                              ? 'Đã lưu câu sai'
-                              : 'Lưu câu sai'}
-                          </button>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Grade essay button */}
-                    {isEssayQuestion && (
-                      <div className="mt-3 ml-8">
+                  {/* Smart Question Filter Tabs */}
+                  <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-[#ead9bd]/80 pt-4 dark:border-slate-800">
+                    {[
+                      { key: 'all' as SmartQuestionFilter, label: `Tất cả (${filterCounts.all})` },
+                      { key: 'incorrect' as SmartQuestionFilter, label: `❌ Câu làm sai (${filterCounts.incorrect})` },
+                      { key: 'unanswered' as SmartQuestionFilter, label: `⚪ Câu bỏ trống (${filterCounts.unanswered})` },
+                      { key: 'correct' as SmartQuestionFilter, label: `✅ Câu làm đúng (${filterCounts.correct})` },
+                      { key: 'saved' as SmartQuestionFilter, label: `⭐ Đã lưu vào Sổ tay câu sai (${filterCounts.saved})` },
+                    ].map((tab) => {
+                      const isActive = questionFilter === tab.key && !(retryMistakeMode && tab.key === 'all');
+                      const isRetryAllWrongActive = retryMistakeMode && tab.key === 'all' && questionFilter === 'all';
+                      return (
                         <button
-                          onClick={() => setShowGradeModal(q)}
-                          className="text-sm text-orange-600 hover:text-orange-800 font-medium flex items-center gap-1.5">
-                          <FiCpu size={14} /> Chấm bài bằng AI
+                          key={tab.key}
+                          type="button"
+                          onClick={() => {
+                            setQuestionFilter(tab.key);
+                            if (tab.key === 'correct' || tab.key === 'all') {
+                              setRetryMistakeMode(false);
+                            }
+                          }}
+                          className={`rounded-xl px-3.5 py-2 text-xs font-black transition-all sm:text-sm ${
+                            isActive
+                              ? 'bg-gradient-to-r from-[#b9231a] to-[#d52a1e] text-white shadow-md shadow-red-900/15'
+                              : isRetryAllWrongActive
+                                ? 'border border-amber-400 bg-amber-100/80 text-amber-900 dark:border-amber-600 dark:bg-amber-950/50 dark:text-amber-200'
+                                : 'border border-[#dfcba8] bg-white/90 text-[#5c432d] hover:border-[#c99722] hover:bg-[#fff7e8] dark:border-slate-700 dark:bg-slate-800/90 dark:text-slate-200 dark:hover:border-amber-500'
+                          }`}
+                        >
+                          {tab.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Active Retry Mistake Mode Banner */}
+                  {retryMistakeMode && (
+                    <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-amber-300 bg-gradient-to-r from-amber-50 via-orange-50/80 to-rose-50/70 p-4 dark:border-amber-700/70 dark:from-amber-950/50 dark:via-slate-900 dark:to-rose-950/30 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="space-y-1">
+                        <p className="text-xs font-black uppercase tracking-wide text-amber-800 dark:text-amber-300">
+                          🔥 Tự Kiểm Tra Lại Các Câu Sai (Retry Mistake Mode)
+                        </p>
+                        <p className="text-xs font-medium text-amber-900/90 dark:text-slate-200 sm:text-sm">
+                          Đáp án đúng và giải thích đã được ẩn. Hãy click trực tiếp vào đáp án <strong>A, B, C, D</strong> ở từng câu bên dưới để tự kiểm tra lại!
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                        <div className="rounded-xl border border-amber-300 bg-white/90 px-3 py-1.5 text-xs font-black text-amber-900 dark:border-amber-700 dark:bg-slate-800 dark:text-amber-200">
+                          Đã làm lại: {retryAttemptedCount}/{filteredReviewItems.length} · Đúng: <span className="text-emerald-600 dark:text-emerald-400">{retryCorrectCount}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRetryAnswers({});
+                            setRevealedRetryKeys(new Set());
+                          }}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-amber-300 bg-white px-3 py-1.5 text-xs font-bold text-amber-800 transition hover:bg-amber-100 dark:border-amber-700 dark:bg-slate-800 dark:text-amber-200 dark:hover:bg-slate-700"
+                        >
+                          <FiRotateCw size={13} /> Làm mới lượt thử
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setRetryMistakeMode(false)}
+                          className="inline-flex items-center gap-1.5 rounded-xl bg-amber-800 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-amber-900 dark:bg-amber-600 dark:hover:bg-amber-500"
+                        >
+                          Hiện tất cả đáp án
                         </button>
                       </div>
-                    )}
+                    </div>
+                  )}
+                </section>
+
+                {filteredReviewItems.length === 0 ? (
+                  <div className={`rounded-2xl p-10 text-center ${inkResultSoftPanel}`}>
+                    <p className={`text-base font-bold ${inkResultTitle}`}>
+                      {questionFilter === 'saved'
+                        ? 'Bạn chưa lưu câu hỏi nào vào Sổ tay câu sai trong đề này.'
+                        : questionFilter === 'incorrect'
+                          ? 'Tuyệt vời! Không có câu làm sai nào trong mục này.'
+                          : questionFilter === 'unanswered'
+                            ? 'Bạn không bỏ trống câu hỏi nào.'
+                            : 'Không có câu hỏi nào khớp với bộ lọc hiện tại.'}
+                    </p>
+                    <p className={`mt-1 text-xs ${inkResultMuted}`}>
+                      Hãy bấm nút &ldquo;⭐ Lưu vào Sổ Tay Câu Sai&rdquo; trên từng câu hỏi hoặc chuyển sang bộ lọc khác.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setQuestionFilter('all');
+                        setRetryMistakeMode(false);
+                      }}
+                      className="mt-4 inline-flex items-center gap-2 rounded-xl bg-[#d52a1e] px-4 py-2 text-xs font-black text-white shadow-sm hover:bg-[#b91f16]"
+                    >
+                      Xem tất cả ({filterCounts.all})
+                    </button>
                   </div>
-                );
-              })
+                ) : (
+                  filteredReviewItems.map(({ q, originalIndex, status, qKey, isSavedInNotebook }, filteredIdx) => {
+                    const isEssayQuestion = q.question_type === 'essay' || q.question_type === 'translation';
+                    const questionId = q.question_id || q.id;
+                    const isReported = Boolean(questionId && reportedQuestionIds.has(questionId));
+
+                    const retryPickedKey = retryAnswers[qKey] || null;
+                    const isManuallyRevealed = revealedRetryKeys.has(qKey);
+                    const isRevealedInRetry = Boolean(retryPickedKey) || isManuallyRevealed;
+                    const hideAnswersForRetry = retryMistakeMode && !isRevealedInRetry;
+
+                    const retryPickedOption = retryPickedKey
+                      ? (q.options ?? []).find((o) => o.key === retryPickedKey)
+                      : undefined;
+                    const isRetryCorrect = retryPickedKey
+                      ? Boolean(retryPickedOption?.is_correct || retryPickedKey === q.correct_answer_key)
+                      : false;
+
+                    const borderCls = hideAnswersForRetry
+                      ? 'bg-amber-50/40 border-amber-300 dark:bg-slate-900/90 dark:border-amber-700/60'
+                      : retryMistakeMode && retryPickedKey
+                        ? isRetryCorrect
+                          ? 'bg-emerald-50/80 border-emerald-300 dark:bg-emerald-950/25 dark:border-emerald-800/70'
+                          : 'bg-rose-50/80 border-rose-300 dark:bg-rose-950/25 dark:border-rose-800/70'
+                        : getReviewCardClass(status);
+
+                    const showPassage =
+                      Boolean(q.passage_text) &&
+                      (filteredIdx === 0 || filteredReviewItems[filteredIdx - 1]?.q.passage_text !== q.passage_text);
+
+                    return (
+                      <div key={qKey} className={`rounded-xl border-2 p-5 transition-all ${borderCls}`}>
+
+                        {/* Passage */}
+                        {showPassage && (
+                          <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-4 dark:bg-purple-950/25 dark:border-purple-900/60">
+                            <p className="text-xs font-bold text-purple-700 mb-2 uppercase tracking-wide dark:text-purple-200">Đoạn văn</p>
+                            <p className="text-gray-800 leading-relaxed dark:text-gray-100">{q.passage_text}</p>
+                          </div>
+                        )}
+
+                        {/* Question Header */}
+                        <div className="flex items-start gap-3 mb-4">
+                          <div className="flex-shrink-0 mt-0.5">
+                            {hideAnswersForRetry ? (
+                              <div className="flex h-[22px] w-[22px] items-center justify-center rounded-full border-2 border-amber-500 bg-amber-100 text-[11px] font-black text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                                ?
+                              </div>
+                            ) : retryMistakeMode && retryPickedKey ? (
+                              isRetryCorrect ? (
+                                <FiCheckCircle className="text-emerald-600 dark:text-emerald-400" size={22} />
+                              ) : (
+                                <FiXCircle className="text-rose-600 dark:text-rose-400" size={22} />
+                              )
+                            ) : (
+                              <>
+                                {status === 'correct' && <FiCheckCircle className="text-green-600" size={22} />}
+                                {status === 'incorrect' && <FiXCircle className="text-red-600" size={22} />}
+                                {status === 'unanswered' && <div className="w-[22px] h-[22px] rounded-full border-2 border-gray-300" />}
+                              </>
+                            )}
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide dark:text-gray-400">
+                                Câu {q.sub_question_number || q.question_number || originalIndex + 1}
+                                {q.difficulty && (
+                                  <span className={`ml-2 px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                                    q.difficulty === 'easy' ? 'bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-300' :
+                                    q.difficulty === 'hard' ? 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300' :
+                                    'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
+                                  }`}>
+                                    {q.difficulty === 'easy' ? 'Dễ' : q.difficulty === 'hard' ? 'Khó' : 'TB'}
+                                  </span>
+                                )}
+                              </span>
+                              {!hideAnswersForRetry && status === 'incorrect' && q.selected_answer_key && (
+                                <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded dark:bg-red-950/40 dark:text-red-300">
+                                  Bạn: {q.selected_answer_key}
+                                </span>
+                              )}
+                              {hideAnswersForRetry && (
+                                <span className="text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-bold dark:bg-amber-950/60 dark:text-amber-300">
+                                  🔥 Đang ẩn đáp án · Hãy chọn lại
+                                </span>
+                              )}
+                              {(q.topic_name || q.question_category) && (
+                                <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded dark:bg-slate-800 dark:text-slate-300">
+                                  {q.topic_name || q.question_category}
+                                </span>
+                              )}
+                              <span className="ml-auto text-xs text-gray-400">{q.points} điểm</span>
+                            </div>
+                            <BilingualMathText
+                              primary={q.question_text}
+                              secondary={q.question_text_cn}
+                              tertiary={q.question_text_en}
+                              languageMode={languageMode}
+                              className="exam-math-readable text-gray-900 font-medium leading-relaxed dark:text-gray-100"
+                            />
+                            <div className="mt-3 flex flex-wrap items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleToggleMistakeNotebook(q, originalIndex)}
+                                className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-bold transition-colors ${
+                                  isSavedInNotebook
+                                    ? 'border-amber-400 bg-amber-100 text-amber-900 hover:bg-amber-200 dark:border-amber-600 dark:bg-amber-950/60 dark:text-amber-200'
+                                    : 'border-amber-200 bg-white text-amber-800 hover:bg-amber-50 dark:border-slate-700 dark:bg-slate-800 dark:text-amber-300 dark:hover:bg-slate-700'
+                                }`}
+                              >
+                                <FiStar size={13} className={isSavedInNotebook ? 'fill-amber-500 text-amber-500' : 'text-amber-500'} />
+                                {isSavedInNotebook ? '⭐ Đã lưu vào Sổ Tay Câu Sai' : '⭐ Lưu vào Sổ Tay Câu Sai'}
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => setReportQuestion(q)}
+                                disabled={!questionId || isReported}
+                                className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-bold transition-colors ${
+                                  isReported
+                                    ? 'cursor-default border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300'
+                                    : 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
+                                }`}
+                              >
+                                {isReported ? <FiCheckCircle size={13} /> : <FiFlag size={13} />}
+                                {isReported ? 'Đã báo lỗi' : 'Báo lỗi'}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Options */}
+                        <div className="space-y-2 ml-8">
+                          {(q.options ?? []).map((opt) => {
+                            const isCorrect = opt.is_correct || opt.key === q.correct_answer_key;
+                            const isOriginalUserPick = q.selected_answer_key === opt.key;
+                            const isRetryUserPick = retryPickedKey === opt.key;
+
+                            if (hideAnswersForRetry) {
+                              return (
+                                <button
+                                  key={opt.key}
+                                  type="button"
+                                  onClick={() => handleSelectRetryOption(qKey, opt.key)}
+                                  className="group flex w-full items-start gap-2.5 rounded-lg border-2 border-gray-200 bg-white p-3 text-left transition-all hover:border-amber-500 hover:bg-amber-50/70 dark:border-gray-700 dark:bg-gray-900/80 dark:hover:border-amber-500 dark:hover:bg-amber-950/30"
+                                >
+                                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-gray-300 bg-gray-50 text-xs font-black text-gray-700 transition-colors group-hover:border-amber-500 group-hover:bg-amber-500 group-hover:text-white dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200">
+                                    {opt.key}
+                                  </span>
+                                  <div className="flex-1 pt-0.5">
+                                    <BilingualMathText
+                                      primary={opt.text}
+                                      secondary={opt.text_cn}
+                                      tertiary={opt.text_en}
+                                      languageMode={languageMode}
+                                      className="exam-math-readable text-sm text-gray-800 dark:text-gray-100"
+                                      secondaryClassName="mt-1 text-xs text-gray-500 dark:text-gray-400"
+                                    />
+                                  </div>
+                                  <span className="ml-auto self-center text-xs font-bold text-amber-600 opacity-0 transition-opacity group-hover:opacity-100 dark:text-amber-400">
+                                    Chọn {opt.key} →
+                                  </span>
+                                </button>
+                              );
+                            }
+
+                            const effectiveUserPick = retryMistakeMode && retryPickedKey ? isRetryUserPick : isOriginalUserPick;
+                            const tone = getOptionToneClass(isCorrect, effectiveUserPick);
+
+                            return (
+                              <div key={opt.key} className={`flex items-start gap-2 p-3 rounded-lg border-2 ${tone.bg} ${tone.border}`}>
+                                <span className={`font-bold text-sm shrink-0 ${tone.text}`}>{opt.key}.</span>
+                                <div className="flex-1">
+                                  <BilingualMathText
+                                    primary={opt.text}
+                                    secondary={opt.text_cn}
+                                    tertiary={opt.text_en}
+                                    languageMode={languageMode}
+                                    className={`exam-math-readable text-sm ${tone.text}`}
+                                    secondaryClassName={`mt-1 text-xs ${tone.secondary}`}
+                                  />
+                                </div>
+                                <div className="ml-auto flex flex-wrap items-center gap-1.5 shrink-0">
+                                  {isCorrect && (
+                                    <span className="text-green-700 font-bold text-xs dark:text-green-300">✓ Đúng</span>
+                                  )}
+                                  {retryMistakeMode && isRetryUserPick && !isCorrect && (
+                                    <span className="text-red-700 font-bold text-xs dark:text-red-300">✗ Bạn vừa chọn</span>
+                                  )}
+                                  {!retryMistakeMode && isOriginalUserPick && !isCorrect && (
+                                    <span className="text-red-700 font-bold text-xs dark:text-red-300">✗ Bạn chọn</span>
+                                  )}
+                                  {retryMistakeMode && isOriginalUserPick && (
+                                    <span className="rounded bg-gray-200/80 px-1.5 py-0.5 text-[10px] font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                                      Lần thi: {opt.key}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+
+                          {/* Retry Result Feedback Banner */}
+                          {retryMistakeMode && retryPickedKey && (
+                            <div
+                              className={`mt-3 flex flex-col gap-2 rounded-xl border p-3.5 sm:flex-row sm:items-center sm:justify-between ${
+                                isRetryCorrect
+                                  ? 'border-emerald-300 bg-emerald-100/80 text-emerald-900 dark:border-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-200'
+                                  : 'border-rose-300 bg-rose-100/80 text-rose-900 dark:border-rose-700 dark:bg-rose-950/50 dark:text-rose-200'
+                              }`}
+                            >
+                              <div className="text-xs font-bold sm:text-sm">
+                                {isRetryCorrect ? (
+                                  <span>
+                                    🎉 Chính xác! Bạn đã chọn đúng đáp án <strong>{retryPickedKey}</strong> trong lần tự kiểm tra lại.
+                                  </span>
+                                ) : (
+                                  <span>
+                                    ❌ Chưa đúng! Bạn vừa chọn <strong>{retryPickedKey}</strong>, đáp án đúng là{' '}
+                                    <strong>{q.correct_answer_key}</strong>. Xem kỹ giải thích chi tiết bên dưới nhé!
+                                  </span>
+                                )}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleResetSingleRetryQuestion(qKey)}
+                                className="inline-flex w-fit shrink-0 items-center gap-1 rounded-lg border border-current/25 bg-white/80 px-2.5 py-1 text-xs font-black transition hover:bg-white dark:bg-slate-900/70"
+                              >
+                                <FiRotateCw size={12} /> Chọn lại câu này
+                              </button>
+                            </div>
+                          )}
+
+                          {!hideAnswersForRetry && !q.selected_answer_key && (
+                            <p className="text-sm text-gray-400 italic dark:text-gray-500">
+                              Bạn đã bỏ qua · Đáp án đúng: <strong className="text-gray-600 dark:text-gray-300">{q.correct_answer_key}</strong>
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Essay/Translation answer display */}
+                        {isEssayQuestion && !hideAnswersForRetry && (
+                          <div className="mt-4 ml-8 space-y-3">
+                            <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 dark:bg-indigo-950/25 dark:border-indigo-900/60">
+                              <p className="text-xs font-bold text-indigo-700 mb-1 dark:text-indigo-200">✍️ Câu trả lời của bạn</p>
+                              <RichMathText value={q.selected_answer_text || 'Chưa trả lời'} className="text-sm text-gray-800 leading-relaxed dark:text-gray-100" />
+                            </div>
+                            <div className="bg-green-50 border border-green-200 rounded-xl p-4 dark:bg-green-950/25 dark:border-green-900/60">
+                              <p className="text-xs font-bold text-green-700 mb-1 dark:text-green-200">✓ Đáp án mẫu</p>
+                              <BilingualMathText
+                                primary={q.correct_answer_text}
+                                secondary={q.correct_answer_text_cn}
+                                tertiary={q.correct_answer_text_en}
+                                languageMode={languageMode}
+                                className="text-sm text-gray-800 dark:text-gray-100"
+                                secondaryClassName="mt-1 text-xs text-green-700 dark:text-green-300"
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Explanation or Hidden Retry Prompt */}
+                        {hideAnswersForRetry ? (
+                          <div className="mt-4 sm:ml-8 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed border-amber-300 bg-amber-50/70 px-4 py-3 text-xs text-amber-900 dark:border-amber-700/60 dark:bg-amber-950/25 dark:text-amber-200">
+                            <span>
+                              👆 Hãy bấm chọn một phương án <strong>A, B, C, D</strong> phía trên để kiểm tra đáp án và mở lời giải chi tiết.
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setRevealedRetryKeys((prev) => new Set(prev).add(qKey))}
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-amber-400 bg-white px-3 py-1.5 text-xs font-bold text-amber-800 transition hover:bg-amber-100 dark:border-amber-600 dark:bg-slate-800 dark:text-amber-200"
+                            >
+                              <FiEye size={13} /> Xem đáp án &amp; lời giải
+                            </button>
+                          </div>
+                        ) : (
+                          <QuestionExplanationBlock question={q} languageMode={explanationLanguageMode} className="mt-4 sm:ml-8" />
+                        )}
+
+                        {/* AI buttons & Mistake Notebook action */}
+                        {!result.is_room_exam && !isEssayQuestion && (
+                          <div className="mt-3 ml-8 flex items-center gap-3 flex-wrap">
+                            <ReviewAIButtons
+                              status={status}
+                              onOpen={(mode) => openReviewAI(q, mode)}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleToggleMistakeNotebook(q, originalIndex)}
+                              className={`text-sm font-medium flex items-center gap-1.5 transition-colors ${
+                                isSavedInNotebook
+                                  ? 'text-amber-600 hover:text-amber-700 dark:text-amber-400'
+                                  : 'text-red-600 hover:text-red-800 dark:text-rose-400 dark:hover:text-rose-300'
+                              }`}
+                            >
+                              <FiBookOpen size={14} />
+                              {isSavedInNotebook ? 'Đã lưu vào Sổ tay câu sai' : 'Lưu vào Sổ tay câu sai'}
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Grade essay button */}
+                        {isEssayQuestion && (
+                          <div className="mt-3 ml-8">
+                            <button
+                              onClick={() => setShowGradeModal(q)}
+                              className="text-sm text-orange-600 hover:text-orange-800 font-medium flex items-center gap-1.5">
+                              <FiCpu size={14} /> Chấm bài bằng AI
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </>
             )}
           </div>
         )}

@@ -1,5 +1,38 @@
 import axios from '../utils/axios';
 
+export interface StationVideoDTO {
+  id: string;
+  title: string;
+  creator: string;
+  creatorHandle: string;
+  category: 'discipline' | 'exam' | 'tips' | 'scholarship' | string;
+  tags: string[];
+  likes: number;
+  message: string;
+  originalUrl?: string;
+  createdBy?: number | null;
+  isCustom?: boolean;
+}
+
+export interface StudyLeaderboardEntry {
+  userId?: number | null;
+  userName: string;
+  userAvatar?: string | null;
+  totalMinutes: number;
+  sessionsCount: number;
+  dreamUniversity?: string;
+}
+
+export interface StudyLeaderboardData {
+  topToday: StudyLeaderboardEntry[];
+  topWeek: StudyLeaderboardEntry[];
+  myStats: {
+    todayMinutes: number;
+    todaySessions: number;
+    weekMinutes: number;
+  };
+}
+
 export interface StationChatMessage {
   id: string;
   userId?: number | null;
@@ -33,6 +66,7 @@ export interface RoomParticipantDTO {
   isMicOn: boolean;
   statusText: string;
   isHost?: boolean;
+  cameraFrame?: string | null;
   lastSeen: number;
 }
 
@@ -50,6 +84,114 @@ export interface BackendStudyRoom {
   isPrivate: boolean;
   createdAt: number;
   participants?: RoomParticipantDTO[];
+}
+
+/**
+ * Lấy danh sách video TikTok truyền động lực từ SQL database
+ */
+export async function getStationVideos(): Promise<StationVideoDTO[]> {
+  try {
+    const res = await axios.get('/study-station/videos');
+    if (res.data?.success && Array.isArray(res.data?.data)) {
+      return res.data.data;
+    }
+    return [];
+  } catch (err) {
+    console.error('getStationVideos error:', err);
+    return [];
+  }
+}
+
+/**
+ * Thêm / chia sẻ video TikTok mới lên Trạm Động Lực (lưu vào SQL database)
+ */
+export async function createStationVideoApi(payload: {
+  id: string;
+  title: string;
+  creator?: string;
+  creatorHandle?: string;
+  category?: string;
+  tags?: string[];
+  message?: string;
+  originalUrl?: string;
+}): Promise<StationVideoDTO | null> {
+  try {
+    const res = await axios.post('/study-station/videos', payload);
+    if (res.data?.success && res.data?.data) {
+      return res.data.data;
+    }
+    return null;
+  } catch (err) {
+    console.error('createStationVideoApi error:', err);
+    return null;
+  }
+}
+
+/**
+ * Thả tim hoặc bỏ tim cho video động lực
+ */
+export async function likeStationVideoApi(
+  videoId: string,
+  delta: 1 | -1 = 1
+): Promise<number | null> {
+  try {
+    const res = await axios.post(`/study-station/videos/${encodeURIComponent(videoId)}/like`, {
+      delta,
+    });
+    if (res.data?.success && typeof res.data?.data?.likes === 'number') {
+      return res.data.data.likes;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Xóa video động lực (dành cho người đăng hoặc Admin)
+ */
+export async function deleteStationVideoApi(videoId: string): Promise<boolean> {
+  try {
+    const res = await axios.delete(`/study-station/videos/${encodeURIComponent(videoId)}`);
+    return Boolean(res.data?.success);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Ghi nhận 1 phiên học Pomodoro hoàn thành và trả về thống kê cá nhân
+ */
+export async function recordStudySessionApi(payload: {
+  durationMinutes: number;
+  subject?: string;
+  dreamUniversity?: string;
+  userName?: string;
+}): Promise<{ todayMinutes: number; todaySessions: number; weekMinutes: number } | null> {
+  try {
+    const res = await axios.post('/study-station/sessions', payload);
+    if (res.data?.success && res.data?.data) {
+      return res.data.data;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Lấy bảng xếp hạng học viên chăm chỉ (24h qua và 7 ngày qua)
+ */
+export async function getStudyLeaderboardApi(): Promise<StudyLeaderboardData | null> {
+  try {
+    const res = await axios.get('/study-station/leaderboard');
+    if (res.data?.success && res.data?.data) {
+      return res.data.data;
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -149,7 +291,7 @@ export async function getStudyRoomByCodeApi(roomCode: string): Promise<BackendSt
 }
 
 /**
- * Đồng bộ trạng thái thành viên thật trong phòng (heartbeat)
+ * Đồng bộ trạng thái thành viên thật trong phòng (heartbeat + live camera frame)
  */
 export async function syncRoomPresenceApi(
   roomCode: string,
@@ -161,6 +303,7 @@ export async function syncRoomPresenceApi(
     isMicOn: boolean;
     statusText: string;
     isHost?: boolean;
+    cameraFrame?: string | null;
   }
 ): Promise<{ memberCount: number; participants: RoomParticipantDTO[] } | null> {
   try {

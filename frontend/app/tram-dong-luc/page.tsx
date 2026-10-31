@@ -7,7 +7,6 @@ import VirtualStudyRoom from '@/components/study-station/VirtualStudyRoom';
 import {
   FiArrowLeft,
   FiVolume2,
-  FiVolumeX,
   FiShare2,
   FiBookmark,
   FiPlus,
@@ -24,10 +23,31 @@ import {
   FiSend,
   FiTrash2,
   FiMusic,
+  FiEdit3,
+  FiClock,
 } from 'react-icons/fi';
-import { FaHeart, FaBookmark, FaFire } from 'react-icons/fa';
+import {
+  FaHeart,
+  FaBookmark,
+  FaFire,
+  FaTrophy,
+  FaGraduationCap,
+  FaCrown,
+  FaMedal,
+} from 'react-icons/fa';
 import { useAuthStore } from '@/lib/store/authStore';
-import { getStationChats, sendStationChat } from '@/lib/api/studyStation';
+import {
+  getStationChats,
+  sendStationChat,
+  getStationVideos,
+  createStationVideoApi,
+  likeStationVideoApi,
+  deleteStationVideoApi,
+  recordStudySessionApi,
+  getStudyLeaderboardApi,
+  type StationVideoDTO,
+  type StudyLeaderboardData,
+} from '@/lib/api/studyStation';
 
 // ─── TYPES ───────────────────────────────────────────────────────────────────
 interface MotivationVideo {
@@ -41,6 +61,19 @@ interface MotivationVideo {
   message: string;
   originalUrl?: string;
   isCustom?: boolean;
+  createdBy?: number | null;
+}
+
+interface StudyTaskItem {
+  id: string;
+  text: string;
+  done: boolean;
+}
+
+interface DreamGoalConfig {
+  dreamUni: string;
+  targetScore: string;
+  examDate: string;
 }
 
 // ─── CURATED INITIAL MOTIVATION VIDEOS ────────────────────────────────────────
@@ -125,11 +158,46 @@ const QUICK_CHEERS = [
   { label: '🎓 Đỗ CSCA!', text: '🎓 Hẹn gặp tất cả các bạn tại cánh cổng trường đại học mơ ước!' },
 ];
 
-const AMBIENT_SOUNDS: Array<{ key: 'rain' | 'ocean' | 'cafe'; label: string; emoji: string }> = [
+// ─── 4-MODE AMBIENT & LOFI SOUND MIXER ───────────────────────────────────────
+const AMBIENT_SOUNDS: Array<{
+  key: 'rain' | 'ocean' | 'cafe' | 'lofi';
+  label: string;
+  emoji: string;
+}> = [
   { key: 'rain', label: 'Mưa rơi', emoji: '🌧️' },
   { key: 'ocean', label: 'Sóng biển', emoji: '🌊' },
   { key: 'cafe', label: 'Quán Cafe', emoji: '☕' },
+  { key: 'lofi', label: 'Giai điệu Lofi', emoji: '🎵' },
 ];
+
+// ─── PRESET STUDY TASKS & DREAM UNIVERSITIES ─────────────────────────────────
+const DEFAULT_STUDY_TASKS: StudyTaskItem[] = [
+  { id: 'task-init-1', text: 'Giải 1 đề mô phỏng Toán CSCA', done: false },
+  { id: 'task-init-2', text: 'Ôn 30 từ vựng Tiếng Trung', done: false },
+  { id: 'task-init-3', text: 'Hoàn thành 2 chu kỳ Pomodoro', done: false },
+];
+
+const PRESET_TASK_CHIPS = [
+  'Giải 1 đề mô phỏng Toán CSCA',
+  'Ôn 30 từ vựng Tiếng Trung',
+  'Xem lại các câu làm sai',
+  'Hoàn thành 2 chu kỳ Pomodoro',
+];
+
+const PRESET_UNIVERSITIES = [
+  'Đại học Thanh Hoa (Tsinghua)',
+  'Đại học Bắc Kinh (Peking)',
+  'Đại học Chiết Giang (Zhejiang)',
+  'Đại học Giao thông Thượng Hải',
+  'Đại học Phục Đán (Fudan)',
+  'Đại học Nam Kinh (Nanjing)',
+];
+
+const DEFAULT_DREAM_GOAL: DreamGoalConfig = {
+  dreamUni: 'Đại học Thanh Hoa (Tsinghua)',
+  targetScore: '90+ / 100',
+  examDate: '2026-12-20',
+};
 
 export default function TramDongLucPage() {
   const { user } = useAuthStore();
@@ -150,6 +218,24 @@ export default function TramDongLucPage() {
   const [showNoteDrawer, setShowNoteDrawer] = useState<boolean>(false);
   const [showSoundMenu, setShowSoundMenu] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Study Checklist & Note State
+  const [studyNote, setStudyNote] = useState<string>('');
+  const [studyTasks, setStudyTasks] = useState<StudyTaskItem[]>(DEFAULT_STUDY_TASKS);
+  const [newTaskInput, setNewTaskInput] = useState<string>('');
+
+  // Dream University & Countdown State
+  const [dreamGoal, setDreamGoal] = useState<DreamGoalConfig>(DEFAULT_DREAM_GOAL);
+  const [showDreamModal, setShowDreamModal] = useState<boolean>(false);
+  const [editDreamUni, setEditDreamUni] = useState<string>(DEFAULT_DREAM_GOAL.dreamUni);
+  const [editTargetScore, setEditTargetScore] = useState<string>(DEFAULT_DREAM_GOAL.targetScore);
+  const [editExamDate, setEditExamDate] = useState<string>(DEFAULT_DREAM_GOAL.examDate);
+
+  // Leaderboard State
+  const [leaderboardData, setLeaderboardData] = useState<StudyLeaderboardData | null>(null);
+  const [leaderboardPeriod, setLeaderboardPeriod] = useState<'today' | 'week'>('today');
+  const [isLoadingLeaderboard, setIsLoadingLeaderboard] = useState<boolean>(false);
+  const [showLeaderboardModal, setShowLeaderboardModal] = useState<boolean>(false);
 
   // Gesture & wheel cooldown refs for buttery-smooth TikTok scrolling
   const lastScrollTimeRef = useRef<number>(0);
@@ -172,6 +258,11 @@ export default function TramDongLucPage() {
   const [isLoadingChats, setIsLoadingChats] = useState<boolean>(true);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
 
+  const showToast = useCallback((msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3200);
+  }, []);
+
   // Format relative time helper
   const formatTimeAgo = (dateStr: string) => {
     try {
@@ -188,6 +279,94 @@ export default function TramDongLucPage() {
       return 'Vừa xong';
     }
   };
+
+  // ─── LOAD SHARED VIDEOS FROM POSTGRESQL + MERGE LOCAL ──────────────────────
+  const mapDtoToMotivationVideo = useCallback((v: StationVideoDTO): MotivationVideo => {
+    const validCat = ['discipline', 'exam', 'scholarship', 'tips', 'custom'].includes(v.category)
+      ? (v.category as MotivationVideo['category'])
+      : 'discipline';
+    return {
+      id: String(v.id),
+      title: v.title || 'Video Động Lực Học Tập',
+      creator: v.creator || 'Chiến Binh CSCA',
+      creatorHandle: v.creatorHandle || '@chienthancsca',
+      category: validCat,
+      tags: Array.isArray(v.tags) && v.tags.length > 0 ? v.tags : ['#dongluc', '#csca'],
+      likes: typeof v.likes === 'number' ? v.likes : 1,
+      message: v.message || 'Hãy tập trung 100% vào mục tiêu của bạn hôm nay!',
+      originalUrl: v.originalUrl || undefined,
+      isCustom: Boolean(v.isCustom),
+      createdBy: v.createdBy ?? null,
+    };
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadSharedVideos = async () => {
+      try {
+        const dbVideos = await getStationVideos();
+        if (!isMounted) return;
+
+        let localCustom: MotivationVideo[] = [];
+        try {
+          const rawCustom = localStorage.getItem('moly:dongluc_custom_videos');
+          if (rawCustom) {
+            const parsed = JSON.parse(rawCustom);
+            if (Array.isArray(parsed)) {
+              localCustom = parsed.map((v) => ({ ...v, isCustom: true }));
+            }
+          }
+        } catch {}
+
+        const mappedFromDb = Array.isArray(dbVideos)
+          ? dbVideos.map(mapDtoToMotivationVideo)
+          : [];
+
+        const combined = [...mappedFromDb, ...localCustom, ...INITIAL_VIDEOS];
+        const seen = new Set<string>();
+        const deduped: MotivationVideo[] = [];
+        const dbLikeCounts: Record<string, number> = {};
+
+        for (const vid of combined) {
+          if (!vid || !vid.id || seen.has(vid.id)) continue;
+          seen.add(vid.id);
+          deduped.push(vid);
+          dbLikeCounts[vid.id] = vid.likes;
+        }
+
+        if (deduped.length > 0) {
+          setVideos(deduped);
+          setLikeCountMap((prev) => ({ ...dbLikeCounts, ...prev }));
+        }
+      } catch (err) {
+        console.error('loadSharedVideos error:', err);
+      }
+    };
+
+    loadSharedVideos();
+    return () => {
+      isMounted = false;
+    };
+  }, [mapDtoToMotivationVideo]);
+
+  // ─── LOAD LEADERBOARD FROM POSTGRESQL ──────────────────────────────────────
+  const loadLeaderboard = useCallback(async () => {
+    setIsLoadingLeaderboard(true);
+    try {
+      const data = await getStudyLeaderboardApi();
+      if (data) {
+        setLeaderboardData(data);
+      }
+    } catch (err) {
+      console.error('loadLeaderboard error:', err);
+    } finally {
+      setIsLoadingLeaderboard(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadLeaderboard();
+  }, [loadLeaderboard]);
 
   // Fetch real chats from SQL database
   useEffect(() => {
@@ -222,10 +401,184 @@ export default function TramDongLucPage() {
     };
   }, [user?.id]);
 
-  const showToast = useCallback((msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3000);
+  // ─── INITIAL STORAGE LOAD (LIKES, SAVED, TASKS, NOTE, DREAM GOAL) ──────────
+  useEffect(() => {
+    try {
+      const storedLikes = localStorage.getItem('moly:dongluc_likes');
+      if (storedLikes) setLikedMap(JSON.parse(storedLikes));
+
+      const storedSaved = localStorage.getItem('moly:dongluc_saved');
+      if (storedSaved) setSavedMap(JSON.parse(storedSaved));
+
+      const savedNote = localStorage.getItem('moly:dongluc_study_note');
+      if (savedNote) setStudyNote(savedNote);
+
+      const savedTasks = localStorage.getItem('moly:dongluc_study_tasks');
+      if (savedTasks) {
+        const parsedTasks = JSON.parse(savedTasks) as StudyTaskItem[];
+        if (Array.isArray(parsedTasks)) {
+          setStudyTasks(parsedTasks);
+        }
+      }
+
+      const savedDream = localStorage.getItem('moly:csca_dream_goal');
+      if (savedDream) {
+        const parsedDream = JSON.parse(savedDream) as Partial<DreamGoalConfig>;
+        const merged: DreamGoalConfig = {
+          dreamUni: parsedDream.dreamUni || DEFAULT_DREAM_GOAL.dreamUni,
+          targetScore: parsedDream.targetScore || DEFAULT_DREAM_GOAL.targetScore,
+          examDate: parsedDream.examDate || DEFAULT_DREAM_GOAL.examDate,
+        };
+        setDreamGoal(merged);
+        setEditDreamUni(merged.dreamUni);
+        setEditTargetScore(merged.targetScore);
+        setEditExamDate(merged.examDate);
+      }
+
+      const params = new URLSearchParams(window.location.search);
+      const tab = params.get('tab');
+      if (tab === 'reels') {
+        setViewMode('reels');
+      } else if (tab === 'room' || params.get('room')) {
+        setViewMode('room');
+      }
+    } catch {}
   }, []);
+
+  // ─── STUDY CHECKLIST HANDLERS ──────────────────────────────────────────────
+  const persistStudyTasks = useCallback((nextTasks: StudyTaskItem[]) => {
+    setStudyTasks(nextTasks);
+    try {
+      localStorage.setItem('moly:dongluc_study_tasks', JSON.stringify(nextTasks));
+    } catch {}
+  }, []);
+
+  const handleToggleTask = useCallback(
+    (taskId: string) => {
+      setStudyTasks((prev) => {
+        const next = prev.map((t) => (t.id === taskId ? { ...t, done: !t.done } : t));
+        try {
+          localStorage.setItem('moly:dongluc_study_tasks', JSON.stringify(next));
+        } catch {}
+        const target = next.find((t) => t.id === taskId);
+        if (target?.done) {
+          const allDone = next.length > 0 && next.every((t) => t.done);
+          if (allDone) {
+            showToast('🏆 Tuyệt vời! Bạn đã hoàn thành 100% checklist mục tiêu hôm nay!');
+          } else {
+            showToast('✅ Đã hoàn thành 1 nhiệm vụ! Tiếp tục giữ vững phong độ nhé!');
+          }
+        }
+        return next;
+      });
+    },
+    [showToast]
+  );
+
+  const handleAddStudyTask = useCallback(
+    (textToAdd?: string) => {
+      const clean = (textToAdd ?? newTaskInput).trim();
+      if (!clean) return;
+      if (studyTasks.some((t) => t.text.toLowerCase() === clean.toLowerCase())) {
+        showToast('ℹ️ Nhiệm vụ này đã có trong checklist của bạn!');
+        return;
+      }
+      const newTask: StudyTaskItem = {
+        id: `task-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        text: clean,
+        done: false,
+      };
+      const next = [...studyTasks, newTask];
+      persistStudyTasks(next);
+      if (!textToAdd) setNewTaskInput('');
+      showToast('📌 Đã thêm nhiệm vụ vào Checklist hôm nay!');
+    },
+    [newTaskInput, studyTasks, persistStudyTasks, showToast]
+  );
+
+  const handleDeleteStudyTask = useCallback(
+    (taskId: string) => {
+      const next = studyTasks.filter((t) => t.id !== taskId);
+      persistStudyTasks(next);
+    },
+    [studyTasks, persistStudyTasks]
+  );
+
+  const completedTasksCount = useMemo(
+    () => studyTasks.filter((t) => t.done).length,
+    [studyTasks]
+  );
+  const totalTasksCount = studyTasks.length;
+  const taskProgressPercent =
+    totalTasksCount > 0 ? Math.round((completedTasksCount / totalTasksCount) * 100) : 0;
+
+  // ─── DREAM GOAL & COUNTDOWN HANDLERS ───────────────────────────────────────
+  const daysUntilExam = useMemo(() => {
+    try {
+      const targetMs = new Date(dreamGoal.examDate).getTime();
+      if (isNaN(targetMs)) return 50;
+      const diffDays = Math.ceil((targetMs - Date.now()) / (1000 * 60 * 60 * 24));
+      return Math.max(0, diffDays);
+    } catch {
+      return 50;
+    }
+  }, [dreamGoal.examDate]);
+
+  const handleSaveDreamGoal = (e: React.FormEvent) => {
+    e.preventDefault();
+    const updated: DreamGoalConfig = {
+      dreamUni: editDreamUni.trim() || DEFAULT_DREAM_GOAL.dreamUni,
+      targetScore: editTargetScore.trim() || DEFAULT_DREAM_GOAL.targetScore,
+      examDate: editExamDate || DEFAULT_DREAM_GOAL.examDate,
+    };
+    setDreamGoal(updated);
+    try {
+      localStorage.setItem('moly:csca_dream_goal', JSON.stringify(updated));
+    } catch {}
+    setShowDreamModal(false);
+    showToast(`🎓 Đã lưu mục tiêu: ${updated.dreamUni} (${updated.targetScore})!`);
+  };
+
+  // ─── POMODORO COMPLETION -> RECORD TO SQL & REFRESH LEADERBOARD ────────────
+  const handlePomodoroSessionComplete = useCallback(
+    async (mode: 'work' | 'break', mins?: number) => {
+      if (mode !== 'work') return;
+      const durationMinutes = mins || 25;
+      showToast(
+        `🎉 Chúc mừng bạn vừa hoàn thành ${durationMinutes} phút tập trung! Đã cộng vào Bảng Xếp Hạng!`
+      );
+      try {
+        await recordStudySessionApi({
+          durationMinutes,
+          subject: 'Tự học CSCA',
+          dreamUniversity: dreamGoal.dreamUni,
+          userName: user?.full_name || user?.username || 'Chiến binh CSCA',
+        });
+        await loadLeaderboard();
+      } catch (err) {
+        console.error('recordStudySessionApi error:', err);
+      }
+    },
+    [dreamGoal.dreamUni, user?.full_name, user?.username, showToast, loadLeaderboard]
+  );
+
+  // Manual quick check-in from Leaderboard modal
+  const handleQuickCheckInSession = async (mins = 25) => {
+    showToast(
+      `🎉 Chúc mừng bạn vừa hoàn thành ${mins} phút tập trung! Đã cộng vào Bảng Xếp Hạng!`
+    );
+    try {
+      await recordStudySessionApi({
+        durationMinutes: mins,
+        subject: 'Tự học CSCA',
+        dreamUniversity: dreamGoal.dreamUni,
+        userName: user?.full_name || user?.username || 'Chiến binh CSCA',
+      });
+      await loadLeaderboard();
+    } catch (err) {
+      console.error('handleQuickCheckInSession error:', err);
+    }
+  };
 
   const handleSendChatMessage = async (e?: React.FormEvent, customText?: string) => {
     if (e) e.preventDefault();
@@ -293,7 +646,9 @@ export default function TramDongLucPage() {
   const [inputCategory, setInputCategory] = useState<MotivationVideo['category']>('discipline');
 
   // Ambient Sound Generator (Web Audio API - 0 data transfer!)
-  const [activeSound, setActiveSound] = useState<'none' | 'rain' | 'ocean' | 'cafe'>('none');
+  const [activeSound, setActiveSound] = useState<'none' | 'rain' | 'ocean' | 'cafe' | 'lofi'>(
+    'none'
+  );
   const [soundVolume, setSoundVolume] = useState<number>(0.5);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const soundNodesRef = useRef<{ gain?: GainNode; source?: AudioNode; stop?: () => void } | null>(
@@ -303,50 +658,8 @@ export default function TramDongLucPage() {
   // Quote State
   const [quoteIndex, setQuoteIndex] = useState<number>(0);
 
-  // User study note
-  const [studyNote, setStudyNote] = useState<string>('');
-
   // Iframe loading indicator with fast fallback so it never blocks the user
   const [iframeLoading, setIframeLoading] = useState<boolean>(true);
-
-  // ─── INITIAL STORAGE LOAD ──────────────────────────────────────────────────
-  useEffect(() => {
-    try {
-      const storedLikes = localStorage.getItem('moly:dongluc_likes');
-      if (storedLikes) setLikedMap(JSON.parse(storedLikes));
-
-      const storedSaved = localStorage.getItem('moly:dongluc_saved');
-      if (storedSaved) setSavedMap(JSON.parse(storedSaved));
-
-      const customVideos = localStorage.getItem('moly:dongluc_custom_videos');
-      if (customVideos) {
-        const parsed = JSON.parse(customVideos) as MotivationVideo[];
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setVideos((prev) => {
-            const markedCustom = parsed.map((v) => ({ ...v, isCustom: true }));
-            const combined = [...markedCustom, ...prev];
-            const seen = new Set<string>();
-            return combined.filter((v) => {
-              if (!v || !v.id || seen.has(v.id)) return false;
-              seen.add(v.id);
-              return true;
-            });
-          });
-        }
-      }
-
-      const savedNote = localStorage.getItem('moly:dongluc_study_note');
-      if (savedNote) setStudyNote(savedNote);
-
-      const params = new URLSearchParams(window.location.search);
-      const tab = params.get('tab');
-      if (tab === 'reels') {
-        setViewMode('reels');
-      } else if (tab === 'room' || params.get('room')) {
-        setViewMode('room');
-      }
-    } catch {}
-  }, []);
 
   // Filtered videos based on category & strictly deduplicated by ID
   const filteredVideos = useMemo(() => {
@@ -445,9 +758,9 @@ export default function TramDongLucPage() {
     }
   };
 
-  // ─── LIKE, BOOKMARK, SHARE & DELETE ────────────────────────────────────────
+  // ─── LIKE, BOOKMARK, SHARE & DELETE (WITH REAL POSTGRESQL SYNC) ────────────
   const toggleLike = useCallback(
-    (videoId: string) => {
+    async (videoId: string) => {
       const isLiked = !!likedMap[videoId];
       const newLiked = !isLiked;
       const updated = { ...likedMap, [videoId]: newLiked };
@@ -456,9 +769,10 @@ export default function TramDongLucPage() {
         localStorage.setItem('moly:dongluc_likes', JSON.stringify(updated));
       } catch {}
 
+      const delta: 1 | -1 = newLiked ? 1 : -1;
       setLikeCountMap((prev) => ({
         ...prev,
-        [videoId]: (prev[videoId] ?? currentVideo?.likes ?? 1000) + (newLiked ? 1 : -1),
+        [videoId]: Math.max(0, (prev[videoId] ?? currentVideo?.likes ?? 1000) + delta),
       }));
 
       if (newLiked) {
@@ -466,6 +780,16 @@ export default function TramDongLucPage() {
         setTimeout(() => setHeartBurst(false), 750);
         showToast('❤️ Đã thả tim tiếp lửa! Cố gắng học tập nhé bạn!');
       }
+
+      try {
+        const updatedServerLikes = await likeStationVideoApi(videoId, delta);
+        if (typeof updatedServerLikes === 'number') {
+          setLikeCountMap((prev) => ({
+            ...prev,
+            [videoId]: updatedServerLikes,
+          }));
+        }
+      } catch {}
     },
     [likedMap, currentVideo?.likes, showToast]
   );
@@ -510,7 +834,7 @@ export default function TramDongLucPage() {
     });
   };
 
-  const handleDeleteCustomVideo = (videoId: string) => {
+  const handleDeleteCustomVideo = async (videoId: string) => {
     setVideos((prev) => prev.filter((v) => v.id !== videoId));
     try {
       const stored = localStorage.getItem('moly:dongluc_custom_videos');
@@ -524,10 +848,15 @@ export default function TramDongLucPage() {
         }
       }
     } catch {}
-    showToast('🗑️ Đã xóa video khỏi danh sách của bạn');
+
+    try {
+      await deleteStationVideoApi(videoId);
+    } catch {}
+
+    showToast('🗑️ Đã xóa video khỏi danh sách Trạm Động Lực');
   };
 
-  // ─── EXTRACT TIKTOK VIDEO ID ──────────────────────────────────────────────
+  // ─── EXTRACT TIKTOK VIDEO ID & SAVE TO POSTGRESQL ─────────────────────────
   const extractTikTokId = (raw: string): string | null => {
     const trimmed = raw.trim();
     if (!trimmed) return null;
@@ -539,7 +868,7 @@ export default function TramDongLucPage() {
     return null;
   };
 
-  const handleAddVideo = (e: React.FormEvent) => {
+  const handleAddVideo = async (e: React.FormEvent) => {
     e.preventDefault();
     const videoId = extractTikTokId(inputUrl);
     if (!videoId) {
@@ -556,17 +885,21 @@ export default function TramDongLucPage() {
       return;
     }
 
+    const creatorName = user?.full_name || user?.username || 'Bạn chia sẻ';
+    const creatorHandle = user?.username ? `@${user.username}` : '@ban_chia_se';
+
     const newVid: MotivationVideo = {
       id: videoId,
       title: inputTitle.trim() || 'Video Động Lực Học Tập',
-      creator: user?.full_name || 'Bạn thêm vào',
-      creatorHandle: '@ban_chia_se',
+      creator: creatorName,
+      creatorHandle,
       category: inputCategory,
       tags: ['#dongluc', '#custom', '#csca'],
       likes: 1,
       message: inputMessage.trim() || 'Hãy tập trung 100% vào mục tiêu của bạn hôm nay!',
       originalUrl: inputUrl.trim(),
       isCustom: true,
+      createdBy: user?.id ?? null,
     };
 
     const updatedVideos = [newVid, ...videos.filter((v) => v.id !== videoId)];
@@ -590,10 +923,29 @@ export default function TramDongLucPage() {
     setShowAddModal(false);
     setSelectedCategory('all');
     setCurrentIndex(0);
-    showToast('🎉 Đã thêm video vào Trạm Động Lực thành công!');
+    showToast('🎉 Đã chia sẻ video TikTok lên Trạm Động Lực cộng đồng!');
+
+    try {
+      const savedDto = await createStationVideoApi({
+        id: newVid.id,
+        title: newVid.title,
+        creator: newVid.creator,
+        creatorHandle: newVid.creatorHandle,
+        category: newVid.category,
+        tags: newVid.tags,
+        message: newVid.message,
+        originalUrl: newVid.originalUrl,
+      });
+      if (savedDto) {
+        const mapped = mapDtoToMotivationVideo(savedDto);
+        setVideos((prev) => prev.map((v) => (v.id === mapped.id ? { ...mapped, isCustom: true } : v)));
+      }
+    } catch (err) {
+      console.error('createStationVideoApi error:', err);
+    }
   };
 
-  // ─── SYNTHESIS WEB AUDIO AMBIENT SOUND (0 BANDWIDTH) ───────────────────────
+  // ─── SYNTHESIS WEB AUDIO AMBIENT + LOFI SOUND (0 BANDWIDTH) ────────────────
   const initAudio = () => {
     if (!audioCtxRef.current) {
       const AudioCtx =
@@ -615,7 +967,7 @@ export default function TramDongLucPage() {
     setActiveSound('none');
   }, []);
 
-  const playAmbientSound = (type: 'rain' | 'ocean' | 'cafe') => {
+  const playAmbientSound = (type: 'rain' | 'ocean' | 'cafe' | 'lofi') => {
     if (activeSound === type) {
       stopActiveSound();
       return;
@@ -624,70 +976,152 @@ export default function TramDongLucPage() {
 
     try {
       const ctx = initAudio();
-      const bufferSize = 2 * ctx.sampleRate;
-      const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-      const output = noiseBuffer.getChannelData(0);
-
-      let b0 = 0,
-        b1 = 0,
-        b2 = 0,
-        b3 = 0,
-        b4 = 0,
-        b5 = 0,
-        b6 = 0;
-      for (let i = 0; i < bufferSize; i++) {
-        const white = Math.random() * 2 - 1;
-        b0 = 0.99886 * b0 + white * 0.0555179;
-        b1 = 0.99332 * b1 + white * 0.0750759;
-        b2 = 0.969 * b2 + white * 0.153852;
-        b3 = 0.8665 * b3 + white * 0.3104856;
-        b4 = 0.55 * b4 + white * 0.5329522;
-        b5 = -0.7616 * b5 - white * 0.016898;
-        output[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.11;
-        b6 = white * 0.115926;
-      }
-
-      const whiteNoise = ctx.createBufferSource();
-      whiteNoise.buffer = noiseBuffer;
-      whiteNoise.loop = true;
-
-      const filter = ctx.createBiquadFilter();
       const gainNode = ctx.createGain();
       gainNode.gain.setValueAtTime(soundVolume * 0.35, ctx.currentTime);
 
-      if (type === 'rain') {
-        filter.type = 'lowpass';
-        filter.frequency.setValueAtTime(800, ctx.currentTime);
-      } else if (type === 'ocean') {
-        filter.type = 'bandpass';
-        filter.frequency.setValueAtTime(450, ctx.currentTime);
-        filter.Q.setValueAtTime(1.5, ctx.currentTime);
-        const lfo = ctx.createOscillator();
-        const lfoGain = ctx.createGain();
-        lfo.frequency.setValueAtTime(0.12, ctx.currentTime);
-        lfoGain.gain.setValueAtTime(0.18, ctx.currentTime);
-        lfo.connect(lfoGain.gain);
-        lfo.start();
+      if (type === 'lofi') {
+        // Warm synthesized Lofi ambient chord progression pad (Fmaj7 -> Em7 -> Dm7 -> Cmaj7)
+        const chords = [
+          [174.61, 220.0, 261.63, 329.63], // Fmaj7
+          [164.81, 196.0, 246.94, 293.66], // Em7
+          [146.83, 174.61, 220.0, 261.63], // Dm7
+          [130.81, 164.81, 196.0, 246.94], // Cmaj7
+        ];
+
+        const masterFilter = ctx.createBiquadFilter();
+        masterFilter.type = 'lowpass';
+        masterFilter.frequency.setValueAtTime(520, ctx.currentTime);
+        masterFilter.Q.setValueAtTime(1.2, ctx.currentTime);
+
+        // Slow LFO modulating filter frequency for dreamy lofi warmth
+        const filterLfo = ctx.createOscillator();
+        const filterLfoGain = ctx.createGain();
+        filterLfo.type = 'sine';
+        filterLfo.frequency.setValueAtTime(0.18, ctx.currentTime);
+        filterLfoGain.gain.setValueAtTime(160, ctx.currentTime);
+        filterLfo.connect(filterLfoGain);
+        filterLfoGain.connect(masterFilter.frequency);
+        filterLfo.start();
+
+        const oscillators: OscillatorNode[] = [];
+        const voiceGains: GainNode[] = [];
+
+        chords[0].forEach((freq, idx) => {
+          const osc = ctx.createOscillator();
+          const vGain = ctx.createGain();
+          osc.type = idx % 2 === 0 ? 'sine' : 'triangle';
+          osc.frequency.setValueAtTime(freq, ctx.currentTime);
+          osc.detune.setValueAtTime((idx - 1.5) * 4, ctx.currentTime);
+          vGain.gain.setValueAtTime(0.18, ctx.currentTime);
+          osc.connect(vGain);
+          vGain.connect(masterFilter);
+          osc.start();
+          oscillators.push(osc);
+          voiceGains.push(vGain);
+        });
+
+        let chordIdx = 0;
+        const chordInterval = window.setInterval(() => {
+          if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') return;
+          chordIdx = (chordIdx + 1) % chords.length;
+          const nextChord = chords[chordIdx];
+          const now = audioCtxRef.current.currentTime;
+          oscillators.forEach((osc, i) => {
+            try {
+              osc.frequency.exponentialRampToValueAtTime(nextChord[i], now + 1.2);
+            } catch {}
+          });
+        }, 4200);
+
+        masterFilter.connect(gainNode);
+        gainNode.connect(ctx.destination);
+
+        soundNodesRef.current = {
+          gain: gainNode,
+          stop: () => {
+            window.clearInterval(chordInterval);
+            try {
+              filterLfo.stop();
+              filterLfo.disconnect();
+            } catch {}
+            oscillators.forEach((osc) => {
+              try {
+                osc.stop();
+                osc.disconnect();
+              } catch {}
+            });
+            voiceGains.forEach((g) => {
+              try {
+                g.disconnect();
+              } catch {}
+            });
+          },
+        };
       } else {
-        filter.type = 'lowpass';
-        filter.frequency.setValueAtTime(500, ctx.currentTime);
+        const bufferSize = 2 * ctx.sampleRate;
+        const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+        const output = noiseBuffer.getChannelData(0);
+
+        let b0 = 0,
+          b1 = 0,
+          b2 = 0,
+          b3 = 0,
+          b4 = 0,
+          b5 = 0,
+          b6 = 0;
+        for (let i = 0; i < bufferSize; i++) {
+          const white = Math.random() * 2 - 1;
+          b0 = 0.99886 * b0 + white * 0.0555179;
+          b1 = 0.99332 * b1 + white * 0.0750759;
+          b2 = 0.969 * b2 + white * 0.153852;
+          b3 = 0.8665 * b3 + white * 0.3104856;
+          b4 = 0.55 * b4 + white * 0.5329522;
+          b5 = -0.7616 * b5 - white * 0.016898;
+          output[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.11;
+          b6 = white * 0.115926;
+        }
+
+        const whiteNoise = ctx.createBufferSource();
+        whiteNoise.buffer = noiseBuffer;
+        whiteNoise.loop = true;
+
+        const filter = ctx.createBiquadFilter();
+
+        if (type === 'rain') {
+          filter.type = 'lowpass';
+          filter.frequency.setValueAtTime(800, ctx.currentTime);
+        } else if (type === 'ocean') {
+          filter.type = 'bandpass';
+          filter.frequency.setValueAtTime(450, ctx.currentTime);
+          filter.Q.setValueAtTime(1.5, ctx.currentTime);
+          const lfo = ctx.createOscillator();
+          const lfoGain = ctx.createGain();
+          lfo.frequency.setValueAtTime(0.12, ctx.currentTime);
+          lfoGain.gain.setValueAtTime(0.18, ctx.currentTime);
+          lfo.connect(lfoGain.gain);
+          lfo.start();
+        } else {
+          filter.type = 'lowpass';
+          filter.frequency.setValueAtTime(500, ctx.currentTime);
+        }
+
+        whiteNoise.connect(filter);
+        filter.connect(gainNode);
+        gainNode.connect(ctx.destination);
+        whiteNoise.start();
+
+        soundNodesRef.current = {
+          gain: gainNode,
+          source: whiteNoise,
+          stop: () => {
+            try {
+              whiteNoise.stop();
+              whiteNoise.disconnect();
+            } catch {}
+          },
+        };
       }
 
-      whiteNoise.connect(filter);
-      filter.connect(gainNode);
-      gainNode.connect(ctx.destination);
-      whiteNoise.start();
-
-      soundNodesRef.current = {
-        gain: gainNode,
-        source: whiteNoise,
-        stop: () => {
-          try {
-            whiteNoise.stop();
-            whiteNoise.disconnect();
-          } catch {}
-        },
-      };
       setActiveSound(type);
       const label = AMBIENT_SOUNDS.find((s) => s.key === type)?.label || '';
       showToast(`🎧 Đang phát âm thanh nền: ${label}`);
@@ -719,6 +1153,25 @@ export default function TramDongLucPage() {
   const currentLikesCount = currentVideo
     ? likeCountMap[currentVideo.id] ?? currentVideo.likes
     : 0;
+  const canDeleteCurrentVideo = Boolean(
+    currentVideo &&
+      (currentVideo.isCustom ||
+        user?.role === 'admin' ||
+        (user?.id && currentVideo.createdBy === user.id))
+  );
+
+  const activeLeaderboardRows = useMemo(() => {
+    if (!leaderboardData) return [];
+    return leaderboardPeriod === 'today'
+      ? leaderboardData.topToday || []
+      : leaderboardData.topWeek || [];
+  }, [leaderboardData, leaderboardPeriod]);
+
+  const myStats = leaderboardData?.myStats || {
+    todayMinutes: 0,
+    todaySessions: 0,
+    weekMinutes: 0,
+  };
 
   return (
     <div className="min-h-screen bg-slate-950 text-white selection:bg-violet-500 selection:text-white">
@@ -741,7 +1194,7 @@ export default function TramDongLucPage() {
 
       {/* Toast Alert */}
       {toastMessage && (
-        <div className="fixed bottom-6 left-1/2 z-[150] -translate-x-1/2 transform rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-600 px-6 py-3 text-xs font-bold text-white shadow-2xl shadow-violet-500/40 backdrop-blur-md transition-all">
+        <div className="fixed bottom-6 left-1/2 z-[180] -translate-x-1/2 transform rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-600 px-6 py-3 text-xs font-bold text-white shadow-2xl shadow-violet-500/40 backdrop-blur-md transition-all">
           {toastMessage}
         </div>
       )}
@@ -749,7 +1202,7 @@ export default function TramDongLucPage() {
       {/* Main Container */}
       <main className="mx-auto max-w-[1600px] px-3 py-4 sm:px-6 sm:py-5">
         {/* Top Navigation & View Mode Switcher */}
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-4 pt-1">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-4 pt-1">
           {/* Brand & Back Button */}
           <div className="flex items-center gap-3">
             <Link
@@ -816,9 +1269,23 @@ export default function TramDongLucPage() {
             </button>
           </div>
 
-          {/* Quick Action Buttons + Ambient Sound Mixer */}
-          <div className="relative flex items-center gap-2">
-            {/* Ambient Sound Mixer Toggle */}
+          {/* Quick Action Buttons + Leaderboard + Ambient Sound Mixer */}
+          <div className="relative flex flex-wrap items-center gap-2">
+            {/* 🏆 BXH Tự Học Button */}
+            <button
+              type="button"
+              onClick={() => {
+                loadLeaderboard();
+                setShowLeaderboardModal(true);
+              }}
+              className="flex items-center gap-1.5 rounded-xl border border-amber-500/30 bg-amber-500/15 px-3 py-2 text-xs font-bold text-amber-300 transition-all hover:bg-amber-500/25 hover:text-amber-200 shadow-sm"
+              title="Bảng xếp hạng Chiến Thần Tự Học"
+            >
+              <FaTrophy className="text-xs sm:text-sm text-amber-400" />
+              <span>🏆 BXH Tự Học</span>
+            </button>
+
+            {/* Ambient Sound Mixer Toggle (4 Modes: Rain, Ocean, Cafe, Lofi) */}
             <div className="relative">
               <button
                 type="button"
@@ -828,7 +1295,7 @@ export default function TramDongLucPage() {
                     ? 'border-emerald-500/40 bg-emerald-500/20 text-emerald-300 shadow-sm shadow-emerald-500/20'
                     : 'border-white/15 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white'
                 }`}
-                title="Âm thanh trắng giúp tập trung (Mưa, Sóng biển, Cafe)"
+                title="Bộ trộn âm thanh tập trung (Mưa, Sóng biển, Cafe, Giai điệu Lofi)"
               >
                 {activeSound !== 'none' ? (
                   <FiVolume2 className="text-sm text-emerald-400 animate-pulse" />
@@ -843,10 +1310,10 @@ export default function TramDongLucPage() {
               </button>
 
               {showSoundMenu && (
-                <div className="absolute right-0 top-full mt-2 z-[140] w-64 rounded-2xl border border-white/15 bg-slate-900/95 p-3.5 shadow-2xl backdrop-blur-xl">
+                <div className="absolute right-0 top-full mt-2 z-[140] w-72 rounded-2xl border border-white/15 bg-slate-900/95 p-3.5 shadow-2xl backdrop-blur-xl">
                   <div className="flex items-center justify-between mb-2.5">
                     <span className="text-xs font-extrabold text-white">
-                      🎧 Âm Thanh Tập Trung
+                      🎧 Bộ Trộn Âm Thanh Tập Trung
                     </span>
                     {activeSound !== 'none' && (
                       <button
@@ -858,7 +1325,7 @@ export default function TramDongLucPage() {
                       </button>
                     )}
                   </div>
-                  <div className="grid grid-cols-3 gap-1.5">
+                  <div className="grid grid-cols-2 gap-1.5">
                     {AMBIENT_SOUNDS.map((snd) => {
                       const isPlaying = activeSound === snd.key;
                       return (
@@ -866,14 +1333,14 @@ export default function TramDongLucPage() {
                           key={snd.key}
                           type="button"
                           onClick={() => playAmbientSound(snd.key)}
-                          className={`flex flex-col items-center gap-1 rounded-xl p-2 text-[11px] font-bold transition-all ${
+                          className={`flex items-center gap-2 rounded-xl p-2 text-[11px] font-bold transition-all ${
                             isPlaying
                               ? 'bg-violet-600 text-white shadow-md shadow-violet-600/30 ring-1 ring-violet-400'
                               : 'bg-white/5 text-slate-300 hover:bg-white/10'
                           }`}
                         >
                           <span className="text-base">{snd.emoji}</span>
-                          <span>{snd.label}</span>
+                          <span className="truncate">{snd.label}</span>
                         </button>
                       );
                     })}
@@ -913,9 +1380,71 @@ export default function TramDongLucPage() {
                 className="flex items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-600/20 px-3.5 py-2 text-xs font-bold text-emerald-200 backdrop-blur-sm transition-all hover:bg-emerald-600 hover:text-white shadow-sm"
               >
                 <FiZap className="text-base" />
-                <span>Mục tiêu buổi học</span>
+                <span>
+                  Checklist ({completedTasksCount}/{totalTasksCount})
+                </span>
               </button>
             )}
+          </div>
+        </div>
+
+        {/* ─── 🎯 WIDGET: ĐẾM NGƯỢC NGÀY THI CSCA & TRƯỜNG ĐẠI HỌC MƠ ƯỚC ───── */}
+        <div className="mb-6 rounded-2xl border border-violet-500/25 bg-gradient-to-r from-violet-950/60 via-slate-900/90 to-indigo-950/60 px-4 py-3 shadow-lg backdrop-blur-md">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-3 sm:gap-5">
+              {/* Dream University & Target Score */}
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/30 text-amber-300">
+                  <FaGraduationCap className="text-lg" />
+                </div>
+                <div>
+                  <div className="flex flex-wrap items-center gap-1.5 text-xs sm:text-sm font-black text-white">
+                    <span>🎓 Mục tiêu: {dreamGoal.dreamUni}</span>
+                    <span className="text-slate-500">•</span>
+                    <span className="rounded-lg bg-amber-500/15 px-2 py-0.5 text-[11px] font-extrabold text-amber-300 border border-amber-500/30">
+                      Điểm: {dreamGoal.targetScore}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400">
+                    Mỗi chu kỳ Pomodoro hôm nay đưa bạn tiến gần hơn tới cánh cổng trường mơ ước!
+                  </p>
+                </div>
+              </div>
+
+              <div className="hidden md:block h-7 w-px bg-white/10" />
+
+              {/* Exam Countdown Pill */}
+              <div className="flex items-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-1.5">
+                <span className="text-xs font-extrabold text-rose-300">
+                  ⏳ Còn <strong className="text-sm text-white">{daysUntilExam}</strong> ngày tới kỳ thi CSCA
+                </span>
+                <span className="text-[10px] text-rose-200/70 hidden sm:inline">
+                  ({dreamGoal.examDate})
+                </span>
+              </div>
+            </div>
+
+            {/* Right Actions: Today Focus Stats + Edit Dream Goal Button */}
+            <div className="flex items-center gap-2.5">
+              <div className="hidden sm:flex items-center gap-1.5 rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-3 py-1.5 text-[11px] font-bold text-emerald-300">
+                <FiClock className="text-xs" />
+                <span>Hôm nay: {myStats.todayMinutes} phút tập trung</span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setEditDreamUni(dreamGoal.dreamUni);
+                  setEditTargetScore(dreamGoal.targetScore);
+                  setEditExamDate(dreamGoal.examDate);
+                  setShowDreamModal(true);
+                }}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-violet-400/30 bg-violet-500/15 px-3 py-1.5 text-xs font-bold text-violet-200 transition-all hover:bg-violet-600 hover:text-white active:scale-95"
+              >
+                <FiEdit3 className="text-xs" />
+                <span>Chỉnh sửa mục tiêu</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -926,14 +1455,273 @@ export default function TramDongLucPage() {
             <div className="mx-auto w-full max-w-3xl flex flex-col items-center">
               <FlipClock
                 isCompact={false}
-                studyGoal={studyNote}
+                studyGoal={
+                  studyNote ||
+                  (studyTasks.length > 0
+                    ? `Hoàn thành ${completedTasksCount}/${totalTasksCount} nhiệm vụ (${taskProgressPercent}%)`
+                    : '')
+                }
                 onEditGoal={() => setShowNoteDrawer(true)}
                 quote={MOTIVATION_QUOTES[quoteIndex]}
                 onNextQuote={() =>
                   setQuoteIndex((prev) => (prev + 1) % MOTIVATION_QUOTES.length)
                 }
+                onSessionComplete={handlePomodoroSessionComplete}
                 className="w-full"
               />
+            </div>
+
+            {/* 1.5. CHECKLIST MỤC TIÊU CA HỌC & BẢNG XẾP HẠNG CHIẾN THẦN TỰ HỌC */}
+            <div className="mx-auto w-full max-w-6xl grid grid-cols-1 lg:grid-cols-12 gap-5">
+              {/* Left 7 Cols: Interactive Study To-Do List with Progress Bar */}
+              <div className="lg:col-span-7 rounded-3xl border border-white/15 bg-slate-900/80 p-5 shadow-xl backdrop-blur-md flex flex-col justify-between">
+                <div>
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-400">
+                        <FiCheck className="text-base" />
+                      </span>
+                      <div>
+                        <h3 className="text-sm font-black text-white">
+                          Checklist Mục Tiêu Ca Học Hôm Nay
+                        </h3>
+                        <p className="text-[11px] text-slate-400">
+                          Tích chọn từng nhiệm vụ ngay khi hoàn thành để duy trì hưng phấn
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="rounded-full bg-emerald-500/15 border border-emerald-500/30 px-3 py-1 text-xs font-extrabold text-emerald-300">
+                        {completedTasksCount}/{totalTasksCount} nhiệm vụ • {taskProgressPercent}%
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setShowNoteDrawer(true)}
+                        className="rounded-xl border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-bold text-violet-300 hover:bg-white/10 hover:text-white"
+                      >
+                        Lời hứa ↗
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Sleek Progress Bar */}
+                  <div className="mb-4 h-2 w-full overflow-hidden rounded-full bg-white/10">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-emerald-500 via-teal-400 to-violet-500 transition-all duration-500"
+                      style={{ width: `${taskProgressPercent}%` }}
+                    />
+                  </div>
+
+                  {/* Quick-Add Preset Chips */}
+                  <div className="mb-3 flex flex-wrap items-center gap-1.5">
+                    {PRESET_TASK_CHIPS.map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => handleAddStudyTask(preset)}
+                        className="rounded-xl border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[10px] font-bold text-slate-300 transition-all hover:border-emerald-500/40 hover:bg-emerald-500/15 hover:text-emerald-200 active:scale-95"
+                      >
+                        + {preset}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Task Items List */}
+                  <div className="space-y-2 max-h-52 overflow-y-auto pr-1 hide-scrollbar">
+                    {studyTasks.length === 0 ? (
+                      <div className="rounded-2xl border border-dashed border-white/15 py-6 text-center text-xs text-slate-400">
+                        Chưa có nhiệm vụ nào. Hãy bấm chip gợi ý phía trên hoặc nhập mục tiêu mới!
+                      </div>
+                    ) : (
+                      studyTasks.map((task) => (
+                        <div
+                          key={task.id}
+                          className={`group flex items-center justify-between gap-3 rounded-2xl border px-3.5 py-2.5 transition-all ${
+                            task.done
+                              ? 'border-emerald-500/30 bg-emerald-500/10 text-slate-400'
+                              : 'border-white/10 bg-white/[0.03] text-white hover:border-white/20'
+                          }`}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => handleToggleTask(task.id)}
+                            className="flex flex-1 items-center gap-3 text-left"
+                          >
+                            <span
+                              className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-lg border transition-all ${
+                                task.done
+                                  ? 'border-emerald-500 bg-emerald-500 text-slate-950'
+                                  : 'border-white/25 bg-slate-900 hover:border-violet-400'
+                              }`}
+                            >
+                              {task.done && <FiCheck className="text-xs stroke-[3]" />}
+                            </span>
+                            <span
+                              className={`text-xs font-semibold ${
+                                task.done ? 'line-through text-slate-400' : 'text-slate-100'
+                              }`}
+                            >
+                              {task.text}
+                            </span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteStudyTask(task.id)}
+                            className="opacity-60 group-hover:opacity-100 rounded-lg p-1 text-slate-400 hover:bg-rose-500/20 hover:text-rose-400 transition-all"
+                            title="Xóa nhiệm vụ"
+                          >
+                            <FiTrash2 className="text-xs" />
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                {/* Add Custom Task Input */}
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    handleAddStudyTask();
+                  }}
+                  className="mt-3.5 flex items-center gap-2 pt-3 border-t border-white/10"
+                >
+                  <input
+                    type="text"
+                    value={newTaskInput}
+                    onChange={(e) => setNewTaskInput(e.target.value)}
+                    placeholder="Nhập thêm mục tiêu buổi học (VD: Làm 20 câu Đọc hiểu)..."
+                    className="flex-1 rounded-xl border border-white/10 bg-slate-950 px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:border-emerald-500 focus:outline-none"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!newTaskInput.trim()}
+                    className="inline-flex items-center gap-1 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white transition-all hover:bg-emerald-500 disabled:opacity-40"
+                  >
+                    <FiPlus className="text-sm" />
+                    <span>Thêm</span>
+                  </button>
+                </form>
+              </div>
+
+              {/* Right 5 Cols: Bảng Xếp Hạng Chiến Thần Tự Học Card */}
+              <div className="lg:col-span-5 rounded-3xl border border-white/15 bg-slate-900/80 p-5 shadow-xl backdrop-blur-md flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between gap-2 mb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-500/20 border border-amber-500/30 text-amber-400">
+                        <FaTrophy className="text-sm" />
+                      </span>
+                      <div>
+                        <h3 className="text-sm font-black text-white">
+                          BXH Chiến Thần Tự Học
+                        </h3>
+                        <p className="text-[11px] text-slate-400">
+                          Tự động cộng điểm khi hoàn thành Pomodoro
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Period Toggle */}
+                    <div className="flex rounded-xl border border-white/10 bg-slate-950 p-0.5 text-[10px] font-bold">
+                      <button
+                        type="button"
+                        onClick={() => setLeaderboardPeriod('today')}
+                        className={`rounded-lg px-2.5 py-1 transition-all ${
+                          leaderboardPeriod === 'today'
+                            ? 'bg-amber-500 text-slate-950 font-black'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        Hôm nay
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLeaderboardPeriod('week')}
+                        className={`rounded-lg px-2.5 py-1 transition-all ${
+                          leaderboardPeriod === 'week'
+                            ? 'bg-amber-500 text-slate-950 font-black'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        7 ngày qua
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Top 4 Leaderboard List */}
+                  <div className="space-y-2 max-h-52 overflow-y-auto pr-1 hide-scrollbar">
+                    {isLoadingLeaderboard && activeLeaderboardRows.length === 0 ? (
+                      <div className="flex items-center justify-center py-8 text-xs text-slate-400 gap-2">
+                        <FiRefreshCw className="animate-spin text-amber-400" />
+                        <span>Đang tải bảng vàng chăm chỉ...</span>
+                      </div>
+                    ) : activeLeaderboardRows.length === 0 ? (
+                      <div className="rounded-2xl border border-dashed border-white/15 py-6 px-4 text-center text-xs text-slate-400">
+                        Chưa có phiên học nào được ghi nhận. Hoàn thành 1 chu kỳ Pomodoro để giành Top 1 ngay hôm nay!
+                      </div>
+                    ) : (
+                      activeLeaderboardRows.slice(0, 4).map((item, idx) => (
+                        <div
+                          key={`${item.userName}-${idx}`}
+                          className="flex items-center justify-between gap-2.5 rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2"
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <span
+                              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-xs font-black ${
+                                idx === 0
+                                  ? 'bg-amber-400 text-slate-950'
+                                  : idx === 1
+                                  ? 'bg-slate-300 text-slate-950'
+                                  : idx === 2
+                                  ? 'bg-amber-700 text-white'
+                                  : 'bg-white/10 text-slate-300'
+                              }`}
+                            >
+                              {idx + 1}
+                            </span>
+                            <div className="min-w-0">
+                              <p className="text-xs font-bold text-white truncate">
+                                {item.userName}
+                              </p>
+                              <p className="text-[10px] text-violet-300 truncate">
+                                🎓 {item.dreamUniversity || 'ĐH Mơ Ước CSCA'}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="text-right shrink-0">
+                            <span className="text-xs font-black text-amber-300">
+                              {item.totalMinutes} phút
+                            </span>
+                            <p className="text-[10px] text-slate-400">
+                              {item.sessionsCount} ca học
+                            </p>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                {/* My Stats Footer & Open Full Leaderboard Modal */}
+                <div className="mt-3.5 flex items-center justify-between border-t border-white/10 pt-3 text-xs">
+                  <div className="text-[11px] text-slate-300">
+                    Của bạn:{' '}
+                    <strong className="text-emerald-400">{myStats.todayMinutes}p</strong> hôm nay •{' '}
+                    <strong className="text-violet-300">{myStats.weekMinutes}p</strong> tuần này
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowLeaderboardModal(true)}
+                    className="text-[11px] font-bold text-amber-300 hover:text-amber-200 underline underline-offset-2"
+                  >
+                    Xem đầy đủ ↗
+                  </button>
+                </div>
+              </div>
             </div>
 
             {/* 2. PHÒNG TỰ HỌC BẬT CAM (STUDY TOGETHER) */}
@@ -1024,7 +1812,8 @@ export default function TramDongLucPage() {
                           </h4>
                           <div className="mt-1 flex items-center justify-between text-[10px]">
                             <span className="flex items-center gap-1 text-rose-400 font-semibold">
-                              <FaHeart className="text-[9px]" /> {(vidLikes / 1000).toFixed(1)}k
+                              <FaHeart className="text-[9px]" />{' '}
+                              {vidLikes >= 1000 ? `${(vidLikes / 1000).toFixed(1)}k` : vidLikes}
                             </span>
                             {isCurrent && (
                               <span className="text-violet-300 font-extrabold text-[10px]">
@@ -1194,7 +1983,9 @@ export default function TramDongLucPage() {
                               <FaHeart className="text-lg" />
                             </button>
                             <span className="mt-1 text-[10px] font-bold text-slate-300">
-                              {(currentLikesCount / 1000).toFixed(1)}k
+                              {currentLikesCount >= 1000
+                                ? `${(currentLikesCount / 1000).toFixed(1)}k`
+                                : currentLikesCount}
                             </span>
                           </div>
 
@@ -1246,13 +2037,13 @@ export default function TramDongLucPage() {
                             <FiExternalLink className="text-xs" />
                           </a>
 
-                          {/* Delete button if custom video */}
-                          {currentVideo.isCustom && (
+                          {/* Delete button if custom video or Admin */}
+                          {canDeleteCurrentVideo && (
                             <button
                               type="button"
                               onClick={() => handleDeleteCustomVideo(currentVideo.id)}
                               className="flex h-9 w-9 items-center justify-center rounded-xl border border-rose-500/30 bg-rose-500/10 text-rose-400 hover:bg-rose-600 hover:text-white transition-all"
-                              title="Xóa video bạn đã thêm"
+                              title="Xóa video khỏi Trạm Động Lực"
                             >
                               <FiTrash2 className="text-xs" />
                             </button>
@@ -1600,14 +2391,19 @@ export default function TramDongLucPage() {
         )}
       </main>
 
-      {/* ─── MODAL: DÁN LINK TIKTOK ────────────────────────────────────────── */}
+      {/* ─── MODAL: DÁN LINK TIKTOK (CHIA SẺ CỘNG ĐỒNG SQL) ────────────────── */}
       {showAddModal && (
         <div className="fixed inset-0 z-[160] flex items-center justify-center bg-black/80 p-4 backdrop-blur-md">
           <div className="w-full max-w-md rounded-3xl border border-white/15 bg-slate-900 p-6 shadow-2xl">
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
-              <h3 className="text-base font-extrabold text-white">
-                Thêm Video TikTok Của Bạn
-              </h3>
+              <div>
+                <h3 className="text-base font-extrabold text-white">
+                  Chia Sẻ Video TikTok Truyền Động Lực
+                </h3>
+                <p className="text-[11px] text-slate-400">
+                  Video sẽ được lưu vào Trạm Động Lực để truyền lửa cho toàn bộ học viên
+                </p>
+              </div>
               <button
                 type="button"
                 onClick={() => setShowAddModal(false)}
@@ -1666,11 +2462,11 @@ export default function TramDongLucPage() {
 
               <div>
                 <label className="block text-xs font-bold text-slate-300">
-                  Lời nhắn gửi cho bản thân (không bắt buộc):
+                  Lời nhắn gửi cho cộng đồng & bản thân:
                 </label>
                 <textarea
                   rows={2}
-                  placeholder="Mục tiêu thi đạt bao nhiêu điểm? Nhắn nhủ bản thân..."
+                  placeholder="Mục tiêu thi đạt bao nhiêu điểm? Nhắn nhủ cùng cố gắng..."
                   value={inputMessage}
                   onChange={(e) => setInputMessage(e.target.value)}
                   className="mt-1.5 w-full rounded-2xl border border-white/15 bg-slate-950 px-4 py-2 text-xs text-white placeholder-slate-500 focus:border-violet-500 focus:outline-none"
@@ -1689,7 +2485,7 @@ export default function TramDongLucPage() {
                   type="submit"
                   className="rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 px-5 py-2 text-xs font-bold text-white shadow-lg shadow-violet-600/30 hover:brightness-110"
                 >
-                  Thêm vào trạm
+                  Chia sẻ lên Trạm
                 </button>
               </div>
             </form>
@@ -1697,15 +2493,15 @@ export default function TramDongLucPage() {
         </div>
       )}
 
-      {/* ─── DRAWER: LỜI HỨA & MỤC TIÊU HÔM NAY ─────────────────────────────── */}
+      {/* ─── MODAL: LỜI HỨA KỶ LUẬT & CHECKLIST MỤC TIÊU HÔM NAY ────────────── */}
       {showNoteDrawer && (
         <div className="fixed inset-0 z-[160] flex items-center justify-center bg-black/80 p-4 backdrop-blur-md">
-          <div className="w-full max-w-md rounded-3xl border border-white/15 bg-slate-900 p-6 shadow-2xl">
+          <div className="w-full max-w-lg rounded-3xl border border-white/15 bg-slate-900 p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
               <div className="flex items-center gap-2">
                 <FiZap className="text-amber-400" />
                 <h3 className="text-base font-extrabold text-white">
-                  Lời Hứa Kỷ Luật Hôm Nay
+                  Checklist & Lời Hứa Kỷ Luật Hôm Nay
                 </h3>
               </div>
               <button
@@ -1717,33 +2513,394 @@ export default function TramDongLucPage() {
               </button>
             </div>
 
-            <p className="mt-3 text-xs text-slate-400">
-              Viết ra mục tiêu của bạn cho buổi học này. Khi viết ra và nhìn thấy nó, bạn sẽ có thêm 80% động lực để hoàn thành!
-            </p>
+            {/* Progress indicator */}
+            <div className="mt-3">
+              <div className="flex items-center justify-between text-xs mb-1.5">
+                <span className="font-bold text-slate-300">Tiến độ hoàn thành hôm nay:</span>
+                <span className="font-extrabold text-emerald-400">
+                  {completedTasksCount}/{totalTasksCount} nhiệm vụ • {taskProgressPercent}%
+                </span>
+              </div>
+              <div className="h-2 w-full overflow-hidden rounded-full bg-white/10">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-violet-500 transition-all duration-300"
+                  style={{ width: `${taskProgressPercent}%` }}
+                />
+              </div>
+            </div>
 
-            <textarea
-              rows={5}
-              placeholder="Ví dụ: Tối nay từ 20h - 22h, mình cam kết hoàn thành 1 đề mô phỏng Toán CSCA và ôn lại 20 từ vựng. Tuyệt đối không bấm vào mạng xã hội làm xao nhãng!"
-              value={studyNote}
-              onChange={(e) => {
-                setStudyNote(e.target.value);
-                try {
-                  localStorage.setItem('moly:dongluc_study_note', e.target.value);
-                } catch {}
-              }}
-              className="mt-3 w-full rounded-2xl border border-white/15 bg-slate-950 p-4 text-xs text-white placeholder-slate-500 focus:border-violet-500 focus:outline-none"
-            />
+            {/* Preset quick-add chips */}
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {PRESET_TASK_CHIPS.map((chip) => (
+                <button
+                  key={chip}
+                  type="button"
+                  onClick={() => handleAddStudyTask(chip)}
+                  className="rounded-xl border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-bold text-slate-300 hover:border-emerald-500/40 hover:bg-emerald-500/15 hover:text-emerald-200"
+                >
+                  + {chip}
+                </button>
+              ))}
+            </div>
+
+            {/* Task list inside modal */}
+            <div className="mt-3 space-y-2 max-h-48 overflow-y-auto pr-1">
+              {studyTasks.map((task) => (
+                <div
+                  key={task.id}
+                  className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-slate-950 px-3 py-2"
+                >
+                  <button
+                    type="button"
+                    onClick={() => handleToggleTask(task.id)}
+                    className="flex flex-1 items-center gap-2.5 text-left"
+                  >
+                    <span
+                      className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+                        task.done
+                          ? 'border-emerald-500 bg-emerald-500 text-slate-950'
+                          : 'border-white/25'
+                      }`}
+                    >
+                      {task.done && <FiCheck className="text-[10px] stroke-[3]" />}
+                    </span>
+                    <span
+                      className={`text-xs font-medium ${
+                        task.done ? 'line-through text-slate-500' : 'text-slate-200'
+                      }`}
+                    >
+                      {task.text}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteStudyTask(task.id)}
+                    className="text-slate-500 hover:text-rose-400 p-1"
+                  >
+                    <FiTrash2 className="text-xs" />
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            {/* Add task input */}
+            <div className="mt-2.5 flex gap-2">
+              <input
+                type="text"
+                value={newTaskInput}
+                onChange={(e) => setNewTaskInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleAddStudyTask();
+                  }
+                }}
+                placeholder="Thêm nhiệm vụ mới..."
+                className="flex-1 rounded-xl border border-white/15 bg-slate-950 px-3 py-2 text-xs text-white placeholder-slate-500 focus:border-violet-500 focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => handleAddStudyTask()}
+                className="rounded-xl bg-emerald-600 px-3.5 py-2 text-xs font-bold text-white hover:bg-emerald-500"
+              >
+                + Thêm
+              </button>
+            </div>
+
+            {/* Commitment Note */}
+            <div className="mt-4 pt-3 border-t border-white/10">
+              <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                Lời hứa cam kết kỷ luật của bạn:
+              </label>
+              <textarea
+                rows={3}
+                placeholder="Ví dụ: Tối nay từ 20h - 22h, mình cam kết hoàn thành 1 đề mô phỏng Toán CSCA và tuyệt đối không lướt mạng xã hội!"
+                value={studyNote}
+                onChange={(e) => {
+                  setStudyNote(e.target.value);
+                  try {
+                    localStorage.setItem('moly:dongluc_study_note', e.target.value);
+                  } catch {}
+                }}
+                className="w-full rounded-2xl border border-white/15 bg-slate-950 p-3.5 text-xs text-white placeholder-slate-500 focus:border-violet-500 focus:outline-none"
+              />
+            </div>
 
             <div className="mt-4 flex items-center justify-end">
               <button
                 type="button"
                 onClick={() => {
                   setShowNoteDrawer(false);
-                  showToast('✅ Đã lưu mục tiêu! Chúc bạn có buổi học bứt phá!');
+                  showToast('✅ Đã lưu Checklist & Lời hứa! Chúc bạn có buổi học bứt phá!');
                 }}
                 className="rounded-xl bg-violet-600 px-5 py-2 text-xs font-bold text-white shadow-lg shadow-violet-600/30 hover:bg-violet-500"
               >
-                Lưu lời hứa & Bắt đầu học
+                Lưu mục tiêu & Bắt đầu học
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── MODAL: CHỈNH SỬA MỤC TIÊU ĐẠI HỌC MƠ ƯỚC & NGÀY THI CSCA ───────── */}
+      {showDreamModal && (
+        <div className="fixed inset-0 z-[170] flex items-center justify-center bg-black/80 p-4 backdrop-blur-md">
+          <div className="w-full max-w-md rounded-3xl border border-white/15 bg-slate-900 p-6 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <div className="flex items-center gap-2">
+                <FaGraduationCap className="text-xl text-amber-400" />
+                <h3 className="text-base font-extrabold text-white">
+                  Mục Tiêu Đại Học & Kỳ Thi CSCA
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDreamModal(false)}
+                className="rounded-xl p-1.5 text-slate-400 hover:bg-white/10 hover:text-white"
+              >
+                <FiX className="text-lg" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveDreamGoal} className="mt-4 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                  Chọn nhanh trường đại học mơ ước:
+                </label>
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {PRESET_UNIVERSITIES.map((uni) => (
+                    <button
+                      key={uni}
+                      type="button"
+                      onClick={() => setEditDreamUni(uni)}
+                      className={`rounded-xl px-2.5 py-1 text-[10px] font-bold transition-all border ${
+                        editDreamUni === uni
+                          ? 'border-violet-400 bg-violet-600 text-white'
+                          : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'
+                      }`}
+                    >
+                      {uni}
+                    </button>
+                  ))}
+                </div>
+                <input
+                  type="text"
+                  required
+                  value={editDreamUni}
+                  onChange={(e) => setEditDreamUni(e.target.value)}
+                  placeholder="Nhập tên trường đại học mơ ước của bạn..."
+                  className="w-full rounded-2xl border border-white/15 bg-slate-950 px-4 py-2.5 text-xs text-white placeholder-slate-500 focus:border-violet-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                    Điểm CSCA mục tiêu:
+                  </label>
+                  <input
+                    type="text"
+                    value={editTargetScore}
+                    onChange={(e) => setEditTargetScore(e.target.value)}
+                    placeholder="VD: 92+ / 100"
+                    className="w-full rounded-2xl border border-white/15 bg-slate-950 px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:border-violet-500 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                    Ngày thi dự kiến:
+                  </label>
+                  <input
+                    type="date"
+                    value={editExamDate}
+                    onChange={(e) => setEditExamDate(e.target.value)}
+                    className="w-full rounded-2xl border border-white/15 bg-slate-950 px-3.5 py-2.5 text-xs text-white focus:border-violet-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowDreamModal(false)}
+                  className="rounded-xl px-4 py-2 text-xs font-bold text-slate-400 hover:bg-white/5"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 px-5 py-2 text-xs font-bold text-white shadow-lg shadow-violet-600/30 hover:brightness-110"
+                >
+                  Lưu mục tiêu
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─── MODAL: 🏆 BẢNG XẾP HẠNG CHIẾN THẦN TỰ HỌC ─────────────────────── */}
+      {showLeaderboardModal && (
+        <div className="fixed inset-0 z-[170] flex items-center justify-center bg-black/80 p-4 backdrop-blur-md">
+          <div className="w-full max-w-lg rounded-3xl border border-white/15 bg-slate-900 p-6 shadow-2xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/20 border border-amber-500/30 text-amber-400">
+                  <FaTrophy className="text-lg" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-white">
+                    Bảng Xếp Hạng Chiến Thần Tự Học
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Vinh danh các sĩ tử CSCA tập trung bền bỉ nhất
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowLeaderboardModal(false)}
+                className="rounded-xl p-1.5 text-slate-400 hover:bg-white/10 hover:text-white"
+              >
+                <FiX className="text-lg" />
+              </button>
+            </div>
+
+            {/* My Personal Study Summary Banner */}
+            <div className="mt-4 rounded-2xl border border-violet-500/30 bg-gradient-to-r from-violet-950/60 to-indigo-950/60 p-3.5 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-bold text-violet-300">
+                  Thành tích tự học của bạn ({dreamGoal.dreamUni})
+                </p>
+                <div className="mt-1 flex items-center gap-4 text-xs">
+                  <span>
+                    Hôm nay: <strong className="text-emerald-400">{myStats.todayMinutes} phút</strong> ({myStats.todaySessions} ca)
+                  </span>
+                  <span>
+                    7 ngày qua: <strong className="text-amber-300">{myStats.weekMinutes} phút</strong>
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleQuickCheckInSession(25)}
+                className="rounded-xl bg-emerald-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-emerald-500 transition-all shadow-sm"
+                title="Ghi nhận nhanh 1 ca tự học 25 phút"
+              >
+                + Check-in 25p học
+              </button>
+            </div>
+
+            {/* Period Switcher */}
+            <div className="mt-4 flex rounded-2xl border border-white/10 bg-slate-950 p-1">
+              <button
+                type="button"
+                onClick={() => setLeaderboardPeriod('today')}
+                className={`flex-1 rounded-xl py-2 text-xs font-extrabold transition-all ${
+                  leaderboardPeriod === 'today'
+                    ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 shadow-md'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                🔥 Top Hôm Nay (24h)
+              </button>
+              <button
+                type="button"
+                onClick={() => setLeaderboardPeriod('week')}
+                className={`flex-1 rounded-xl py-2 text-xs font-extrabold transition-all ${
+                  leaderboardPeriod === 'week'
+                    ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 shadow-md'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                🏆 Top 7 Ngày Qua
+              </button>
+            </div>
+
+            {/* Leaderboard Entries */}
+            <div className="mt-3 flex-1 overflow-y-auto space-y-2 pr-1 hide-scrollbar">
+              {isLoadingLeaderboard && activeLeaderboardRows.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-slate-400 text-xs">
+                  <FiRefreshCw className="animate-spin text-xl text-amber-400 mb-2" />
+                  <span>Đang tải bảng xếp hạng...</span>
+                </div>
+              ) : activeLeaderboardRows.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-white/15 py-10 px-4 text-center text-xs text-slate-400">
+                  Chưa có học viên nào ghi nhận giờ học trong khoảng thời gian này. Hãy bấm &ldquo;+ Check-in 25p học&rdquo; hoặc hoàn thành Pomodoro để dẫn đầu bảng vàng!
+                </div>
+              ) : (
+                activeLeaderboardRows.map((entry, idx) => (
+                  <div
+                    key={`lb-modal-${entry.userName}-${idx}`}
+                    className={`flex items-center justify-between gap-3 rounded-2xl border p-3 transition-all ${
+                      idx === 0
+                        ? 'border-amber-500/40 bg-amber-500/10'
+                        : idx === 1
+                        ? 'border-slate-400/30 bg-white/[0.05]'
+                        : idx === 2
+                        ? 'border-orange-500/30 bg-orange-500/10'
+                        : 'border-white/10 bg-white/[0.02]'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div
+                        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-xs font-black ${
+                          idx === 0
+                            ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-500/30'
+                            : idx === 1
+                            ? 'bg-slate-300 text-slate-950'
+                            : idx === 2
+                            ? 'bg-amber-700 text-white'
+                            : 'bg-white/10 text-slate-300'
+                        }`}
+                      >
+                        {idx === 0 ? <FaCrown className="text-sm" /> : idx < 3 ? <FaMedal className="text-sm" /> : idx + 1}
+                      </div>
+
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-extrabold text-white truncate">
+                            {entry.userName}
+                          </span>
+                          {idx === 0 && (
+                            <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[9px] font-black text-amber-300 border border-amber-500/30">
+                              Quán Quân
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-violet-300 truncate mt-0.5">
+                          🎓 Mục tiêu: {entry.dreamUniversity || 'Đỗ học bổng CSCA'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="text-right shrink-0">
+                      <div className="text-sm font-black text-amber-300">
+                        {entry.totalMinutes} phút
+                      </div>
+                      <div className="text-[10px] text-slate-400">
+                        {entry.sessionsCount} chu kỳ Pomodoro
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between">
+              <span className="text-[11px] text-slate-400">
+                💡 Mỗi chu kỳ Pomodoro hoàn thành sẽ tự động cộng giờ học cho bạn
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowLeaderboardModal(false);
+                  setViewMode('room');
+                }}
+                className="rounded-xl bg-violet-600 px-4 py-2 text-xs font-bold text-white hover:bg-violet-500"
+              >
+                Bắt đầu Pomodoro
               </button>
             </div>
           </div>

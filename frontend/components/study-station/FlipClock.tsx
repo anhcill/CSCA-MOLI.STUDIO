@@ -15,17 +15,153 @@ import {
   FiMinimize2,
   FiX,
   FiZap,
+  FiChevronLeft,
+  FiChevronRight,
+  FiShuffle,
+  FiEye,
 } from 'react-icons/fi';
 import { FaQuoteLeft } from 'react-icons/fa';
 
 interface FlipClockProps {
-  onSessionComplete?: (mode: 'work' | 'break') => void;
+  onSessionComplete?: (mode: 'work' | 'break', durationMinutes?: number) => void;
   className?: string;
   isCompact?: boolean;
   studyGoal?: string;
   onEditGoal?: () => void;
   quote?: { text: string; author: string };
   onNextQuote?: () => void;
+}
+
+const POMODORO_STORAGE_KEY = 'moly:pomodoro_daily_stats';
+
+interface DailyPomodoroStats {
+  date: string;
+  completedSessions: number;
+  totalMinutes: number;
+}
+
+interface QuickFlashcard {
+  id: number;
+  subject: 'Toán CSCA' | 'Lý & Hóa CSCA' | 'Tiếng Trung Học Thuật CSCA';
+  topic: string;
+  front: string;
+  back: string;
+}
+
+export const CSCA_QUICK_CARDS: QuickFlashcard[] = [
+  {
+    id: 1,
+    subject: 'Toán CSCA',
+    topic: 'Đạo hàm & Tiếp tuyến',
+    front: 'Phương trình tiếp tuyến của đồ thị y = f(x) tại M(x₀, y₀) và quy tắc đạo hàm hàm hợp [u(v(x))]’?',
+    back: '• Tiếp tuyến: y - f(x₀) = f’(x₀)(x - x₀)\n• Hàm hợp: [u(v(x))]’ = u’(v(x)) · v’(x)\n• Điểm cực trị: f’(x₀) = 0 và f’(x) đổi dấu khi qua x₀.',
+  },
+  {
+    id: 2,
+    subject: 'Toán CSCA',
+    topic: 'Cấp số cộng / Cấp số nhân',
+    front: 'Công thức số hạng tổng quát uₙ và tổng Sₙ của Cấp số cộng (d) & Cấp số nhân (q ≠ 1)?',
+    back: '• CSC: uₙ = u₁ + (n - 1)d  |  Sₙ = n(u₁ + uₙ)/2 = n·u₁ + n(n - 1)d/2\n• CSN: uₙ = u₁ · qⁿ⁻¹  |  Sₙ = u₁(1 - qⁿ) / (1 - q)',
+  },
+  {
+    id: 3,
+    subject: 'Toán CSCA',
+    topic: 'Bất đẳng thức Cauchy (AM-GM)',
+    front: 'Bất đẳng thức AM-GM (Cauchy) cho a, b > 0 và quy tắc tìm GTLN - GTNN nhanh?',
+    back: '• a + b ≥ 2√(ab)  ⇔  (a + b)/2 ≥ √(ab) ≥ 2ab/(a + b)\n• Tích ab = P không đổi ⇒ (a + b)min = 2√P; Tổng a + b = S không đổi ⇒ (ab)max = S²/4.\n• Dấu "=" xảy ra khi và chỉ khi a = b.',
+  },
+  {
+    id: 4,
+    subject: 'Toán CSCA',
+    topic: 'Tích vô hướng Vector',
+    front: 'Tích vô hướng a⃗ · b⃗, điều kiện hai vector vuông góc và cos góc giữa hai vector trong Oxy?',
+    back: '• a⃗ · b⃗ = |a⃗||b⃗|cos(a⃗, b⃗) = x₁x₂ + y₁y₂\n• Vuông góc: a⃗ ⊥ b⃗ ⇔ x₁x₂ + y₁y₂ = 0\n• cos θ = (x₁x₂ + y₁y₂) / [√(x₁² + y₁²) · √(x₂² + y₂²)]',
+  },
+  {
+    id: 5,
+    subject: 'Toán CSCA',
+    topic: 'Xác suất cổ điển',
+    front: 'Công thức cộng xác suất P(A ∪ B), xác suất có điều kiện P(A|B) và công thức Bernoulli?',
+    back: '• P(A ∪ B) = P(A) + P(B) - P(A ∩ B)\n• P(A|B) = P(A ∩ B) / P(B) (Nếu A, B độc lập: P(A ∩ B) = P(A)·P(B))\n• Nhị thức Bernoulli: Pₙ(k) = Cₙᵏ · pᵏ · (1 - p)ⁿ⁻ᵏ',
+  },
+  {
+    id: 6,
+    subject: 'Lý & Hóa CSCA',
+    topic: 'Định luật II Newton & Bảo toàn cơ năng',
+    front: 'Định luật II Newton, Định lý động năng và Định luật bảo toàn cơ năng trong trọng trường?',
+    back: '• Newton II: ∑F⃗ = m·a⃗\n• Định lý động năng: A_ngoại_lực = ΔWđ = ½mv₂² - ½mv₁²\n• Bảo toàn cơ năng (chỉ lực thế): W = ½mv² + mgh = const',
+  },
+  {
+    id: 7,
+    subject: 'Lý & Hóa CSCA',
+    topic: 'Định luật Ohm toàn mạch',
+    front: 'Định luật Ohm cho toàn mạch nguồn (E, r) nối với tải R_N và điều kiện công suất mạch ngoài cực đại?',
+    back: '• Cường độ dòng điện: I = E / (R_N + r)  |  Hiệu điện thế ngoài: U_N = E - I·r\n• Công suất mạch ngoài cực đại khi R_N = r ⇒ P_max = E² / (4r)',
+  },
+  {
+    id: 8,
+    subject: 'Lý & Hóa CSCA',
+    topic: 'Phương trình khí lý tưởng PV = nRT',
+    front: 'Phương trình trạng thái khí lý tưởng PV = nRT và liên hệ với khối lượng riêng ρ, khối lượng mol M?',
+    back: '• P·V = n·R·T = (m/M)·R·T  ⇒  (P₁V₁)/T₁ = (P₂V₂)/T₂\n• Khối lượng riêng: ρ = m/V = (P·M)/(R·T)\n• Lưu ý: Luôn đổi nhiệt độ sang Kelvin: T(K) = t(°C) + 273.15',
+  },
+  {
+    id: 9,
+    subject: 'Lý & Hóa CSCA',
+    topic: 'Cân bằng hóa học Le Chatelier',
+    front: 'Khi tăng nhiệt độ (T ↑) hoặc tăng áp suất (P ↑), cân bằng hóa học dịch chuyển theo chiều nào?',
+    back: '• Tăng T (T ↑): Dịch chuyển theo chiều phản ứng THU NHIỆT (ΔH > 0)\n• Tăng P (P ↑): Dịch chuyển theo chiều làm GIẢM số mol khí (Δn_khí < 0)\n• Chất xúc tác chỉ tăng tốc độ đạt cân bằng, KHÔNG làm dịch chuyển cân bằng!',
+  },
+  {
+    id: 10,
+    subject: 'Tiếng Trung Học Thuật CSCA',
+    topic: 'Từ vựng lập luận: 推导 • 假设',
+    front: 'Giải nghĩa bộ từ khóa lập luận đề thi CSCA: 【推导 (tuīdǎo) - Suy đạo/Chứng minh】 & 【假设 (jiǎshè) - Giả thiết】?',
+    back: '• 推导 (tuīdǎo): Suy đạo / Biến đổi suy ra / Chứng minh công thức\n• 假设 (jiǎshè): Giả thiết / Giả sử (Suppose / Assume)\n• 已知 (yǐzhī): Đã biết (Cho trước dữ kiện đề bài)',
+  },
+  {
+    id: 11,
+    subject: 'Tiếng Trung Học Thuật CSCA',
+    topic: 'Từ vựng Toán học: 恒成立',
+    front: 'Giải nghĩa thuật ngữ hay gặp trong bài toán hàm số & bất đẳng thức CSCA: 【恒成立 (héng chénglì)】?',
+    back: '• 恒成立 (héng chénglì): Luôn đúng / Nghiệm đúng với mọi giá trị trên miền xác định\n• Ví dụ: 若 f(x) ≥ a 在 R 上恒成立 (Nếu f(x) ≥ a luôn đúng trên ℝ) ⇒ a ≤ f(x)_min.',
+  },
+  {
+    id: 12,
+    subject: 'Tiếng Trung Học Thuật CSCA',
+    topic: 'Logic: 充分必要条件',
+    front: 'Phân biệt bộ 3 điều kiện logic trọng tâm CSCA: 【充分条件】, 【必要条件】, 【充分必要条件】?',
+    back: '• 充分不必要条件: Điều kiện đủ nhưng không cần (A ⇒ B nhưng B ⇏ A)\n• 必要不充分条件: Điều kiện cần nhưng không đủ (B ⇒ A nhưng A ⇏ B)\n• 充分必要条件 (充要条件): Điều kiện cần và đủ (A ⇔ B)',
+  },
+];
+
+function getTodayDateString(): string {
+  return new Date().toLocaleDateString('en-CA');
+}
+
+function getFocusRankBadge(todayMinutes: number): { label: string; badgeClass: string } {
+  if (todayMinutes >= 120) {
+    return {
+      label: '👑 Chiến thần CSCA',
+      badgeClass: 'bg-rose-500/20 text-rose-300 ring-1 ring-rose-500/40',
+    };
+  }
+  if (todayMinutes >= 60) {
+    return {
+      label: '⚡ Cao thủ Kỷ luật',
+      badgeClass: 'bg-violet-500/20 text-violet-300 ring-1 ring-violet-500/40',
+    };
+  }
+  if (todayMinutes >= 25) {
+    return {
+      label: '🔥 Chiến binh Tập trung',
+      badgeClass: 'bg-amber-500/20 text-amber-300 ring-1 ring-amber-500/40',
+    };
+  }
+  return {
+    label: '🌱 Khởi động',
+    badgeClass: 'bg-slate-500/20 text-slate-300 ring-1 ring-slate-500/30',
+  };
 }
 
 // ─── MECHANICAL FLIP DIGIT COMPONENT ──────────────────────────────────────────
@@ -156,14 +292,42 @@ export default function FlipClock({
   const [timeLeft, setTimeLeft] = useState<number>(workMinutes * 60);
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [completedSessions, setCompletedSessions] = useState<number>(0);
+  const [todayMinutes, setTodayMinutes] = useState<number>(0);
   const [showSettings, setShowSettings] = useState<boolean>(false);
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
+
+  // Break-time CSCA Quick Flashcards state
+  const [showQuickCards, setShowQuickCards] = useState<boolean>(false);
+  const [quickCardIndex, setQuickCardIndex] = useState<number>(0);
+  const [isCardRevealed, setIsCardRevealed] = useState<boolean>(false);
 
   // Fullscreen Desk Clock state
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
 
   // Audio Context for alarm sound
   const audioCtxRef = useRef<AudioContext | null>(null);
+
+  // Hydrate daily Pomodoro stats from localStorage on mount
+  useEffect(() => {
+    try {
+      const today = getTodayDateString();
+      const raw = localStorage.getItem(POMODORO_STORAGE_KEY);
+      if (raw) {
+        const parsed: DailyPomodoroStats = JSON.parse(raw);
+        if (parsed && parsed.date === today) {
+          setCompletedSessions(Number(parsed.completedSessions) || 0);
+          setTodayMinutes(Number(parsed.totalMinutes) || 0);
+        } else {
+          const fresh: DailyPomodoroStats = {
+            date: today,
+            completedSessions: 0,
+            totalMinutes: 0,
+          };
+          localStorage.setItem(POMODORO_STORAGE_KEY, JSON.stringify(fresh));
+        }
+      }
+    } catch {}
+  }, []);
 
   const playBeep = () => {
     if (!soundEnabled) return;
@@ -201,21 +365,44 @@ export default function FlipClock({
     } else if (timeLeft === 0) {
       playBeep();
       if (mode === 'work') {
-        setCompletedSessions((prev) => prev + 1);
+        const nextSessions = completedSessions + 1;
+        const nextMinutes = todayMinutes + workMinutes;
+        setCompletedSessions(nextSessions);
+        setTodayMinutes(nextMinutes);
+        try {
+          const stats: DailyPomodoroStats = {
+            date: getTodayDateString(),
+            completedSessions: nextSessions,
+            totalMinutes: nextMinutes,
+          };
+          localStorage.setItem(POMODORO_STORAGE_KEY, JSON.stringify(stats));
+        } catch {}
         setMode('break');
         setTimeLeft(breakMinutes * 60);
-        onSessionComplete?.('work');
+        setShowQuickCards(true);
+        setIsCardRevealed(false);
+        onSessionComplete?.('work', workMinutes);
       } else {
         setMode('work');
         setTimeLeft(workMinutes * 60);
-        onSessionComplete?.('break');
+        onSessionComplete?.('break', breakMinutes);
       }
       setIsRunning(false);
     }
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [isRunning, timeLeft, mode, breakMinutes, workMinutes, onSessionComplete, soundEnabled]);
+  }, [
+    isRunning,
+    timeLeft,
+    mode,
+    breakMinutes,
+    workMinutes,
+    completedSessions,
+    todayMinutes,
+    onSessionComplete,
+    soundEnabled,
+  ]);
 
   // Fullscreen toggling logic
   const toggleFullscreen = () => {
@@ -307,6 +494,41 @@ export default function FlipClock({
   const adjustMinutes = (delta: number) => {
     const newMins = Math.max(1, Math.min(180, workMinutes + delta));
     handleSelectWorkMinutes(newMins);
+  };
+
+  // Flashcard navigation handlers
+  const handlePrevCard = () => {
+    setIsCardRevealed(false);
+    setQuickCardIndex((prev) => (prev - 1 + CSCA_QUICK_CARDS.length) % CSCA_QUICK_CARDS.length);
+  };
+
+  const handleNextCard = () => {
+    setIsCardRevealed(false);
+    setQuickCardIndex((prev) => (prev + 1) % CSCA_QUICK_CARDS.length);
+  };
+
+  const handleRandomCard = () => {
+    setIsCardRevealed(false);
+    if (CSCA_QUICK_CARDS.length <= 1) return;
+    let nextIdx = quickCardIndex;
+    while (nextIdx === quickCardIndex) {
+      nextIdx = Math.floor(Math.random() * CSCA_QUICK_CARDS.length);
+    }
+    setQuickCardIndex(nextIdx);
+  };
+
+  const currentCard = CSCA_QUICK_CARDS[quickCardIndex] || CSCA_QUICK_CARDS[0];
+  const rankBadge = getFocusRankBadge(todayMinutes);
+
+  const getSubjectBadgeStyle = (subject: QuickFlashcard['subject']) => {
+    switch (subject) {
+      case 'Toán CSCA':
+        return 'bg-sky-500/20 text-sky-300 ring-1 ring-sky-500/40';
+      case 'Lý & Hóa CSCA':
+        return 'bg-amber-500/20 text-amber-300 ring-1 ring-amber-500/40';
+      case 'Tiếng Trung Học Thuật CSCA':
+        return 'bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/40';
+    }
   };
 
   return (
@@ -558,6 +780,132 @@ export default function FlipClock({
           </button>
         </div>
 
+        {/* ─── CSCA BREAK-TIME MINI FLASHCARDS TOGGLE & CAROUSEL ─────────────── */}
+        <div className="mt-3.5">
+          {mode === 'break' && !showQuickCards && (
+            <div className="mb-2 flex items-center justify-between rounded-xl border border-emerald-500/30 bg-emerald-950/30 px-3 py-2 text-xs text-emerald-200">
+              <span>☕ Đang giải lao! Tranh thủ nhẩm 1–2 công thức CSCA nhé?</span>
+              <button
+                type="button"
+                onClick={() => setShowQuickCards(true)}
+                className="ml-2 shrink-0 rounded-lg bg-emerald-600 px-2.5 py-1 text-[11px] font-extrabold text-white hover:bg-emerald-500 transition-colors"
+              >
+                Mở thẻ ngay
+              </button>
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setShowQuickCards((prev) => !prev)}
+            className={`w-full flex items-center justify-between rounded-xl border px-3 py-2 text-xs font-extrabold transition-all ${
+              showQuickCards
+                ? 'border-amber-500/40 bg-amber-500/15 text-amber-300 shadow-sm'
+                : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white'
+            }`}
+          >
+            <span className="flex items-center gap-1.5 truncate">
+              <span>⚡ Nhẩm nhanh Kiến thức CSCA khi giải lao</span>
+            </span>
+            <span className="ml-2 shrink-0 rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-bold text-slate-200">
+              {showQuickCards ? 'Thu gọn ▲' : `${CSCA_QUICK_CARDS.length} thẻ ▼`}
+            </span>
+          </button>
+
+          {showQuickCards && (
+            <div className="mt-2.5 rounded-2xl border border-amber-500/30 bg-gradient-to-br from-slate-900 via-slate-900/95 to-indigo-950/50 p-3.5 text-left shadow-xl animate-in fade-in">
+              {/* Card Header: Subject badge & counter */}
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span
+                    className={`rounded-full px-2.5 py-0.5 text-[10px] font-black ${getSubjectBadgeStyle(
+                      currentCard.subject
+                    )}`}
+                  >
+                    {currentCard.subject}
+                  </span>
+                  <span className="text-[11px] font-bold text-slate-400 truncate">
+                    • {currentCard.topic}
+                  </span>
+                </div>
+                <span className="shrink-0 font-mono text-[11px] font-bold text-slate-400">
+                  {quickCardIndex + 1}/{CSCA_QUICK_CARDS.length}
+                </span>
+              </div>
+
+              {/* Front Question / Term */}
+              <div className="rounded-xl border border-white/10 bg-slate-950/70 p-3">
+                <p className="text-[10px] font-extrabold uppercase tracking-wider text-violet-400 mb-1">
+                  Câu hỏi / Thuật ngữ trọng tâm:
+                </p>
+                <p className="text-xs sm:text-[13px] font-bold text-white leading-relaxed">
+                  {currentCard.front}
+                </p>
+              </div>
+
+              {/* Click-to-reveal Back Formula / Explanation */}
+              <div className="mt-2">
+                {isCardRevealed ? (
+                  <div
+                    onClick={() => setIsCardRevealed(false)}
+                    className="cursor-pointer rounded-xl border border-emerald-500/30 bg-emerald-950/25 p-3 transition-all hover:border-emerald-500/50"
+                    title="Bấm để ẩn đáp án"
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-400">
+                        ✓ Công thức & Giải thích chuẩn CSCA:
+                      </span>
+                      <span className="text-[10px] text-slate-400">Bấm để ẩn</span>
+                    </div>
+                    <p className="whitespace-pre-line text-xs text-emerald-100 font-medium leading-relaxed">
+                      {currentCard.back}
+                    </p>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setIsCardRevealed(true)}
+                    className="w-full flex items-center justify-center gap-1.5 rounded-xl border border-dashed border-violet-400/40 bg-violet-500/10 py-2.5 px-3 text-xs font-bold text-violet-300 hover:bg-violet-500/20 hover:text-white transition-all"
+                  >
+                    <FiEye className="text-sm" />
+                    <span>Bấm để lật xem Công thức / Giải nghĩa</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Carousel Controls */}
+              <div className="mt-3 flex items-center justify-between gap-2 pt-2 border-t border-white/10">
+                <button
+                  type="button"
+                  onClick={handlePrevCard}
+                  className="flex items-center gap-1 rounded-xl bg-white/5 px-3 py-1.5 text-xs font-bold text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
+                >
+                  <FiChevronLeft />
+                  <span>Trước</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleRandomCard}
+                  className="flex items-center gap-1 rounded-xl bg-amber-500/15 px-3 py-1.5 text-xs font-bold text-amber-300 ring-1 ring-amber-500/30 hover:bg-amber-500/25 transition-colors"
+                >
+                  <FiShuffle className="text-xs" />
+                  <span>Ngẫu nhiên</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleNextCard}
+                  className="flex items-center gap-1 rounded-xl bg-white/5 px-3 py-1.5 text-xs font-bold text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
+                >
+                  <span>Tiếp theo</span>
+                  <FiChevronRight />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Integrated Goal & Quote Bar */}
         {(studyGoal !== undefined || quote !== undefined) && (
           <div className="mt-4 pt-3.5 border-t border-white/10 grid grid-cols-1 md:grid-cols-2 gap-3 text-left">
@@ -625,10 +973,24 @@ export default function FlipClock({
           </div>
         )}
 
-        {/* Footer info */}
-        <div className={`${isCompact ? 'mt-2.5 pt-2 text-[10px]' : 'mt-4 pt-3 text-xs'} flex items-center justify-between border-t border-white/10 text-slate-400`}>
-          <span>Đã hoàn thành hôm nay:</span>
-          <span className="font-extrabold text-violet-400">{completedSessions} chu kỳ</span>
+        {/* Footer info with Persistent Daily Stats & Rank Badge */}
+        <div
+          className={`${
+            isCompact ? 'mt-2.5 pt-2 text-[10px]' : 'mt-4 pt-3 text-xs'
+          } flex flex-wrap items-center justify-between gap-2 border-t border-white/10 text-slate-400`}
+        >
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span>Đã hoàn thành hôm nay:</span>
+            <span className="font-extrabold text-violet-400">
+              {completedSessions} chu kỳ ({todayMinutes} phút tập trung)
+            </span>
+          </div>
+          <span
+            className={`rounded-full px-2.5 py-0.5 text-[10px] font-extrabold ${rankBadge.badgeClass}`}
+            title="Huy hiệu kỷ luật hôm nay (tự động lưu cả khi tải lại trang)"
+          >
+            {rankBadge.label}
+          </span>
         </div>
       </div>
 
@@ -637,7 +999,7 @@ export default function FlipClock({
         <div className="fixed inset-0 z-[250] bg-slate-950/98 backdrop-blur-2xl flex flex-col justify-between p-6 sm:p-12 select-none overflow-hidden animate-in fade-in duration-200">
           {/* Top Bar in Fullscreen */}
           <div className="flex items-center justify-between w-full max-w-7xl mx-auto">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
               <span
                 className={`rounded-full px-4 py-1.5 text-xs sm:text-sm font-black uppercase tracking-wider shadow-lg ${
                   mode === 'work'
@@ -649,7 +1011,16 @@ export default function FlipClock({
               </span>
 
               <span className="hidden sm:inline text-xs font-bold text-slate-400">
-                Chu kỳ hoàn thành: <strong className="text-violet-400">{completedSessions}</strong>
+                Hôm nay:{' '}
+                <strong className="text-violet-400">
+                  {completedSessions} chu kỳ ({todayMinutes} phút tập trung)
+                </strong>
+              </span>
+
+              <span
+                className={`hidden md:inline-flex rounded-full px-3 py-1 text-xs font-extrabold ${rankBadge.badgeClass}`}
+              >
+                {rankBadge.label}
               </span>
             </div>
 
