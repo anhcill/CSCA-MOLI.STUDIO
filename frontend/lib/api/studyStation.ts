@@ -24,10 +24,23 @@ export interface RoomChatMessage {
   createdAt: string;
 }
 
+export interface RoomParticipantDTO {
+  peerId: string;
+  userId?: number | null;
+  name: string;
+  avatar?: string | null;
+  isCameraOn: boolean;
+  isMicOn: boolean;
+  statusText: string;
+  isHost?: boolean;
+  lastSeen: number;
+}
+
 export interface BackendStudyRoom {
   id: string;
   code: string;
   name: string;
+  hostId?: number | null;
   hostName: string;
   hostAvatar?: string;
   subject: string;
@@ -36,6 +49,7 @@ export interface BackendStudyRoom {
   maxMembers: number;
   isPrivate: boolean;
   createdAt: number;
+  participants?: RoomParticipantDTO[];
 }
 
 /**
@@ -105,6 +119,7 @@ export async function createStudyRoomApi(payload: {
   maxMembers?: number;
   isPrivate?: boolean;
   code?: string;
+  hostName?: string;
 }): Promise<BackendStudyRoom | null> {
   try {
     const res = await axios.post('/study-station/rooms', payload);
@@ -114,6 +129,73 @@ export async function createStudyRoomApi(payload: {
     return null;
   } catch (err) {
     console.error('createStudyRoomApi error:', err);
+    throw err;
+  }
+}
+
+/**
+ * Tìm phòng học theo mã phòng từ SQL database
+ */
+export async function getStudyRoomByCodeApi(roomCode: string): Promise<BackendStudyRoom | null> {
+  try {
+    const res = await axios.get(`/study-station/rooms/${encodeURIComponent(roomCode)}`);
+    if (res.data?.success && res.data?.data) {
+      return res.data.data;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Đồng bộ trạng thái thành viên thật trong phòng (heartbeat)
+ */
+export async function syncRoomPresenceApi(
+  roomCode: string,
+  payload: {
+    peerId: string;
+    name: string;
+    avatar?: string | null;
+    isCameraOn: boolean;
+    isMicOn: boolean;
+    statusText: string;
+    isHost?: boolean;
+  }
+): Promise<{ memberCount: number; participants: RoomParticipantDTO[] } | null> {
+  try {
+    const res = await axios.post(
+      `/study-station/rooms/${encodeURIComponent(roomCode)}/presence`,
+      payload
+    );
+    if (res.data?.success && res.data?.data) {
+      return res.data.data;
+    }
+    return null;
+  } catch (err) {
+    console.error('syncRoomPresenceApi error:', err);
+    return null;
+  }
+}
+
+/**
+ * Rời phòng học
+ */
+export async function leaveStudyRoomApi(roomCode: string, peerId: string): Promise<void> {
+  try {
+    await axios.post(`/study-station/rooms/${encodeURIComponent(roomCode)}/leave`, { peerId });
+  } catch {}
+}
+
+/**
+ * Đóng / xóa phòng học (dành cho chủ phòng hoặc Admin)
+ */
+export async function deleteStudyRoomApi(roomCode: string): Promise<boolean> {
+  try {
+    const res = await axios.delete(`/study-station/rooms/${encodeURIComponent(roomCode)}`);
+    return Boolean(res.data?.success);
+  } catch (err) {
+    console.error('deleteStudyRoomApi error:', err);
     throw err;
   }
 }

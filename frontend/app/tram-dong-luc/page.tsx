@@ -1,13 +1,11 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import FlipClock from '@/components/study-station/FlipClock';
 import VirtualStudyRoom from '@/components/study-station/VirtualStudyRoom';
 import {
   FiArrowLeft,
-  FiPlay,
-  FiPause,
   FiVolume2,
   FiVolumeX,
   FiShare2,
@@ -15,24 +13,19 @@ import {
   FiPlus,
   FiChevronUp,
   FiChevronDown,
-  FiMessageCircle,
   FiMessageSquare,
   FiExternalLink,
   FiCheck,
-  FiCopy,
   FiRefreshCw,
   FiZap,
   FiX,
   FiVideo,
   FiFilm,
   FiSend,
-  FiUsers,
-  FiTool,
-  FiHome,
-  FiMonitor,
-  FiFileText,
+  FiTrash2,
+  FiMusic,
 } from 'react-icons/fi';
-import { FaHeart, FaBookmark, FaFire, FaQuoteLeft } from 'react-icons/fa';
+import { FaHeart, FaBookmark, FaFire } from 'react-icons/fa';
 import { useAuthStore } from '@/lib/store/authStore';
 import { getStationChats, sendStationChat } from '@/lib/api/studyStation';
 
@@ -47,6 +40,7 @@ interface MotivationVideo {
   likes: number;
   message: string;
   originalUrl?: string;
+  isCustom?: boolean;
 }
 
 // ─── CURATED INITIAL MOTIVATION VIDEOS ────────────────────────────────────────
@@ -67,7 +61,7 @@ const INITIAL_VIDEOS: MotivationVideo[] = [
     creator: 'Cú Đêm Ôn Thi',
     creatorHandle: '@cudem_study',
     category: 'exam',
-    tags: ['#studywithme', '#thuchuya', '#2ham', '#onthicsca'],
+    tags: ['#studywithme', '#thuckhuya', '#2ham', '#onthicsca'],
     likes: 15300,
     message: 'Khi bạn thấy mệt mỏi muốn gục ngã, hãy nhớ về lý do vì sao ngày đầu tiên bạn bắt đầu!',
   },
@@ -87,7 +81,7 @@ const INITIAL_VIDEOS: MotivationVideo[] = [
     creator: 'Động Lực Mỗi Ngày',
     creatorHandle: '@dongluc_moingay',
     category: 'discipline',
-    tags: ['#dongluc', '#niemtin', '#baphat', '#csca'],
+    tags: ['#dongluc', '#niemtin', '#butpha', '#csca'],
     likes: 21900,
     message: 'Xuất phát điểm của bạn ở đâu không quyết định vạch đích của bạn. Chỉ có sự bền bỉ mới tạo nên kỳ tích.',
   },
@@ -119,6 +113,7 @@ const CATEGORIES = [
   { key: 'exam', label: '🌙 Thức khuya ôn thi' },
   { key: 'scholarship', label: '🎓 Săn học bổng' },
   { key: 'tips', label: '💡 Tips học thông minh' },
+  { key: 'saved', label: '⭐ Đã lưu' },
 ];
 
 // ─── QUICK CHEERS ────────────────────────────────────────────────────────────
@@ -130,8 +125,11 @@ const QUICK_CHEERS = [
   { label: '🎓 Đỗ CSCA!', text: '🎓 Hẹn gặp tất cả các bạn tại cánh cổng trường đại học mơ ước!' },
 ];
 
-// ─── TẠM KHÓA TRẠM ĐỘNG LỰC ĐỂ SỬA CHỮA / BẢO TRÌ ───────────────────────────
-const IS_LOCKED_FOR_MAINTENANCE = true;
+const AMBIENT_SOUNDS: Array<{ key: 'rain' | 'ocean' | 'cafe'; label: string; emoji: string }> = [
+  { key: 'rain', label: 'Mưa rơi', emoji: '🌧️' },
+  { key: 'ocean', label: 'Sóng biển', emoji: '🌊' },
+  { key: 'cafe', label: 'Quán Cafe', emoji: '☕' },
+];
 
 export default function TramDongLucPage() {
   const { user } = useAuthStore();
@@ -143,25 +141,34 @@ export default function TramDongLucPage() {
   const [videos, setVideos] = useState<MotivationVideo[]>(INITIAL_VIDEOS);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [currentIndex, setCurrentIndex] = useState<number>(0);
+  const [slideDirection, setSlideDirection] = useState<'up' | 'down'>('up');
   const [likedMap, setLikedMap] = useState<Record<string, boolean>>({});
   const [savedMap, setSavedMap] = useState<Record<string, boolean>>({});
   const [likeCountMap, setLikeCountMap] = useState<Record<string, number>>({});
+  const [heartBurst, setHeartBurst] = useState<boolean>(false);
   const [showAddModal, setShowAddModal] = useState<boolean>(false);
   const [showNoteDrawer, setShowNoteDrawer] = useState<boolean>(false);
+  const [showSoundMenu, setShowSoundMenu] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Gesture & wheel cooldown refs for buttery-smooth TikTok scrolling
+  const lastScrollTimeRef = useRef<number>(0);
+  const touchStartYRef = useRef<number | null>(null);
 
   // Live Study Chat & Mobile Reels Tab
   const [chatInput, setChatInput] = useState<string>('');
   const [mobileReelsTab, setMobileReelsTab] = useState<'chat' | 'playlist'>('chat');
-  const [chatMessages, setChatMessages] = useState<Array<{
-    id: string;
-    sender: string;
-    badge: string;
-    badgeColor: string;
-    text: string;
-    time: string;
-    isMe?: boolean;
-  }>>([]);
+  const [chatMessages, setChatMessages] = useState<
+    Array<{
+      id: string;
+      sender: string;
+      badge: string;
+      badgeColor: string;
+      text: string;
+      time: string;
+      isMe?: boolean;
+    }>
+  >([]);
   const [isLoadingChats, setIsLoadingChats] = useState<boolean>(true);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -184,10 +191,6 @@ export default function TramDongLucPage() {
 
   // Fetch real chats from SQL database
   useEffect(() => {
-    if (IS_LOCKED_FOR_MAINTENANCE) {
-      setIsLoadingChats(false);
-      return;
-    }
     let isMounted = true;
     const loadStationChats = async () => {
       try {
@@ -219,6 +222,11 @@ export default function TramDongLucPage() {
     };
   }, [user?.id]);
 
+  const showToast = useCallback((msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3000);
+  }, []);
+
   const handleSendChatMessage = async (e?: React.FormEvent, customText?: string) => {
     if (e) e.preventDefault();
     const textToSend = (customText || chatInput).trim();
@@ -228,7 +236,8 @@ export default function TramDongLucPage() {
 
     // Optimistic temporary display
     const tempId = `temp-${Date.now()}`;
-    const mySenderName = user?.full_name || user?.username || user?.email?.split('@')[0] || 'Bạn (Sĩ tử CSCA)';
+    const mySenderName =
+      user?.full_name || user?.username || user?.email?.split('@')[0] || 'Bạn (Sĩ tử CSCA)';
     const optimisticMsg = {
       id: tempId,
       sender: mySenderName,
@@ -247,7 +256,7 @@ export default function TramDongLucPage() {
     }, 50);
 
     try {
-      const currentVid = videos[currentIndex];
+      const currentVid = filteredVideos[currentIndex];
       const saved = await sendStationChat({
         text: textToSend,
         senderName: mySenderName,
@@ -287,7 +296,9 @@ export default function TramDongLucPage() {
   const [activeSound, setActiveSound] = useState<'none' | 'rain' | 'ocean' | 'cafe'>('none');
   const [soundVolume, setSoundVolume] = useState<number>(0.5);
   const audioCtxRef = useRef<AudioContext | null>(null);
-  const soundNodesRef = useRef<{ gain?: GainNode; source?: AudioNode; stop?: () => void } | null>(null);
+  const soundNodesRef = useRef<{ gain?: GainNode; source?: AudioNode; stop?: () => void } | null>(
+    null
+  );
 
   // Quote State
   const [quoteIndex, setQuoteIndex] = useState<number>(0);
@@ -295,7 +306,7 @@ export default function TramDongLucPage() {
   // User study note
   const [studyNote, setStudyNote] = useState<string>('');
 
-  // Iframe loading indicator
+  // Iframe loading indicator with fast fallback so it never blocks the user
   const [iframeLoading, setIframeLoading] = useState<boolean>(true);
 
   // ─── INITIAL STORAGE LOAD ──────────────────────────────────────────────────
@@ -312,7 +323,8 @@ export default function TramDongLucPage() {
         const parsed = JSON.parse(customVideos) as MotivationVideo[];
         if (Array.isArray(parsed) && parsed.length > 0) {
           setVideos((prev) => {
-            const combined = [...parsed, ...prev];
+            const markedCustom = parsed.map((v) => ({ ...v, isCustom: true }));
+            const combined = [...markedCustom, ...prev];
             const seen = new Set<string>();
             return combined.filter((v) => {
               if (!v || !v.id || seen.has(v.id)) return false;
@@ -330,7 +342,7 @@ export default function TramDongLucPage() {
       const tab = params.get('tab');
       if (tab === 'reels') {
         setViewMode('reels');
-      } else if (tab === 'room') {
+      } else if (tab === 'room' || params.get('room')) {
         setViewMode('room');
       }
     } catch {}
@@ -339,7 +351,9 @@ export default function TramDongLucPage() {
   // Filtered videos based on category & strictly deduplicated by ID
   const filteredVideos = useMemo(() => {
     let list = videos;
-    if (selectedCategory !== 'all') {
+    if (selectedCategory === 'saved') {
+      list = videos.filter((v) => Boolean(savedMap[v.id]));
+    } else if (selectedCategory !== 'all') {
       list = videos.filter((v) => v.category === selectedCategory);
     }
     const seen = new Set<string>();
@@ -348,7 +362,7 @@ export default function TramDongLucPage() {
       seen.add(v.id);
       return true;
     });
-  }, [videos, selectedCategory]);
+  }, [videos, selectedCategory, savedMap]);
 
   // Keep index within bounds
   useEffect(() => {
@@ -358,41 +372,114 @@ export default function TramDongLucPage() {
   }, [selectedCategory, filteredVideos.length, currentIndex]);
 
   const currentVideo = filteredVideos[currentIndex] || filteredVideos[0];
+  const nextVideo =
+    filteredVideos.length > 1
+      ? filteredVideos[(currentIndex + 1) % filteredVideos.length]
+      : null;
 
-  // Keep the loading state tied to the active embed. A hidden autoplaying TikTok iframe
-  // competes for network and video decoding resources, which makes the visible video stutter.
+  // Fast-reveal skeleton: automatically dismiss overlay after 600ms even if TikTok iframe is still initializing scripts
   useEffect(() => {
     setIframeLoading(true);
+    const timer = setTimeout(() => {
+      setIframeLoading(false);
+    }, 600);
+    return () => clearTimeout(timer);
   }, [currentVideo?.id]);
 
-  // ─── TOAST NOTIFICATION HELPER ─────────────────────────────────────────────
-  const showToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3000);
-  };
-
-  // ─── VIDEO NAVIGATION ──────────────────────────────────────────────────────
-  const handlePrevVideo = () => {
+  // ─── VIDEO NAVIGATION (ULTRA-SMOOTH VERTICAL REELS) ────────────────────────
+  const handlePrevVideo = useCallback(() => {
     if (filteredVideos.length <= 1) return;
+    setSlideDirection('down');
     setIframeLoading(true);
     setCurrentIndex((prev) => (prev > 0 ? prev - 1 : filteredVideos.length - 1));
-  };
+  }, [filteredVideos.length]);
 
-  const handleNextVideo = () => {
+  const handleNextVideo = useCallback(() => {
     if (filteredVideos.length <= 1) return;
+    setSlideDirection('up');
     setIframeLoading(true);
     setCurrentIndex((prev) => (prev < filteredVideos.length - 1 ? prev + 1 : 0));
+  }, [filteredVideos.length]);
+
+  const selectVideoByIndex = (idx: number) => {
+    if (idx === currentIndex) return;
+    setSlideDirection(idx > currentIndex ? 'up' : 'down');
+    setIframeLoading(true);
+    setCurrentIndex(idx);
   };
 
-  // Keyboard navigation
+  // Mouse wheel / Trackpad two-finger vertical scroll handler with debounce
+  const handleReelsWheel = useCallback(
+    (e: React.WheelEvent) => {
+      if (filteredVideos.length <= 1) return;
+      if (Math.abs(e.deltaY) < 22) return;
+      const now = Date.now();
+      if (now - lastScrollTimeRef.current < 420) return;
+      lastScrollTimeRef.current = now;
+
+      if (e.deltaY > 0) {
+        handleNextVideo();
+      } else {
+        handlePrevVideo();
+      }
+    },
+    [filteredVideos.length, handleNextVideo, handlePrevVideo]
+  );
+
+  // Touch swipe up / down handlers for mobile & tablets
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartYRef.current = e.touches[0]?.clientY ?? null;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartYRef.current === null) return;
+    const endY = e.changedTouches[0]?.clientY ?? touchStartYRef.current;
+    const diffY = touchStartYRef.current - endY;
+    touchStartYRef.current = null;
+
+    if (Math.abs(diffY) < 40) return;
+    if (diffY > 0) {
+      handleNextVideo();
+    } else {
+      handlePrevVideo();
+    }
+  };
+
+  // ─── LIKE, BOOKMARK, SHARE & DELETE ────────────────────────────────────────
+  const toggleLike = useCallback(
+    (videoId: string) => {
+      const isLiked = !!likedMap[videoId];
+      const newLiked = !isLiked;
+      const updated = { ...likedMap, [videoId]: newLiked };
+      setLikedMap(updated);
+      try {
+        localStorage.setItem('moly:dongluc_likes', JSON.stringify(updated));
+      } catch {}
+
+      setLikeCountMap((prev) => ({
+        ...prev,
+        [videoId]: (prev[videoId] ?? currentVideo?.likes ?? 1000) + (newLiked ? 1 : -1),
+      }));
+
+      if (newLiked) {
+        setHeartBurst(true);
+        setTimeout(() => setHeartBurst(false), 750);
+        showToast('❤️ Đã thả tim tiếp lửa! Cố gắng học tập nhé bạn!');
+      }
+    },
+    [likedMap, currentVideo?.likes, showToast]
+  );
+
+  // Keyboard navigation (`ArrowUp`, `ArrowDown`, `L` to like)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement)?.tagName)) return;
+      if (viewMode !== 'reels') return;
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement)?.tagName)) return;
 
-      if (e.key === 'ArrowDown') {
+      if (e.key === 'ArrowDown' || e.key === 'j' || e.key === 'J') {
         e.preventDefault();
         handleNextVideo();
-      } else if (e.key === 'ArrowUp') {
+      } else if (e.key === 'ArrowUp' || e.key === 'k' || e.key === 'K') {
         e.preventDefault();
         handlePrevVideo();
       } else if (e.key === 'l' || e.key === 'L') {
@@ -401,27 +488,7 @@ export default function TramDongLucPage() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [filteredVideos.length, currentVideo]);
-
-  // ─── LIKE & BOOKMARK ───────────────────────────────────────────────────────
-  const toggleLike = (videoId: string) => {
-    const isLiked = !!likedMap[videoId];
-    const newLiked = !isLiked;
-    const updated = { ...likedMap, [videoId]: newLiked };
-    setLikedMap(updated);
-    try {
-      localStorage.setItem('moly:dongluc_likes', JSON.stringify(updated));
-    } catch {}
-
-    setLikeCountMap((prev) => ({
-      ...prev,
-      [videoId]: (prev[videoId] ?? currentVideo?.likes ?? 1000) + (newLiked ? 1 : -1),
-    }));
-
-    if (newLiked) {
-      showToast('❤️ Đã tiếp lửa! Cố gắng học tập nhé bạn!');
-    }
-  };
+  }, [viewMode, handleNextVideo, handlePrevVideo, currentVideo, toggleLike]);
 
   const toggleBookmark = (videoId: string) => {
     const isSaved = !!savedMap[videoId];
@@ -432,15 +499,32 @@ export default function TramDongLucPage() {
       localStorage.setItem('moly:dongluc_saved', JSON.stringify(updated));
     } catch {}
 
-    showToast(newSaved ? '⭐ Đã lưu video vào kho động lực!' : 'Đã bỏ lưu video');
+    showToast(newSaved ? '⭐ Đã lưu vào mục Video Đã Lưu!' : 'Đã bỏ lưu video');
   };
 
   const handleCopyLink = () => {
     if (!currentVideo) return;
     const url = currentVideo.originalUrl || `https://www.tiktok.com/@moly/video/${currentVideo.id}`;
     navigator.clipboard.writeText(url).then(() => {
-      showToast('🔗 Đã sao chép liên kết video!');
+      showToast('🔗 Đã sao chép liên kết video TikTok!');
     });
+  };
+
+  const handleDeleteCustomVideo = (videoId: string) => {
+    setVideos((prev) => prev.filter((v) => v.id !== videoId));
+    try {
+      const stored = localStorage.getItem('moly:dongluc_custom_videos');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          localStorage.setItem(
+            'moly:dongluc_custom_videos',
+            JSON.stringify(parsed.filter((v: { id?: string }) => v?.id !== videoId))
+          );
+        }
+      }
+    } catch {}
+    showToast('🗑️ Đã xóa video khỏi danh sách của bạn');
   };
 
   // ─── EXTRACT TIKTOK VIDEO ID ──────────────────────────────────────────────
@@ -463,7 +547,6 @@ export default function TramDongLucPage() {
       return;
     }
 
-    // Check if video already exists in list
     const existingIndex = videos.findIndex((v) => v.id === videoId);
     if (existingIndex !== -1) {
       setSelectedCategory('all');
@@ -476,13 +559,14 @@ export default function TramDongLucPage() {
     const newVid: MotivationVideo = {
       id: videoId,
       title: inputTitle.trim() || 'Video Động Lực Học Tập',
-      creator: 'Bạn thêm vào',
-      creatorHandle: '@user.custom',
+      creator: user?.full_name || 'Bạn thêm vào',
+      creatorHandle: '@ban_chia_se',
       category: inputCategory,
       tags: ['#dongluc', '#custom', '#csca'],
       likes: 1,
-      message: inputMessage.trim() || 'Lời nhắc nhở: Hãy tập trung vào mục tiêu của bạn!',
+      message: inputMessage.trim() || 'Hãy tập trung 100% vào mục tiêu của bạn hôm nay!',
       originalUrl: inputUrl.trim(),
+      isCustom: true,
     };
 
     const updatedVideos = [newVid, ...videos.filter((v) => v.id !== videoId)];
@@ -491,8 +575,13 @@ export default function TramDongLucPage() {
     try {
       const stored = localStorage.getItem('moly:dongluc_custom_videos');
       const parsed = stored ? JSON.parse(stored) : [];
-      const filteredParsed = Array.isArray(parsed) ? parsed.filter((v: any) => v?.id !== videoId) : [];
-      localStorage.setItem('moly:dongluc_custom_videos', JSON.stringify([newVid, ...filteredParsed]));
+      const filteredParsed = Array.isArray(parsed)
+        ? parsed.filter((v: { id?: string }) => v?.id !== videoId)
+        : [];
+      localStorage.setItem(
+        'moly:dongluc_custom_videos',
+        JSON.stringify([newVid, ...filteredParsed])
+      );
     } catch {}
 
     setInputUrl('');
@@ -518,13 +607,13 @@ export default function TramDongLucPage() {
     return audioCtxRef.current;
   };
 
-  const stopActiveSound = () => {
+  const stopActiveSound = useCallback(() => {
     if (soundNodesRef.current?.stop) {
       soundNodesRef.current.stop();
     }
     soundNodesRef.current = null;
     setActiveSound('none');
-  };
+  }, []);
 
   const playAmbientSound = (type: 'rain' | 'ocean' | 'cafe') => {
     if (activeSound === type) {
@@ -539,15 +628,21 @@ export default function TramDongLucPage() {
       const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
       const output = noiseBuffer.getChannelData(0);
 
-      let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+      let b0 = 0,
+        b1 = 0,
+        b2 = 0,
+        b3 = 0,
+        b4 = 0,
+        b5 = 0,
+        b6 = 0;
       for (let i = 0; i < bufferSize; i++) {
         const white = Math.random() * 2 - 1;
         b0 = 0.99886 * b0 + white * 0.0555179;
         b1 = 0.99332 * b1 + white * 0.0750759;
-        b2 = 0.96900 * b2 + white * 0.1538520;
-        b3 = 0.86650 * b3 + white * 0.3104856;
-        b4 = 0.55000 * b4 + white * 0.5329522;
-        b5 = -0.7616 * b5 - white * 0.0168980;
+        b2 = 0.969 * b2 + white * 0.153852;
+        b3 = 0.8665 * b3 + white * 0.3104856;
+        b4 = 0.55 * b4 + white * 0.5329522;
+        b5 = -0.7616 * b5 - white * 0.016898;
         output[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.11;
         b6 = white * 0.115926;
       }
@@ -594,6 +689,8 @@ export default function TramDongLucPage() {
         },
       };
       setActiveSound(type);
+      const label = AMBIENT_SOUNDS.find((s) => s.key === type)?.label || '';
+      showToast(`🎧 Đang phát âm thanh nền: ${label}`);
     } catch (err) {
       console.warn('Web Audio error:', err);
     }
@@ -615,129 +712,36 @@ export default function TramDongLucPage() {
         audioCtxRef.current.close().catch(() => {});
       }
     };
-  }, []);
+  }, [stopActiveSound]);
 
-  // ─── RENDER ────────────────────────────────────────────────────────────────
-  if (IS_LOCKED_FOR_MAINTENANCE) {
-    return (
-      <div className="relative flex min-h-screen flex-col justify-between overflow-hidden bg-slate-950 text-white selection:bg-rose-500 selection:text-white">
-        {/* Ambient background glow */}
-        <div className="pointer-events-none absolute -top-40 left-1/2 h-96 w-96 -translate-x-1/2 rounded-full bg-rose-500/15 blur-[120px]" />
-        <div className="pointer-events-none absolute bottom-0 left-10 h-80 w-80 rounded-full bg-amber-500/10 blur-[100px]" />
-        <div className="pointer-events-none absolute right-10 top-1/3 h-80 w-80 rounded-full bg-indigo-500/10 blur-[100px]" />
-
-        {/* Top Header */}
-        <header className="relative z-10 border-b border-white/10 bg-slate-900/60 px-4 py-3 backdrop-blur-md sm:px-6">
-          <div className="mx-auto flex max-w-6xl items-center justify-between">
-            <Link
-              href="/"
-              className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-bold text-gray-300 transition-all hover:bg-white/10 hover:text-white"
-            >
-              <FiArrowLeft className="text-sm" />
-              <span>Về Trang Chủ</span>
-            </Link>
-
-            <div className="flex items-center gap-2">
-              <span className="flex h-2.5 w-2.5 rounded-full bg-amber-400 animate-pulse" />
-              <span className="text-xs font-extrabold uppercase tracking-wider text-amber-400">
-                Bảo Trì Hệ Thống
-              </span>
-            </div>
-          </div>
-        </header>
-
-        {/* Center Maintenance Content */}
-        <main className="relative z-10 flex flex-1 items-center justify-center px-4 py-12 sm:px-6">
-          <div className="mx-auto w-full max-w-2xl text-center">
-            {/* Maintenance Badge & Icon */}
-            <div className="mx-auto mb-6 flex h-24 w-24 items-center justify-center rounded-3xl border border-amber-500/30 bg-gradient-to-br from-amber-500/20 via-orange-500/15 to-rose-500/20 p-5 shadow-2xl shadow-amber-500/10 backdrop-blur-xl">
-              <div className="relative">
-                <FiTool className="text-4xl text-amber-400 animate-bounce" />
-                <span className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[10px]">
-                  🔒
-                </span>
-              </div>
-            </div>
-
-            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-amber-400/40 bg-amber-500/15 px-4 py-1.5 text-xs font-extrabold text-amber-300 shadow-sm backdrop-blur-md">
-              <span>🛠️ TẠM KHÓA ĐỂ NÂNG CẤP & SỬA CHỮA</span>
-            </div>
-
-            <h1 className="mb-4 text-3xl font-black tracking-tight text-white sm:text-4xl md:text-5xl">
-              Trạm Động Lực Đang Tạm Khóa
-            </h1>
-
-            <p className="mx-auto mb-8 max-w-xl text-base leading-relaxed text-slate-300 sm:text-lg">
-              Tính năng <strong className="text-white">Trạm Động Lực & Phòng Học Ảo</strong> đang được đội ngũ kỹ thuật tạm khóa để sửa chữa, nâng cấp trải nghiệm video và tối ưu hệ thống phòng học chung. Chúng mình sẽ sớm mở lại phục vụ các bạn!
-            </p>
-
-            {/* Feature upgrades notice */}
-            <div className="mx-auto mb-8 max-w-lg rounded-2xl border border-white/10 bg-white/5 p-4 text-left backdrop-blur-md sm:p-5">
-              <p className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-400">
-                Các hạng mục đang được sửa chữa & hoàn thiện:
-              </p>
-              <ul className="space-y-2 text-xs text-slate-300 sm:text-sm">
-                <li className="flex items-center gap-2.5">
-                  <span className="text-amber-400">⚡</span>
-                  <span>Tối ưu hóa đường truyền video & tốc độ phản hồi</span>
-                </li>
-                <li className="flex items-center gap-2.5">
-                  <span className="text-rose-400">🎧</span>
-                  <span>Nâng cấp hệ thống âm thanh tập trung & bộ lọc tiếng ồn</span>
-                </li>
-                <li className="flex items-center gap-2.5">
-                  <span className="text-emerald-400">💬</span>
-                  <span>Cải thiện tính năng chat cộng đồng & phòng học ảo trực tuyến</span>
-                </li>
-              </ul>
-            </div>
-
-            {/* Quick Actions */}
-            <div className="flex flex-col items-center justify-center gap-3 sm:flex-row">
-              <Link
-                href="/"
-                className="flex w-full items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/10 px-6 py-3.5 text-sm font-bold text-white shadow-lg backdrop-blur-md transition-all hover:bg-white/20 active:scale-95 sm:w-auto"
-              >
-                <FiHome className="text-base" />
-                <span>Về Trang Chủ</span>
-              </Link>
-              <Link
-                href="/exam-room"
-                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-600 px-6 py-3.5 text-sm font-bold text-white shadow-lg shadow-violet-500/25 transition-all hover:scale-105 hover:shadow-violet-500/40 active:scale-95 sm:w-auto"
-              >
-                <FiMonitor className="text-base" />
-                <span>Luyện Đề CSCA Ngay</span>
-              </Link>
-              <Link
-                href="/tailieu"
-                className="flex w-full items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/5 px-6 py-3.5 text-sm font-bold text-slate-200 transition-all hover:bg-white/15 hover:text-white active:scale-95 sm:w-auto"
-              >
-                <FiFileText className="text-base" />
-                <span>Kho Tài Liệu</span>
-              </Link>
-            </div>
-          </div>
-        </main>
-
-        {/* Footer */}
-        <footer className="relative z-10 border-t border-white/5 bg-slate-950/80 px-4 py-4 text-center text-xs text-slate-500">
-          CSCA Moly Studio — Nền tảng luyện thi CSCA & Săn học bổng du học Trung Quốc
-        </footer>
-      </div>
-    );
-  }
+  const isCurrentLiked = currentVideo ? Boolean(likedMap[currentVideo.id]) : false;
+  const isCurrentSaved = currentVideo ? Boolean(savedMap[currentVideo.id]) : false;
+  const currentLikesCount = currentVideo
+    ? likeCountMap[currentVideo.id] ?? currentVideo.likes
+    : 0;
 
   return (
     <div className="min-h-screen bg-slate-950 text-white selection:bg-violet-500 selection:text-white">
-      {/* Preconnect for fast TikTok CDN connections */}
+      {/* Preconnect & Prefetch for fast TikTok CDN connections */}
       <link rel="preconnect" href="https://www.tiktok.com" crossOrigin="anonymous" />
       <link rel="dns-prefetch" href="https://www.tiktok.com" />
-      <link rel="preconnect" href="https://sf16-website-login.neutral.ttwstatic.com" crossOrigin="anonymous" />
+      <link
+        rel="preconnect"
+        href="https://sf16-website-login.neutral.ttwstatic.com"
+        crossOrigin="anonymous"
+      />
       <link rel="dns-prefetch" href="https://sf16-website-login.neutral.ttwstatic.com" />
+      {nextVideo && (
+        <link
+          rel="prefetch"
+          href={`https://www.tiktok.com/embed/v2/${nextVideo.id}`}
+          as="document"
+        />
+      )}
 
       {/* Toast Alert */}
       {toastMessage && (
-        <div className="fixed bottom-6 left-1/2 z-[150] -translate-x-1/2 transform rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-600 px-6 py-3 text-xs font-bold text-white shadow-2xl shadow-violet-500/40 backdrop-blur-md transition-all animate-bounce">
+        <div className="fixed bottom-6 left-1/2 z-[150] -translate-x-1/2 transform rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-600 px-6 py-3 text-xs font-bold text-white shadow-2xl shadow-violet-500/40 backdrop-blur-md transition-all">
           {toastMessage}
         </div>
       )}
@@ -750,7 +754,7 @@ export default function TramDongLucPage() {
           <div className="flex items-center gap-3">
             <Link
               href="/"
-              className="group inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-slate-300 backdrop-blur-md transition-all hover:bg-white/10 hover:text-white hover:border-violet-500/30 active:scale-95 shadow-sm"
+              className="group inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-2.5 py-1.5 text-[11px] font-semibold text-slate-300 backdrop-blur-md transition-all hover:bg-white/10 hover:text-white hover:border-violet-500/30 active:scale-95 shadow-sm"
               title="Quay về trang chủ Moly"
             >
               <FiArrowLeft className="text-xs text-violet-400 transition-transform group-hover:-translate-x-0.5" />
@@ -808,12 +812,91 @@ export default function TramDongLucPage() {
               }`}
             >
               <FiFilm className="text-sm" />
-              <span>Video Động Lực</span>
+              <span>Lướt TikTok Động Lực</span>
             </button>
           </div>
 
-          {/* Quick Action Button */}
-          <div className="flex items-center gap-2">
+          {/* Quick Action Buttons + Ambient Sound Mixer */}
+          <div className="relative flex items-center gap-2">
+            {/* Ambient Sound Mixer Toggle */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowSoundMenu((prev) => !prev)}
+                className={`flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-bold transition-all ${
+                  activeSound !== 'none'
+                    ? 'border-emerald-500/40 bg-emerald-500/20 text-emerald-300 shadow-sm shadow-emerald-500/20'
+                    : 'border-white/15 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white'
+                }`}
+                title="Âm thanh trắng giúp tập trung (Mưa, Sóng biển, Cafe)"
+              >
+                {activeSound !== 'none' ? (
+                  <FiVolume2 className="text-sm text-emerald-400 animate-pulse" />
+                ) : (
+                  <FiMusic className="text-sm text-violet-400" />
+                )}
+                <span className="hidden sm:inline">
+                  {activeSound === 'none'
+                    ? 'Âm thanh nền'
+                    : AMBIENT_SOUNDS.find((s) => s.key === activeSound)?.label}
+                </span>
+              </button>
+
+              {showSoundMenu && (
+                <div className="absolute right-0 top-full mt-2 z-[140] w-64 rounded-2xl border border-white/15 bg-slate-900/95 p-3.5 shadow-2xl backdrop-blur-xl">
+                  <div className="flex items-center justify-between mb-2.5">
+                    <span className="text-xs font-extrabold text-white">
+                      🎧 Âm Thanh Tập Trung
+                    </span>
+                    {activeSound !== 'none' && (
+                      <button
+                        type="button"
+                        onClick={stopActiveSound}
+                        className="text-[10px] font-bold text-rose-400 hover:underline"
+                      >
+                        Tắt âm
+                      </button>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {AMBIENT_SOUNDS.map((snd) => {
+                      const isPlaying = activeSound === snd.key;
+                      return (
+                        <button
+                          key={snd.key}
+                          type="button"
+                          onClick={() => playAmbientSound(snd.key)}
+                          className={`flex flex-col items-center gap-1 rounded-xl p-2 text-[11px] font-bold transition-all ${
+                            isPlaying
+                              ? 'bg-violet-600 text-white shadow-md shadow-violet-600/30 ring-1 ring-violet-400'
+                              : 'bg-white/5 text-slate-300 hover:bg-white/10'
+                          }`}
+                        >
+                          <span className="text-base">{snd.emoji}</span>
+                          <span>{snd.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="mt-3 pt-2.5 border-t border-white/10">
+                    <div className="flex items-center justify-between text-[10px] text-slate-400 mb-1">
+                      <span>Âm lượng</span>
+                      <span>{Math.round(soundVolume * 100)}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0.05"
+                      max="1"
+                      step="0.05"
+                      value={soundVolume}
+                      onChange={(e) => setSoundVolume(parseFloat(e.target.value))}
+                      className="w-full accent-violet-500 h-1.5 bg-white/10 rounded-lg cursor-pointer"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
             {viewMode === 'reels' ? (
               <button
                 type="button"
@@ -836,42 +919,45 @@ export default function TramDongLucPage() {
           </div>
         </div>
 
-        {/* ─── VIEW MODE: PHÒNG TỰ HỌC BẬT CAM (HOÀN TOÀN KHÔNG CÓ TIKTOK) ─────── */}
+        {/* ─── VIEW MODE: PHÒNG TỰ HỌC BẬT CAM ───────────────────────────────── */}
         {viewMode === 'room' && (
           <div className="space-y-6">
-            {/* 1. ĐỒNG HỒ LẬT POMODORO TRUNG TÂM (TO, RÕ RÀNG, TÍCH HỢP MỤC TIÊU & CHÂM NGÔN) */}
+            {/* 1. ĐỒNG HỒ LẬT POMODORO TRUNG TÂM */}
             <div className="mx-auto w-full max-w-3xl flex flex-col items-center">
               <FlipClock
                 isCompact={false}
                 studyGoal={studyNote}
                 onEditGoal={() => setShowNoteDrawer(true)}
                 quote={MOTIVATION_QUOTES[quoteIndex]}
-                onNextQuote={() => setQuoteIndex((prev) => (prev + 1) % MOTIVATION_QUOTES.length)}
+                onNextQuote={() =>
+                  setQuoteIndex((prev) => (prev + 1) % MOTIVATION_QUOTES.length)
+                }
                 className="w-full"
               />
             </div>
 
-            {/* 2. PHÒNG TỰ HỌC BẬT CAM (STUDY TOGETHER) ĐẶT NGAY DƯỚI ĐỒNG HỒ */}
+            {/* 2. PHÒNG TỰ HỌC BẬT CAM (STUDY TOGETHER) */}
             <VirtualStudyRoom />
           </div>
         )}
 
-        {/* ─── VIEW MODE: TIKTOK REELS (HOÀN TOÀN KHÔNG CÓ PHÒNG HỌC) ──────────── */}
+        {/* ─── VIEW MODE: TIKTOK REELS (LƯỚT MƯỢT CHUẨN TIKTOK) ──────────────── */}
         {viewMode === 'reels' && (
           <div className="py-1">
-            {/* DESKTOP & TABLET 3-COLUMN GRID (FILLS WHOLE SCREEN, BALANCED & LIVELY) */}
+            {/* DESKTOP & TABLET 3-COLUMN GRID */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-
               {/* ─── CỘT 1 (BÊN TRÁI): KHO VIDEO TIẾP LỬA (PLAYLIST) ─── */}
-              <div className="hidden lg:flex lg:col-span-3 flex-col rounded-3xl border border-white/10 bg-slate-900/70 p-4 shadow-xl backdrop-blur-md h-[74vh] max-h-[800px]">
+              <div className="hidden lg:flex lg:col-span-3 flex-col rounded-3xl border border-white/10 bg-slate-900/70 p-4 shadow-xl backdrop-blur-md h-[78vh] max-h-[820px]">
                 <div className="flex items-center justify-between border-b border-white/10 pb-3">
                   <div className="flex items-center gap-2">
                     <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-violet-600/30 text-violet-300 border border-violet-500/30 text-xs">
                       <FiFilm />
                     </div>
                     <div>
-                      <h3 className="text-xs font-black text-white uppercase tracking-wider">Kho Video Tiếp Lửa</h3>
-                      <p className="text-[10px] text-slate-400">Chạm để chọn video phát</p>
+                      <h3 className="text-xs font-black text-white uppercase tracking-wider">
+                        Kho Video Tiếp Lửa
+                      </h3>
+                      <p className="text-[10px] text-slate-400">Chạm hoặc lăn chuột để lướt</p>
                     </div>
                   </div>
                   <span className="rounded-full bg-violet-500/15 px-2 py-0.5 text-[10px] font-bold text-violet-300 border border-violet-500/20">
@@ -883,14 +969,12 @@ export default function TramDongLucPage() {
                 <div className="flex-1 overflow-y-auto space-y-2 py-3 pr-1 hide-scrollbar">
                   {filteredVideos.map((vid, idx) => {
                     const isCurrent = idx === currentIndex;
+                    const vidLikes = likeCountMap[vid.id] ?? vid.likes;
                     return (
                       <button
                         key={`playlist-desktop-${vid.id}-${idx}`}
                         type="button"
-                        onClick={() => {
-                          setCurrentIndex(idx);
-                          setIframeLoading(true);
-                        }}
+                        onClick={() => selectVideoByIndex(idx)}
                         className={`w-full text-left rounded-2xl p-2.5 transition-all flex items-start gap-2.5 border ${
                           isCurrent
                             ? 'border-violet-500/80 bg-violet-600/20 shadow-md shadow-violet-500/15 ring-1 ring-violet-400/30'
@@ -919,18 +1003,34 @@ export default function TramDongLucPage() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5 mb-1">
                             <span className="rounded px-1.5 py-0.2 text-[9px] font-bold uppercase tracking-wider bg-violet-500/20 text-violet-300 border border-violet-500/20">
-                              {vid.category === 'scholarship' ? 'Học Bổng' : vid.category === 'exam' ? 'Ôn Thi' : vid.category === 'tips' ? 'Tips' : 'Kỷ Luật'}
+                              {vid.category === 'scholarship'
+                                ? 'Học Bổng'
+                                : vid.category === 'exam'
+                                ? 'Ôn Thi'
+                                : vid.category === 'tips'
+                                ? 'Tips'
+                                : 'Kỷ Luật'}
                             </span>
-                            <span className="text-[10px] text-slate-400 truncate">{vid.creatorHandle}</span>
+                            <span className="text-[10px] text-slate-400 truncate">
+                              {vid.creatorHandle}
+                            </span>
                           </div>
-                          <h4 className={`text-xs font-bold leading-snug line-clamp-2 ${isCurrent ? 'text-white' : 'text-slate-300'}`}>
+                          <h4
+                            className={`text-xs font-bold leading-snug line-clamp-2 ${
+                              isCurrent ? 'text-white' : 'text-slate-300'
+                            }`}
+                          >
                             {vid.title}
                           </h4>
                           <div className="mt-1 flex items-center justify-between text-[10px]">
                             <span className="flex items-center gap-1 text-rose-400 font-semibold">
-                              <FaHeart className="text-[9px]" /> {(vid.likes / 1000).toFixed(1)}k
+                              <FaHeart className="text-[9px]" /> {(vidLikes / 1000).toFixed(1)}k
                             </span>
-                            {isCurrent && <span className="text-violet-300 font-extrabold text-[10px]">Đang phát 🎵</span>}
+                            {isCurrent && (
+                              <span className="text-violet-300 font-extrabold text-[10px]">
+                                Đang phát 🎵
+                              </span>
+                            )}
                           </div>
                         </div>
                       </button>
@@ -944,20 +1044,24 @@ export default function TramDongLucPage() {
                     <FaFire className="text-xs text-orange-400" /> Bí quyết đỗ CSCA
                   </div>
                   <p className="line-clamp-2 italic text-slate-300">
-                    "Xem 1 video lấy cảm hứng, sau đó ngồi ngay vào bàn học để biến động lực thành kết quả!"
+                    &ldquo;Xem 1 video lấy cảm hứng, sau đó bấm sang Phòng Tự Học để biến động lực thành kết quả!&rdquo;
                   </p>
                 </div>
               </div>
 
-              {/* ─── CỘT 2 (Ở GIỮA): TIKTOK PLAYER (VIDEO Ở TRÊN, PHÂN LOẠI & ĐIỀU HƯỚNG Ở DƯỚI) ─── */}
-              <div className="lg:col-span-5 flex flex-col items-center w-full max-w-[420px] mx-auto">
-                {/* TikTok Vertical Video Card */}
+              {/* ─── CỘT 2 (Ở GIỮA): TIKTOK VERTICAL STAGE + FLOATING ACTION RAIL ─── */}
+              <div
+                className="lg:col-span-5 flex flex-col items-center w-full mx-auto select-none"
+                onWheel={handleReelsWheel}
+                onTouchStart={handleTouchStart}
+                onTouchEnd={handleTouchEnd}
+              >
                 {filteredVideos.length === 0 ? (
-                  <div className="flex min-h-[460px] w-full flex-col items-center justify-center rounded-3xl border border-dashed border-white/20 p-8 text-center bg-white/5">
+                  <div className="flex min-h-[480px] w-full max-w-[390px] flex-col items-center justify-center rounded-3xl border border-dashed border-white/20 p-8 text-center bg-white/5">
                     <FiBookmark className="mb-3 text-4xl text-slate-500" />
                     <h3 className="text-base font-bold">Chưa có video nào ở mục này</h3>
                     <p className="mt-1 text-xs text-slate-400">
-                      Hãy bấm lưu video yêu thích hoặc dán link TikTok mới vào nhé!
+                      Hãy bấm ngôi sao ⭐ lưu video yêu thích hoặc dán link TikTok mới vào nhé!
                     </p>
                     <button
                       type="button"
@@ -968,75 +1072,214 @@ export default function TramDongLucPage() {
                     </button>
                   </div>
                 ) : (
-                  <div className="relative flex w-full flex-col items-center">
-                    {/* VIDEO FRAME (AT THE VERY TOP) - Sized to exact 325px native TikTok player */}
-                    <div className="relative w-[325px] h-[585px] overflow-hidden rounded-3xl border border-white/15 bg-black shadow-[0_20px_60px_-15px_rgba(124,58,237,0.35)] ring-1 ring-white/10 mx-auto">
-                      {/* Top quick loading progress line */}
-                      {iframeLoading && (
-                        <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-violet-500 via-pink-500 to-amber-400 animate-pulse z-20" />
-                      )}
-
-                      {/* Fast-reveal Loading Skeleton (fades out within 700ms) */}
+                  <div className="relative flex flex-col items-center w-full">
+                    {/* MAIN REELS STAGE: PHONE FRAME + TIKTOK RIGHT DOCK */}
+                    <div className="relative flex items-center justify-center gap-3 sm:gap-4">
+                      {/* PHONE FRAME (325x585) WITH DIRECTIONAL SLIDE ANIMATION */}
                       <div
-                        className={`absolute inset-0 z-10 flex flex-col items-center justify-center bg-slate-950/95 backdrop-blur-sm transition-opacity duration-300 ${
-                          iframeLoading ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+                        key={`reel-stage-${currentVideo?.id}-${currentIndex}`}
+                        className={`relative w-[325px] h-[585px] overflow-hidden rounded-[28px] border border-white/15 bg-black shadow-[0_20px_65px_-15px_rgba(124,58,237,0.45)] ring-1 ring-white/10 ${
+                          slideDirection === 'up'
+                            ? 'animate-reel-slide-up'
+                            : 'animate-reel-slide-down'
                         }`}
                       >
-                        <div className="h-8 w-8 animate-spin rounded-full border-2 border-violet-500 border-t-transparent" />
-                        <span className="mt-2 text-[11px] font-medium text-slate-400">
-                          Đang tải video TikTok...
-                        </span>
+                        {/* Top sleek shimmer line while iframe initializes */}
+                        {iframeLoading && (
+                          <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-violet-500 via-pink-500 to-amber-400 animate-pulse z-30" />
+                        )}
+
+                        {/* Floating Heart Burst Animation on Like */}
+                        {heartBurst && (
+                          <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center">
+                            <FaHeart className="text-7xl text-rose-500 drop-shadow-[0_0_30px_rgba(244,63,94,0.9)] animate-ping" />
+                          </div>
+                        )}
+
+                        {/* Fast Non-Blocking Glassmorphic Preview Overlay (fades out within 600ms) */}
+                        <div
+                          className={`pointer-events-none absolute inset-0 z-20 flex flex-col justify-between bg-gradient-to-b from-slate-950/90 via-slate-950/60 to-slate-950/95 p-5 transition-opacity duration-300 ${
+                            iframeLoading ? 'opacity-100' : 'opacity-0'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="rounded-full bg-violet-500/20 px-2.5 py-0.5 text-[10px] font-black text-violet-300 border border-violet-500/30">
+                              {currentVideo?.creatorHandle}
+                            </span>
+                            <span className="text-[10px] font-bold text-slate-400">
+                              #{currentIndex + 1}/{filteredVideos.length}
+                            </span>
+                          </div>
+
+                          <div className="my-auto flex flex-col items-center text-center px-2">
+                            <div className="h-9 w-9 animate-spin rounded-full border-2 border-violet-500 border-t-transparent mb-3" />
+                            <p className="text-sm font-extrabold text-white line-clamp-2">
+                              {currentVideo?.title}
+                            </p>
+                            <p className="mt-2 text-xs italic text-violet-200/90 line-clamp-3">
+                              &ldquo;{currentVideo?.message}&rdquo;
+                            </p>
+                          </div>
+
+                          <div className="flex flex-wrap gap-1 justify-center">
+                            {currentVideo?.tags.map((t) => (
+                              <span
+                                key={t}
+                                className="text-[10px] font-bold text-violet-300/80"
+                              >
+                                {t}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* TikTok Embed Player - exact 325px width */}
+                        {currentVideo && (
+                          <iframe
+                            key={currentVideo.id}
+                            src={`https://www.tiktok.com/embed/v2/${currentVideo.id}?autoplay=1`}
+                            title={currentVideo.title}
+                            onLoad={() => setIframeLoading(false)}
+                            className="w-[325px] h-full border-none block"
+                            scrolling="no"
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                            allowFullScreen
+                          />
+                        )}
                       </div>
 
-                      {/* TikTok Embed Player - exact 325px width, autoplay enabled, no scrollbar */}
+                      {/* ─── FLOATING TIKTOK ACTION RAIL (RIGHT SIDE DOCK) ─── */}
                       {currentVideo && (
-                        <iframe
-                          key={currentVideo.id}
-                          src={`https://www.tiktok.com/embed/v2/${currentVideo.id}?autoplay=1`}
-                          title={currentVideo.title}
-                          onLoad={() => setIframeLoading(false)}
-                          className="w-[325px] h-full border-none block"
-                          scrolling="no"
-                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                          allowFullScreen
-                        />
+                        <div className="flex flex-col items-center gap-3 py-2">
+                          {/* Up (Prev Video) Button */}
+                          <button
+                            type="button"
+                            onClick={handlePrevVideo}
+                            className="group flex h-11 w-11 items-center justify-center rounded-2xl border border-white/15 bg-slate-900/90 text-slate-200 shadow-lg backdrop-blur-md transition-all hover:border-violet-500/50 hover:bg-violet-600 hover:text-white active:scale-90"
+                            title="Video trước (Phím ↑ hoặc lăn chuột lên)"
+                          >
+                            <FiChevronUp className="text-xl transition-transform group-hover:-translate-y-0.5" />
+                          </button>
+
+                          {/* Index Badge */}
+                          <div className="rounded-xl border border-white/10 bg-slate-900/80 px-2.5 py-1 text-[10px] font-black text-slate-300">
+                            <span className="text-violet-400">{currentIndex + 1}</span>/
+                            {filteredVideos.length}
+                          </div>
+
+                          {/* Down (Next Video) Button */}
+                          <button
+                            type="button"
+                            onClick={handleNextVideo}
+                            className="group flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-600 text-white shadow-lg shadow-violet-600/35 transition-all hover:brightness-110 active:scale-90"
+                            title="Video tiếp theo (Phím ↓ hoặc lăn chuột xuống)"
+                          >
+                            <FiChevronDown className="text-xl transition-transform group-hover:translate-y-0.5" />
+                          </button>
+
+                          <div className="my-0.5 h-px w-6 bg-white/10" />
+
+                          {/* Like / Heart Button */}
+                          <div className="flex flex-col items-center">
+                            <button
+                              type="button"
+                              onClick={() => toggleLike(currentVideo.id)}
+                              className={`flex h-11 w-11 items-center justify-center rounded-2xl border transition-all active:scale-75 ${
+                                isCurrentLiked
+                                  ? 'border-rose-500/50 bg-rose-500/20 text-rose-500 shadow-lg shadow-rose-500/25'
+                                  : 'border-white/15 bg-slate-900/90 text-slate-300 hover:bg-white/10 hover:text-rose-400'
+                              }`}
+                              title="Thả tim tiếp lửa (Phím L)"
+                            >
+                              <FaHeart className="text-lg" />
+                            </button>
+                            <span className="mt-1 text-[10px] font-bold text-slate-300">
+                              {(currentLikesCount / 1000).toFixed(1)}k
+                            </span>
+                          </div>
+
+                          {/* Bookmark / Save Button */}
+                          <div className="flex flex-col items-center">
+                            <button
+                              type="button"
+                              onClick={() => toggleBookmark(currentVideo.id)}
+                              className={`flex h-11 w-11 items-center justify-center rounded-2xl border transition-all active:scale-75 ${
+                                isCurrentSaved
+                                  ? 'border-amber-500/50 bg-amber-500/20 text-amber-400 shadow-lg shadow-amber-500/25'
+                                  : 'border-white/15 bg-slate-900/90 text-slate-300 hover:bg-white/10 hover:text-amber-300'
+                              }`}
+                              title="Lưu vào kho video yêu thích"
+                            >
+                              <FaBookmark className="text-base" />
+                            </button>
+                            <span className="mt-1 text-[10px] font-bold text-slate-400">
+                              {isCurrentSaved ? 'Đã lưu' : 'Lưu'}
+                            </span>
+                          </div>
+
+                          {/* Copy / Share Link Button */}
+                          <div className="flex flex-col items-center">
+                            <button
+                              type="button"
+                              onClick={handleCopyLink}
+                              className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/15 bg-slate-900/90 text-slate-300 transition-all hover:bg-white/10 hover:text-white active:scale-90"
+                              title="Sao chép link video"
+                            >
+                              <FiShare2 className="text-base" />
+                            </button>
+                            <span className="mt-1 text-[10px] font-bold text-slate-400">
+                              Chia sẻ
+                            </span>
+                          </div>
+
+                          {/* Open on TikTok */}
+                          <a
+                            href={
+                              currentVideo.originalUrl ||
+                              `https://www.tiktok.com/@moly/video/${currentVideo.id}`
+                            }
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white transition-all"
+                            title="Mở trực tiếp trên TikTok"
+                          >
+                            <FiExternalLink className="text-xs" />
+                          </a>
+
+                          {/* Delete button if custom video */}
+                          {currentVideo.isCustom && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteCustomVideo(currentVideo.id)}
+                              className="flex h-9 w-9 items-center justify-center rounded-xl border border-rose-500/30 bg-rose-500/10 text-rose-400 hover:bg-rose-600 hover:text-white transition-all"
+                              title="Xóa video bạn đã thêm"
+                            >
+                              <FiTrash2 className="text-xs" />
+                            </button>
+                          )}
+                        </div>
                       )}
-
                     </div>
 
-                    {/* Bottom Navigation Controls (Next / Prev) */}
-                    <div className="mt-3 flex w-[325px] items-center justify-between px-1">
-                      <button
-                        type="button"
-                        onClick={handlePrevVideo}
-                        className="flex items-center gap-1.5 rounded-2xl border border-white/10 bg-white/5 px-3.5 py-1.5 text-xs font-extrabold text-slate-300 transition-all hover:bg-white/10 hover:text-white active:scale-95"
-                      >
-                        <FiChevronUp className="text-base" />
-                        <span>Trước (↑)</span>
-                      </button>
-
-                      <div className="flex flex-col items-center">
-                        <span className="text-xs font-extrabold text-slate-400">
-                          <span className="text-violet-400">{currentIndex + 1}</span> / {filteredVideos.length}
-                        </span>
-                        <span className="text-[9px] font-bold text-emerald-400 flex items-center gap-1 mt-0.5">
-                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse inline-block" />
-                          Tự phát: BẬT
-                        </span>
+                    {/* MOTIVATIONAL CAPTION & MESSAGE CARD BELOW PLAYER */}
+                    {currentVideo && (
+                      <div className="mt-3 w-full max-w-[380px] rounded-2xl border border-white/10 bg-slate-900/80 p-3 backdrop-blur-md">
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <span className="text-xs font-extrabold text-white truncate">
+                            {currentVideo.title}
+                          </span>
+                          <span className="shrink-0 text-[10px] font-bold text-violet-400">
+                            {currentVideo.creatorHandle}
+                          </span>
+                        </div>
+                        <p className="text-[11px] italic text-slate-300 leading-relaxed">
+                          &ldquo;{currentVideo.message}&rdquo;
+                        </p>
                       </div>
+                    )}
 
-                      <button
-                        type="button"
-                        onClick={handleNextVideo}
-                        className="flex items-center gap-1.5 rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-600 px-3.5 py-1.5 text-xs font-extrabold text-white shadow-lg shadow-violet-600/30 transition-all hover:brightness-110 active:scale-95"
-                      >
-                        <span>Tiếp theo (↓)</span>
-                        <FiChevronDown className="text-base" />
-                      </button>
-                    </div>
-
-                    {/* CATEGORY FILTER PILLS - MOVED DOWN UNDER THE VIDEO AS REQUESTED */}
-                    <div className="w-full max-w-[340px] flex items-center justify-start sm:justify-center gap-1.5 overflow-x-auto py-2.5 my-1 hide-scrollbar [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    {/* CATEGORY FILTER PILLS */}
+                    <div className="w-full max-w-[385px] flex items-center justify-start sm:justify-center gap-1.5 overflow-x-auto py-2.5 my-0.5 hide-scrollbar [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                       {CATEGORIES.map((cat) => {
                         const active = selectedCategory === cat.key;
                         return (
@@ -1057,9 +1300,16 @@ export default function TramDongLucPage() {
                     </div>
 
                     {/* Hints & Add Video Link */}
-                    <div className="mt-1 flex items-center justify-between text-xs text-slate-400 w-[325px] px-1">
+                    <div className="mt-0.5 flex items-center justify-between text-xs text-slate-400 w-full max-w-[380px] px-1">
                       <span className="flex items-center gap-1 text-[10px] text-slate-400">
-                        💡 Phím <kbd className="rounded bg-white/10 px-1 py-0.5 text-slate-300 font-mono text-[9px]">↑</kbd> <kbd className="rounded bg-white/10 px-1 py-0.5 text-slate-300 font-mono text-[9px]">↓</kbd> để lướt video.
+                        💡 Lăn chuột, vuốt dọc hoặc bấm{' '}
+                        <kbd className="rounded bg-white/10 px-1 py-0.5 text-slate-300 font-mono text-[9px]">
+                          ↑
+                        </kbd>{' '}
+                        <kbd className="rounded bg-white/10 px-1 py-0.5 text-slate-300 font-mono text-[9px]">
+                          ↓
+                        </kbd>{' '}
+                        để lướt
                       </span>
                       <button
                         type="button"
@@ -1074,7 +1324,7 @@ export default function TramDongLucPage() {
               </div>
 
               {/* ─── CỘT 3 (BÊN PHẢI): GÓC CHAT TIẾP SỨC SĨ TỬ (LIVE CHAT ĐỘNG VIÊN) ─── */}
-              <div className="hidden lg:flex lg:col-span-4 flex-col rounded-3xl border border-white/10 bg-slate-900/70 p-4 shadow-xl backdrop-blur-md h-[74vh] max-h-[800px]">
+              <div className="hidden lg:flex lg:col-span-4 flex-col rounded-3xl border border-white/10 bg-slate-900/70 p-4 shadow-xl backdrop-blur-md h-[78vh] max-h-[820px]">
                 {/* Chat Header */}
                 <div className="flex items-center justify-between border-b border-white/10 pb-3">
                   <div className="flex items-center gap-2">
@@ -1082,19 +1332,25 @@ export default function TramDongLucPage() {
                       <FiMessageSquare />
                     </div>
                     <div>
-                      <h3 className="text-xs font-black text-white uppercase tracking-wider">Góc Tiếp Sức Sĩ Tử</h3>
-                      <p className="text-[10px] text-slate-400">Động viên & chia sẻ cùng bạn học</p>
+                      <h3 className="text-xs font-black text-white uppercase tracking-wider">
+                        Góc Tiếp Sức Sĩ Tử
+                      </h3>
+                      <p className="text-[10px] text-slate-400">
+                        Động viên & chia sẻ cùng cộng đồng CSCA
+                      </p>
                     </div>
                   </div>
                   <span className="flex items-center gap-1.5 rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-500/30">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    28 bạn đang xem
+                    Trực tuyến 24/7
                   </span>
                 </div>
 
                 {/* Quick Cheer Reaction Pills */}
                 <div className="py-2.5 flex items-center gap-1.5 overflow-x-auto hide-scrollbar border-b border-white/5">
-                  <span className="text-[10px] font-bold text-slate-400 shrink-0">Bấm tiếp lửa:</span>
+                  <span className="text-[10px] font-bold text-slate-400 shrink-0">
+                    Bấm tiếp lửa:
+                  </span>
                   {QUICK_CHEERS.map((cheer, cIdx) => (
                     <button
                       key={cIdx}
@@ -1118,9 +1374,11 @@ export default function TramDongLucPage() {
                   ) : chatMessages.length === 0 ? (
                     <div className="flex h-full min-h-[220px] flex-col items-center justify-center text-slate-400 py-8 px-4 text-center">
                       <span className="text-3xl mb-2">💬</span>
-                      <p className="text-xs font-bold text-slate-200">Chưa có lời cổ vũ nào</p>
+                      <p className="text-xs font-bold text-slate-200">
+                        Chưa có lời cổ vũ nào hôm nay
+                      </p>
                       <p className="text-[11px] text-slate-400 mt-1 max-w-[220px]">
-                        Hãy là người đầu tiên gửi lời chúc hoặc bấm nút tiếp lửa bên dưới để cùng nhau bứt phá! 🔥
+                        Hãy là người đầu tiên gửi lời chúc hoặc bấm nút tiếp lửa bên trên để cùng nhau bứt phá! 🔥
                       </p>
                     </div>
                   ) : (
@@ -1135,19 +1393,25 @@ export default function TramDongLucPage() {
                       >
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex items-center gap-1.5">
-                            <div className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-black text-white ${
-                              msg.isMe ? 'bg-violet-600' : 'bg-slate-700'
-                            }`}>
+                            <div
+                              className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-black text-white ${
+                                msg.isMe ? 'bg-violet-600' : 'bg-slate-700'
+                              }`}
+                            >
                               {msg.sender.charAt(0).toUpperCase()}
                             </div>
                             <span className="font-bold text-slate-200 text-[11px] truncate max-w-[110px]">
                               {msg.sender}
                             </span>
-                            <span className={`rounded px-1.5 py-0.2 text-[8px] font-bold uppercase tracking-wider border ${msg.badgeColor}`}>
+                            <span
+                              className={`rounded px-1.5 py-0.2 text-[8px] font-bold uppercase tracking-wider border ${msg.badgeColor}`}
+                            >
                               {msg.badge}
                             </span>
                           </div>
-                          <span className="text-[9px] text-slate-500 shrink-0">{msg.time}</span>
+                          <span className="text-[9px] text-slate-500 shrink-0">
+                            {msg.time}
+                          </span>
                         </div>
                         <p className="text-[11px] text-slate-300 leading-snug pl-6 font-medium break-words">
                           {msg.text}
@@ -1159,7 +1423,10 @@ export default function TramDongLucPage() {
                 </div>
 
                 {/* Chat Input */}
-                <form onSubmit={(e) => handleSendChatMessage(e)} className="mt-2 flex items-center gap-1.5 pt-2 border-t border-white/10">
+                <form
+                  onSubmit={(e) => handleSendChatMessage(e)}
+                  className="mt-2 flex items-center gap-1.5 pt-2 border-t border-white/10"
+                >
                   <input
                     type="text"
                     value={chatInput}
@@ -1177,7 +1444,6 @@ export default function TramDongLucPage() {
                   </button>
                 </form>
               </div>
-
             </div>
 
             {/* ─── MOBILE ONLY TABS (GÓC CHAT & PLAYLIST DƯỚI VIDEO TRÊN ĐIỆN THOẠI) ─── */}
@@ -1213,7 +1479,9 @@ export default function TramDongLucPage() {
                 <div className="rounded-3xl border border-white/10 bg-slate-900/80 p-4 shadow-xl backdrop-blur-md">
                   <div className="flex items-center justify-between border-b border-white/10 pb-2 mb-2">
                     <span className="text-xs font-bold text-white">Góc Tiếp Sức Sĩ Tử</span>
-                    <span className="text-[10px] text-emerald-400 font-bold">🟢 28 bạn đang xem</span>
+                    <span className="text-[10px] text-emerald-400 font-bold">
+                      🟢 Trực tuyến 24/7
+                    </span>
                   </div>
 
                   {/* Quick cheers on mobile */}
@@ -1239,7 +1507,9 @@ export default function TramDongLucPage() {
                     ) : chatMessages.length === 0 ? (
                       <div className="flex flex-col items-center justify-center py-6 px-3 text-center text-slate-400">
                         <span className="text-2xl mb-1">💬</span>
-                        <p className="text-xs font-bold text-slate-200">Chưa có tin nhắn nào</p>
+                        <p className="text-xs font-bold text-slate-200">
+                          Chưa có tin nhắn nào
+                        </p>
                         <p className="text-[10px] text-slate-500 mt-0.5">
                           Hãy gửi lời chúc hoặc bấm nút tiếp lửa bên trên! 🔥
                         </p>
@@ -1264,7 +1534,10 @@ export default function TramDongLucPage() {
                     )}
                   </div>
 
-                  <form onSubmit={(e) => handleSendChatMessage(e)} className="flex items-center gap-1.5 pt-2 border-t border-white/10">
+                  <form
+                    onSubmit={(e) => handleSendChatMessage(e)}
+                    className="flex items-center gap-1.5 pt-2 border-t border-white/10"
+                  >
                     <input
                       type="text"
                       value={chatInput}
@@ -1289,26 +1562,33 @@ export default function TramDongLucPage() {
                       <button
                         key={`playlist-mobile-${vid.id}-${idx}`}
                         type="button"
-                        onClick={() => {
-                          setCurrentIndex(idx);
-                          setIframeLoading(true);
-                        }}
+                        onClick={() => selectVideoByIndex(idx)}
                         className={`w-full text-left rounded-xl p-2 transition-all flex items-center gap-2 border ${
                           isCurrent
                             ? 'border-violet-500 bg-violet-600/20 shadow-sm'
                             : 'border-white/5 bg-white/5'
                         }`}
                       >
-                        <div className={`h-7 w-7 rounded-lg flex items-center justify-center text-xs font-black shrink-0 ${
-                          isCurrent ? 'bg-violet-600 text-white' : 'bg-white/10 text-slate-400'
-                        }`}>
+                        <div
+                          className={`h-7 w-7 rounded-lg flex items-center justify-center text-xs font-black shrink-0 ${
+                            isCurrent
+                              ? 'bg-violet-600 text-white'
+                              : 'bg-white/10 text-slate-400'
+                          }`}
+                        >
                           {idx + 1}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className={`text-xs font-bold truncate ${isCurrent ? 'text-white' : 'text-slate-300'}`}>
+                          <p
+                            className={`text-xs font-bold truncate ${
+                              isCurrent ? 'text-white' : 'text-slate-300'
+                            }`}
+                          >
                             {vid.title}
                           </p>
-                          <span className="text-[10px] text-slate-400">{vid.creatorHandle}</span>
+                          <span className="text-[10px] text-slate-400">
+                            {vid.creatorHandle}
+                          </span>
                         </div>
                       </button>
                     );
@@ -1325,7 +1605,9 @@ export default function TramDongLucPage() {
         <div className="fixed inset-0 z-[160] flex items-center justify-center bg-black/80 p-4 backdrop-blur-md">
           <div className="w-full max-w-md rounded-3xl border border-white/15 bg-slate-900 p-6 shadow-2xl">
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
-              <h3 className="text-base font-extrabold text-white">Thêm Video TikTok Của Bạn</h3>
+              <h3 className="text-base font-extrabold text-white">
+                Thêm Video TikTok Của Bạn
+              </h3>
               <button
                 type="button"
                 onClick={() => setShowAddModal(false)}
@@ -1354,7 +1636,9 @@ export default function TramDongLucPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-300">Tiêu đề video:</label>
+                <label className="block text-xs font-bold text-slate-300">
+                  Tiêu đề video:
+                </label>
                 <input
                   type="text"
                   placeholder="Ví dụ: Động lực thức khuya giải đề CSCA"
@@ -1368,7 +1652,9 @@ export default function TramDongLucPage() {
                 <label className="block text-xs font-bold text-slate-300">Chủ đề:</label>
                 <select
                   value={inputCategory}
-                  onChange={(e) => setInputCategory(e.target.value as MotivationVideo['category'])}
+                  onChange={(e) =>
+                    setInputCategory(e.target.value as MotivationVideo['category'])
+                  }
                   className="mt-1.5 w-full rounded-2xl border border-white/15 bg-slate-950 px-4 py-2.5 text-xs text-white focus:border-violet-500 focus:outline-none"
                 >
                   <option value="discipline">Ý chí & Kỷ luật</option>
@@ -1418,7 +1704,9 @@ export default function TramDongLucPage() {
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
               <div className="flex items-center gap-2">
                 <FiZap className="text-amber-400" />
-                <h3 className="text-base font-extrabold text-white">Lời Hứa Kỷ Luật Hôm Nay</h3>
+                <h3 className="text-base font-extrabold text-white">
+                  Lời Hứa Kỷ Luật Hôm Nay
+                </h3>
               </div>
               <button
                 type="button"
@@ -1461,6 +1749,36 @@ export default function TramDongLucPage() {
           </div>
         </div>
       )}
+
+      {/* Smooth vertical slide animations for TikTok Reels */}
+      <style jsx global>{`
+        @keyframes reelSlideUp {
+          0% {
+            opacity: 0.45;
+            transform: translateY(34px) scale(0.985);
+          }
+          100% {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+        @keyframes reelSlideDown {
+          0% {
+            opacity: 0.45;
+            transform: translateY(-34px) scale(0.985);
+          }
+          100% {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+        .animate-reel-slide-up {
+          animation: reelSlideUp 0.28s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+        }
+        .animate-reel-slide-down {
+          animation: reelSlideDown 0.28s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+        }
+      `}</style>
     </div>
   );
 }

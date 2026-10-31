@@ -335,30 +335,30 @@ export default function HomeContent() {
 
             <div className="relative z-10 flex flex-col lg:flex-row items-center justify-between gap-6">
               <div className="max-w-2xl text-center lg:text-left">
-                <div className="inline-flex items-center gap-2 rounded-full border border-amber-400/40 bg-amber-500/20 px-3.5 py-1 text-xs font-bold text-amber-300 backdrop-blur-md mb-3">
-                  <span className="flex h-2 w-2 rounded-full bg-amber-400" />
-                  <span>TẠM KHÓA ĐỂ BẢO TRÌ & SỬA CHỮA</span>
+                <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/40 bg-emerald-500/20 px-3.5 py-1 text-xs font-bold text-emerald-300 backdrop-blur-md mb-3">
+                  <span className="flex h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span>KHÔNG GIAN TỰ HỌC & TRUYỀN CẢM HỨNG 24/7</span>
                 </div>
                 <h3 className="text-2xl sm:text-3xl font-black tracking-tight text-white mb-2 flex items-center justify-center lg:justify-start gap-2.5">
-                  <span>Trạm Động Lực & Học Tập CSCA</span>
-                  <span className="rounded-lg border border-amber-400/40 bg-amber-500/20 px-2.5 py-0.5 text-xs font-bold text-amber-300">Đang sửa chữa 🛠️</span>
+                  <span>Trạm Động Lực & Phòng Học Ảo CSCA</span>
+                  <span className="rounded-lg border border-violet-400/40 bg-violet-500/20 px-2.5 py-0.5 text-xs font-bold text-violet-200">LIVE 🔥</span>
                 </h3>
                 <p className="text-sm sm:text-base text-slate-300 leading-relaxed mb-4">
-                  Không gian Trạm Động Lực & Phòng Học Ảo đang được tạm đóng để đội ngũ kỹ thuật nâng cấp, tối ưu hóa hệ thống video và phòng học chung. Tính năng sẽ sớm mở lại phục vụ bạn!
+                  Bật đồng hồ lật Pomodoro, tham gia phòng tự học bật cam thực tế cùng bạn bè hoặc lướt kho video TikTok động lực siêu mượt để duy trì kỷ luật mỗi ngày!
                 </p>
                 <div className="flex flex-wrap items-center justify-center lg:justify-start gap-2.5 text-xs text-slate-300">
-                  <span className="rounded-xl bg-white/10 px-3 py-1.5 backdrop-blur-sm border border-white/10">🎧 Video Study-With-Me</span>
-                  <span className="rounded-xl bg-white/10 px-3 py-1.5 backdrop-blur-sm border border-white/10">🎯 Bảng mục tiêu hôm nay</span>
-                  <span className="rounded-xl bg-white/10 px-3 py-1.5 backdrop-blur-sm border border-white/10">💬 Chat phòng học chung</span>
+                  <span className="rounded-xl bg-white/10 px-3 py-1.5 backdrop-blur-sm border border-white/10">📹 Phòng học bật cam thực tế</span>
+                  <span className="rounded-xl bg-white/10 px-3 py-1.5 backdrop-blur-sm border border-white/10">🎬 Lướt TikTok động lực mượt mà</span>
+                  <span className="rounded-xl bg-white/10 px-3 py-1.5 backdrop-blur-sm border border-white/10">🎧 Âm thanh trắng tập trung</span>
                 </div>
               </div>
 
               <div className="shrink-0 flex flex-col sm:flex-row items-center gap-3">
                 <Link
                   href="/tram-dong-luc"
-                  className="flex items-center gap-2.5 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-600 px-6 py-3.5 text-sm sm:text-base font-extrabold text-white shadow-lg shadow-amber-500/30 transition-all hover:scale-105 hover:shadow-xl active:scale-95"
+                  className="flex items-center gap-2.5 rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-600 px-6 py-3.5 text-sm sm:text-base font-extrabold text-white shadow-lg shadow-violet-500/30 transition-all hover:scale-105 hover:shadow-xl active:scale-95"
                 >
-                  <span>Xem thông báo bảo trì</span>
+                  <span>Vào Trạm Động Lực Ngay</span>
                   <FiArrowRight className="text-lg" />
                 </Link>
               </div>
