@@ -27,12 +27,13 @@ import {
 import { useAuthStore } from '@/lib/store/authStore';
 import { getDefaultAdminRoute } from '@/lib/utils/permissions';
 import { sanitizeInput } from '@/lib/utils/security';
+import { parseAuthFormError } from '@/lib/utils/authFormErrors';
 import { useLanguage } from '@/context/LanguageContext';
 import axiosInstance from '@/lib/utils/axios';
 import SocialAuthButtons from './SocialAuthButtons';
 import TermsModal from './TermsModal';
 import TurnstileBox, { isTurnstileEnabled } from './TurnstileBox';
-import { FiArrowRight, FiLock, FiMessageCircle, FiMonitor, FiPhone, FiShield, FiUser } from 'react-icons/fi';
+import { FiAlertCircle, FiArrowRight, FiLock, FiMessageCircle, FiMonitor, FiPhone, FiShield, FiUser } from 'react-icons/fi';
 
 export default function LoginForm() {
   const router = useRouter();
@@ -392,17 +393,27 @@ export default function LoginForm() {
         setErrors({ general: error.response?.data?.message || 'Email chưa được xác minh.' });
         return;
       }
-      const newAttempts = loginAttempts + 1;
-      setLoginAttempts(newAttempts);
+      const parsedError = parseAuthFormError(error, 'login', t('auth.loginFailed'));
+      if (error.response?.status === 401) {
+        const newAttempts = loginAttempts + 1;
+        setLoginAttempts(newAttempts);
 
-      if (newAttempts >= 5) {
-        const lockDuration = Math.min(5 * 60 * 1000, newAttempts * 60000);
-        setLockedUntil(Date.now() + lockDuration);
-        setErrors({ general: format('auth.tooManyAttempts', { minutes: Math.ceil(lockDuration / 60000) }) });
+        if (newAttempts >= 5) {
+          const lockDuration = Math.min(5 * 60 * 1000, newAttempts * 60000);
+          setLockedUntil(Date.now() + lockDuration);
+          setErrors({ general: format('auth.tooManyAttempts', { minutes: Math.ceil(lockDuration / 60000) }) });
+        } else {
+          const remaining = 5 - newAttempts;
+          setErrors({
+            ...parsedError,
+            general: format('auth.failedWithRemaining', {
+              message: parsedError.general || t('auth.loginFailed'),
+              remaining,
+            }),
+          });
+        }
       } else {
-        const message = error.response?.data?.message || t('auth.loginFailed');
-        const remaining = 5 - newAttempts;
-        setErrors({ general: format('auth.failedWithRemaining', { message, remaining }) });
+        setErrors(parsedError);
       }
     } finally {
       resetTurnstile();
@@ -728,7 +739,7 @@ export default function LoginForm() {
     return () => window.clearInterval(timer);
   }, [deviceLimitData?.requestToken, deviceOtpOpen]);
 
-  const loginInputBaseClass = 'auth-login-input w-full rounded-2xl border px-4 py-3.5 pl-12 font-semibold text-[#2f2926] caret-[#e11d2e] shadow-[0_12px_30px_rgba(90,54,24,0.08)] outline-none transition-all placeholder:text-[#7a675a] focus:border-[#c1121f] focus:ring-4 focus:ring-[#c1121f]/20 disabled:cursor-not-allowed disabled:opacity-60';
+  const loginInputBaseClass = 'auth-login-input w-full rounded-2xl border px-4 py-3.5 pl-12 font-semibold text-[#2f2926] caret-[#850b16] shadow-[0_12px_30px_rgba(90,54,24,0.08)] outline-none transition-all placeholder:text-[#7a675a] focus:border-[#c1121f] focus:ring-4 focus:ring-[#c1121f]/20 disabled:cursor-not-allowed disabled:opacity-60';
 
   return (
     <div className="auth-login-form w-full max-w-md">
@@ -1142,8 +1153,11 @@ export default function LoginForm() {
             </div>
           </div>
         ) : errors.general ? (
-          <div className="rounded-2xl border border-red-200 bg-red-50/90 px-4 py-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300">
-            {errors.general}
+          <div role="alert" aria-live="assertive" className="flex items-start gap-3 rounded-2xl border-2 border-red-400 bg-red-50 px-4 py-3.5 text-red-800 shadow-sm dark:border-red-700 dark:bg-red-950/40 dark:text-red-200">
+            <FiAlertCircle className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-black">Không thể đăng nhập</p>
+              <p className="mt-0.5 text-sm font-semibold leading-relaxed">{errors.general}</p>
             {unverifiedEmail && (
               <button
                 type="button"
@@ -1154,6 +1168,7 @@ export default function LoginForm() {
                 {verificationResending ? 'Đang gửi…' : 'Gửi lại email xác minh'}
               </button>
             )}
+            </div>
           </div>
         ) : null}
 

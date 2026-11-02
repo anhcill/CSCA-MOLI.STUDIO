@@ -134,12 +134,15 @@ export function checkPasswordStrength(password: string): {
 } {
   const feedback: string[] = [];
   let score = 0;
+  const hasMinimumLength = password.length >= 8;
+  const hasLetter = /[A-Za-z]/.test(password);
+  const hasNumber = /\d/.test(password);
 
   if (!password) {
     return { score: 0, label: 'Rất yếu', color: 'red', feedback: ['Nhập mật khẩu'] };
   }
 
-  if (password.length >= 8) score++;
+  if (hasMinimumLength) score++;
   else feedback.push('Ít nhất 8 ký tự');
 
   if (password.length >= 12) score++;
@@ -147,7 +150,7 @@ export function checkPasswordStrength(password: string): {
   if (/[a-z]/.test(password) && /[A-Z]/.test(password)) score++;
   else feedback.push('Bao gồm chữ hoa và chữ thường');
 
-  if (/\d/.test(password)) score++;
+  if (hasNumber) score++;
   else feedback.push('Bao gồm số');
 
   if (/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) score++;
@@ -155,6 +158,8 @@ export function checkPasswordStrength(password: string): {
 
   // Cap score at 4
   score = Math.min(score, 4);
+  // A password that the API will reject must never be labelled strong.
+  if (!hasMinimumLength || !hasLetter || !hasNumber) score = Math.min(score, 2);
 
   const labels = ['Rất yếu', 'Yếu', 'Trung bình', 'Mạnh', 'Rất mạnh'];
   const colors = ['red', 'red', 'yellow', 'green', 'blue'];

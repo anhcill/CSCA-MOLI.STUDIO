@@ -3,11 +3,12 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { FiArrowRight, FiLock, FiMail, FiUser } from 'react-icons/fi';
+import { FiAlertCircle, FiArrowRight, FiLock, FiMail, FiUser } from 'react-icons/fi';
 import { register, googleAuth, getCurrentUser } from '@/lib/api/auth';
 import { useAuthStore } from '@/lib/store/authStore';
 import { getDefaultAdminRoute } from '@/lib/utils/permissions';
 import { sanitizeInput } from '@/lib/utils/security';
+import { parseAuthFormError, type ParsedAuthFormErrors } from '@/lib/utils/authFormErrors';
 import { useLanguage } from '@/context/LanguageContext';
 import PasswordStrengthIndicator from './PasswordStrengthIndicator';
 import SocialAuthButtons from './SocialAuthButtons';
@@ -26,7 +27,7 @@ export default function RegisterForm() {
     confirmPassword: '',
     full_name: '',
   });
-  const [errors, setErrors] = useState<{ [key: string]: string }>({});
+  const [errors, setErrors] = useState<ParsedAuthFormErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [termsModalType, setTermsModalType] = useState<'terms' | 'privacy'>('terms');
@@ -34,13 +35,14 @@ export default function RegisterForm() {
   const [turnstileToken, setTurnstileToken] = useState('');
   const [turnstileResetKey, setTurnstileResetKey] = useState(0);
 
-  const inputBaseClass = 'auth-login-input w-full rounded-2xl border px-4 py-3.5 pl-12 font-semibold text-[#2f2926] shadow-[0_12px_30px_rgba(90,54,24,0.08)] outline-none transition-all placeholder:text-[#7a675a] focus:border-[#c1121f] focus:ring-4 focus:ring-[#c1121f]/12 disabled:cursor-not-allowed disabled:opacity-60';
+  const inputBaseClass = 'auth-login-input w-full rounded-2xl border px-4 py-3.5 pl-12 font-semibold text-[#2f2926] caret-[#850b16] shadow-[0_12px_30px_rgba(90,54,24,0.08)] outline-none transition-all placeholder:text-[#7a675a] focus:border-[#c1121f] focus:ring-4 focus:ring-[#c1121f]/12 disabled:cursor-not-allowed disabled:opacity-60';
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
+    const fieldName = name as keyof ParsedAuthFormErrors;
     const sanitized = sanitizeInput(value);
     setFormData((prev) => ({ ...prev, [name]: sanitized }));
-    if (errors[name]) setErrors((prev) => ({ ...prev, [name]: '' }));
+    if (errors[fieldName]) setErrors((prev) => ({ ...prev, [fieldName]: undefined }));
   };
 
   const ensureTermsAccepted = () => {
@@ -54,8 +56,8 @@ export default function RegisterForm() {
     const newErrors: typeof errors = {};
     if (!formData.username) {
       newErrors.username = t('auth.requiredUsername');
-    } else if (formData.username.length < 3) {
-      newErrors.username = t('auth.usernameMin3');
+    } else if (formData.username.length < 3 || formData.username.length > 30) {
+      newErrors.username = 'Tên đăng nhập phải có từ 3 đến 30 ký tự.';
     } else if (!/^[a-zA-Z0-9_]+$/.test(formData.username)) {
       newErrors.username = t('auth.usernameInvalid');
     }
@@ -68,6 +70,8 @@ export default function RegisterForm() {
       newErrors.password = t('auth.requiredPassword');
     } else if (formData.password.length < 8) {
       newErrors.password = t('auth.passwordMin8');
+    } else if (!/[A-Za-z]/.test(formData.password) || !/\d/.test(formData.password)) {
+      newErrors.password = 'Mật khẩu phải chứa ít nhất 1 chữ cái và 1 chữ số.';
     }
     if (!formData.confirmPassword) {
       newErrors.confirmPassword = t('auth.confirmRequired');
@@ -121,8 +125,8 @@ export default function RegisterForm() {
         }
         router.push(getDefaultAdminRoute(effectiveUser));
       }
-    } catch (error: any) {
-      setErrors({ general: error.response?.data?.message || t('auth.registerFailed') });
+    } catch (error: unknown) {
+      setErrors(parseAuthFormError(error, 'register', t('auth.registerFailed')));
     } finally {
       setTurnstileToken('');
       setTurnstileResetKey(key => key + 1);
@@ -210,8 +214,12 @@ export default function RegisterForm() {
 
       <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-5">
         {errors.general && (
-          <div role="alert" aria-live="assertive" className="rounded-2xl border border-red-300 bg-red-50/95 px-4 py-3 text-sm font-bold text-red-700 shadow-sm">
-            {errors.general}
+          <div role="alert" aria-live="assertive" className="flex items-start gap-3 rounded-2xl border-2 border-red-400 bg-red-50 px-4 py-3.5 text-red-800 shadow-sm">
+            <FiAlertCircle className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
+            <div>
+              <p className="text-sm font-black">Không thể tạo tài khoản</p>
+              <p className="mt-0.5 text-sm font-semibold leading-relaxed">{errors.general}</p>
+            </div>
           </div>
         )}
 
@@ -248,10 +256,11 @@ export default function RegisterForm() {
               value={formData.full_name}
               onChange={handleChange}
               disabled={isSubmitting}
-              className={`${inputBaseClass} border-white/80`}
+              className={`${inputBaseClass} ${errors.full_name ? 'border-red-500' : 'border-white/80'}`}
               placeholder={t('auth.fullNamePlaceholder')}
             />
           </div>
+          {errors.full_name && <p className="mt-1.5 text-sm font-semibold text-red-700">{errors.full_name}</p>}
         </div>
 
         <div>
@@ -289,7 +298,7 @@ export default function RegisterForm() {
               placeholder="••••••••"
             />
           </div>
-          {errors.password && <p className="mt-1.5 text-sm text-red-600">{errors.password}</p>}
+          {errors.password && <p className="mt-1.5 text-sm font-semibold text-red-700">{errors.password}</p>}
           <PasswordStrengthIndicator password={formData.password} />
         </div>
 

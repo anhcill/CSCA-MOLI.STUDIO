@@ -35,7 +35,7 @@ export default function LoginPage() {
           background: rgba(255, 255, 255, 0.88) !important;
           color: #2d2926 !important;
           -webkit-text-fill-color: #2d2926 !important;
-          caret-color: #e11d2e !important;
+          caret-color: #850b16 !important;
         }
 
         .auth-login-input:focus {
@@ -48,7 +48,7 @@ export default function LoginPage() {
         .auth-login-input:-webkit-autofill:focus {
           -webkit-box-shadow: 0 0 0 1000px rgba(255, 255, 255, 0.92) inset !important;
           -webkit-text-fill-color: #2d2926 !important;
-          caret-color: #e11d2e !important;
+          caret-color: #850b16 !important;
           transition: background-color 9999s ease-out 0s;
         }
 
