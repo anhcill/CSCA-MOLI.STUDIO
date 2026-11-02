@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { User } from '../api/auth';
 import axios, { clearStoredAuth, clearTokenCache } from '../utils/axios';
-import { rememberPreviousSession } from '../utils/previousSession';
+import { forgetPreviousSession } from '../utils/previousSession';
 
 // Decode JWT payload (base64url)
 function decodeJwtPayload(token: string): Record<string, unknown> | null {
@@ -57,6 +57,7 @@ interface AuthState {
   refreshToken: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  rememberMe: boolean;
 
   // Actions
   setUser: (user: User) => void;
@@ -65,36 +66,72 @@ interface AuthState {
   logout: () => void;
   updateUser: (user: Partial<User>) => void;
   setLoading: (loading: boolean) => void;
+  setRememberMe: (remember: boolean) => void;
   syncVipFromToken: () => void;
 }
 
+type PersistedAuthState = Pick<
+  AuthState,
+  'user' | 'token' | 'refreshToken' | 'isAuthenticated' | 'rememberMe'
+>;
+
+function writeSessionUser(user: User | null) {
+  if (typeof window === 'undefined') return;
+  if (user) sessionStorage.setItem('user', JSON.stringify(user));
+  else sessionStorage.removeItem('user');
+}
+
+function readSessionAuth(): Partial<PersistedAuthState> | null {
+  if (typeof window === 'undefined') return null;
+  const token = sessionStorage.getItem('token');
+  const refreshToken = sessionStorage.getItem('refreshToken');
+  const rawUser = sessionStorage.getItem('user');
+  if (!token || !refreshToken || !rawUser) return null;
+  try {
+    return {
+      user: JSON.parse(rawUser) as User,
+      token,
+      refreshToken,
+      isAuthenticated: true,
+      rememberMe: false,
+    };
+  } catch {
+    sessionStorage.removeItem('user');
+    return null;
+  }
+}
+
 export const useAuthStore = create<AuthState>()(
-  persist<AuthState, [], [], Pick<AuthState, 'user' | 'token' | 'refreshToken' | 'isAuthenticated'>>(
+  persist<AuthState, [], [], PersistedAuthState>(
     (set, get) => ({
       user: null,
       token: null,
       refreshToken: null,
       isAuthenticated: false,
       isLoading: false,
+      rememberMe: false,
 
-      setUser: (user) => set({ user, isAuthenticated: true }),
+      setUser: (user) => {
+        writeSessionUser(user);
+        set({ user, isAuthenticated: true });
+      },
 
       setTokens: (token, refreshToken) => {
         clearTokenCache();
-        rememberPreviousSession(token);
         if (typeof window !== 'undefined') {
           sessionStorage.setItem('token', token);
           sessionStorage.setItem('refreshToken', refreshToken);
+          writeSessionUser(get().user);
         }
         set({ token, refreshToken });
       },
 
       login: (user, token, refreshToken) => {
         clearTokenCache();
-        rememberPreviousSession(token);
         if (typeof window !== 'undefined') {
           sessionStorage.setItem('token', token);
           sessionStorage.setItem('refreshToken', refreshToken);
+          writeSessionUser(user);
         }
         set({
           user,
@@ -123,16 +160,23 @@ export const useAuthStore = create<AuthState>()(
           refreshToken: null,
           isAuthenticated: false,
           isLoading: false,
+          rememberMe: false,
         });
       },
 
       updateUser: (userData) =>
         set((state) => {
           const nextUser = state.user ? { ...state.user, ...userData } : null;
+          writeSessionUser(nextUser);
           return { ...state, user: nextUser };
         }),
 
       setLoading: (loading) => set({ isLoading: loading }),
+
+      setRememberMe: (rememberMe) => {
+        if (!rememberMe) forgetPreviousSession();
+        set({ rememberMe });
+      },
 
       syncVipFromToken: () => {
         const { user, token } = get();
@@ -144,21 +188,51 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'auth-storage',
+      version: 2,
       skipHydration: false,
-      partialize: (state) => ({
-        user: state.user,
-        token: state.token,
-        refreshToken: state.refreshToken,
-        isAuthenticated: state.isAuthenticated,
-      }),
+      partialize: (state) => state.rememberMe
+        ? {
+            user: state.user,
+            token: state.token,
+            refreshToken: state.refreshToken,
+            isAuthenticated: state.isAuthenticated,
+            rememberMe: true,
+          }
+        : {
+            user: null,
+            token: null,
+            refreshToken: null,
+            isAuthenticated: false,
+            rememberMe: false,
+          },
+      migrate: (persistedState) => {
+        const legacy = (persistedState || {}) as Partial<PersistedAuthState>;
+        return {
+          user: legacy.user || null,
+          token: legacy.token || null,
+          refreshToken: legacy.refreshToken || null,
+          isAuthenticated: legacy.isAuthenticated === true,
+          // Existing installs already persisted sessions unconditionally.
+          // Preserve those sessions once, then honor the checkbox going forward.
+          rememberMe: legacy.rememberMe ?? Boolean(legacy.token && legacy.refreshToken),
+        };
+      },
+      merge: (persistedState, currentState) => {
+        const persisted = (persistedState || {}) as Partial<PersistedAuthState>;
+        if (persisted.rememberMe) return { ...currentState, ...persisted };
+        const sessionAuth = readSessionAuth();
+        return sessionAuth
+          ? { ...currentState, ...sessionAuth }
+          : { ...currentState, ...persisted };
+      },
       onRehydrateStorage: () => {
         return (state) => {
           // Sync token to sessionStorage after hydration so axios interceptor picks it up
-          if (state?.token && state?.refreshToken && typeof window !== 'undefined') {
+          if (state?.rememberMe && state.token && state.refreshToken && typeof window !== 'undefined') {
             clearTokenCache();
-            rememberPreviousSession(state.token);
             sessionStorage.setItem('token', state.token);
             sessionStorage.setItem('refreshToken', state.refreshToken);
+            writeSessionUser(state.user);
           }
         };
       },

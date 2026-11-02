@@ -7,8 +7,6 @@ export interface RegisterData {
   password: string;
   full_name?: string;
   acceptedTerms: boolean;
-  termsVersion?: string;
-  privacyVersion?: string;
 }
 
 export interface LoginData {
@@ -44,6 +42,17 @@ export interface User {
   exp?: number;
 }
 
+export interface AuthSessionData {
+  user: User;
+  token: string;
+  refreshToken: string;
+}
+
+export interface RegistrationSuccessData {
+  email: string;
+  emailVerificationSent: boolean;
+}
+
 export interface AuthResponse {
   success: boolean;
   message: string;
@@ -56,14 +65,27 @@ export interface AuthResponse {
   requiresAdminMfaSetup?: boolean;
   mfaToken?: string;
   adminEmail?: string;
-  data?: {
+  data?: AuthSessionData;
+}
+
+export interface RegisterResponse extends Omit<AuthResponse, 'data'> {
+  // AuthSessionData remains accepted for backwards compatibility with older API deployments.
+  data?: RegistrationSuccessData | AuthSessionData;
+}
+
+export interface CurrentUserResponse {
+  success: boolean;
+  data: {
     user: User;
-    token: string;
-    refreshToken: string;
-    email?: string;
-    emailVerificationSent?: boolean;
+    token?: string;
   };
 }
+
+export const isAuthSessionData = (
+  data: RegisterResponse['data'] | AuthResponse['data'],
+): data is AuthSessionData => Boolean(
+  data && 'user' in data && data.user && data.token && data.refreshToken,
+);
 
 export interface DeviceSession {
   id?: number;
@@ -114,7 +136,7 @@ export interface AdminMfaAuthResponse {
 /**
  * Register new user
  */
-export const register = async (data: RegisterData): Promise<AuthResponse> => {
+export const register = async (data: RegisterData): Promise<RegisterResponse> => {
   const response = await axios.post('/auth/register', data);
   return response.data;
 };
@@ -130,7 +152,7 @@ export const login = async (data: LoginData): Promise<AuthResponse> => {
 /**
  * Get current user
  */
-export const getCurrentUser = async (): Promise<{ success: boolean; data: { user: User } }> => {
+export const getCurrentUser = async (): Promise<CurrentUserResponse> => {
   const response = await axios.get('/auth/me');
   return response.data;
 };
@@ -155,7 +177,7 @@ export const refreshToken = async (refreshToken: string): Promise<{ success: boo
  * Google OAuth authentication
  */
 export const googleAuth = async (
-  auth: string | { credential?: string; accessToken?: string; acceptedTerms?: boolean; termsVersion?: string; privacyVersion?: string }
+  auth: string | { credential?: string; accessToken?: string; acceptedTerms?: boolean }
 ): Promise<AuthResponse> => {
   const payload = typeof auth === 'string' ? { credential: auth } : auth;
   const response = await axios.post('/auth/google', payload);

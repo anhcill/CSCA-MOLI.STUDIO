@@ -4,10 +4,9 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { FiAlertCircle, FiArrowRight, FiLock, FiMail, FiUser } from 'react-icons/fi';
-import { register, googleAuth, getCurrentUser } from '@/lib/api/auth';
+import { register, googleAuth, getCurrentUser, isAuthSessionData } from '@/lib/api/auth';
 import { useAuthStore } from '@/lib/store/authStore';
 import { getDefaultAdminRoute } from '@/lib/utils/permissions';
-import { sanitizeInput } from '@/lib/utils/security';
 import { parseAuthFormError, type ParsedAuthFormErrors } from '@/lib/utils/authFormErrors';
 import { useLanguage } from '@/context/LanguageContext';
 import PasswordStrengthIndicator from './PasswordStrengthIndicator';
@@ -40,9 +39,10 @@ export default function RegisterForm() {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     const fieldName = name as keyof ParsedAuthFormErrors;
-    const sanitized = sanitizeInput(value);
-    setFormData((prev) => ({ ...prev, [name]: sanitized }));
-    if (errors[fieldName]) setErrors((prev) => ({ ...prev, [fieldName]: undefined }));
+    setFormData((prev) => ({ ...prev, [name]: value }));
+    if (errors[fieldName] || errors.general) {
+      setErrors((prev) => ({ ...prev, [fieldName]: undefined, general: undefined }));
+    }
   };
 
   const ensureTermsAccepted = () => {
@@ -54,16 +54,18 @@ export default function RegisterForm() {
 
   const validateForm = () => {
     const newErrors: typeof errors = {};
-    if (!formData.username) {
+    const username = formData.username.trim();
+    const email = formData.email.trim();
+    if (!username) {
       newErrors.username = t('auth.requiredUsername');
-    } else if (formData.username.length < 3 || formData.username.length > 30) {
+    } else if (username.length < 3 || username.length > 30) {
       newErrors.username = 'Tên đăng nhập phải có từ 3 đến 30 ký tự.';
-    } else if (!/^[a-zA-Z0-9_]+$/.test(formData.username)) {
+    } else if (!/^[a-zA-Z0-9_]+$/.test(username)) {
       newErrors.username = t('auth.usernameInvalid');
     }
-    if (!formData.email) {
+    if (!email) {
       newErrors.email = t('auth.requiredEmail');
-    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
+    } else if (!/\S+@\S+\.\S+/.test(email)) {
       newErrors.email = t('auth.invalidEmail');
     }
     if (!formData.password) {
@@ -96,34 +98,37 @@ export default function RegisterForm() {
     setErrors({});
 
     try {
+      const username = formData.username.trim();
+      const email = formData.email.trim().toLowerCase();
+      const fullName = formData.full_name.trim();
       const response = await register({
-        username: formData.username,
-        email: formData.email,
+        username,
+        email,
         password: formData.password,
-        full_name: formData.full_name || formData.username,
+        full_name: fullName || username,
         acceptedTerms,
-        termsVersion: '2026-08',
-        privacyVersion: '2026-08',
         turnstileToken,
       });
       if (response.success && response.data) {
-        const { user: registerUser, token, refreshToken } = response.data;
-        if (!registerUser || !token || !refreshToken) {
-          router.push(`/login?verification=sent&email=${encodeURIComponent(formData.email)}`);
+        if (!isAuthSessionData(response.data)) {
+          router.push(`/login?verification=sent&email=${encodeURIComponent(email)}`);
           return;
         }
+        const { user: registerUser, token, refreshToken } = response.data;
         setAuth(registerUser, token, refreshToken);
         let effectiveUser = registerUser;
         try {
           const me = await getCurrentUser();
           if (me?.success && me?.data?.user) {
             effectiveUser = me.data.user;
-            setAuth(effectiveUser, token, refreshToken);
+            setAuth(effectiveUser, me.data.token || token, refreshToken);
           }
         } catch {
           /* Keep fallback */
         }
         router.push(getDefaultAdminRoute(effectiveUser));
+      } else {
+        setErrors({ general: response.message || 'Máy chủ không xác nhận được kết quả đăng ký. Vui lòng thử lại.' });
       }
     } catch (error: unknown) {
       setErrors(parseAuthFormError(error, 'register', t('auth.registerFailed')));
@@ -146,8 +151,6 @@ export default function RegisterForm() {
       const response = await googleAuth({
         accessToken,
         acceptedTerms: true,
-        termsVersion: '2026-08',
-        privacyVersion: '2026-08',
       });
       if (response.success && response.data) {
         const { user: loginUser, token, refreshToken } = response.data;
@@ -157,12 +160,14 @@ export default function RegisterForm() {
           const me = await getCurrentUser();
           if (me?.success && me?.data?.user) {
             effectiveUser = me.data.user;
-            setAuth(effectiveUser, token, refreshToken);
+            setAuth(effectiveUser, me.data.token || token, refreshToken);
           }
         } catch {
           /* Keep fallback */
         }
         router.push(getDefaultAdminRoute(effectiveUser));
+      } else {
+        setErrors({ general: response.message || t('auth.googleRegisterFailed') });
       }
     } catch (error: any) {
       setErrors({ general: error.response?.data?.message || t('auth.googleRegisterFailed') });
@@ -198,7 +203,7 @@ export default function RegisterForm() {
     setErrors({});
 
     const redirect = `${window.location.origin}/auth/facebook/callback`;
-    const authUrl = `/api/auth/facebook?redirect=${encodeURIComponent(redirect)}`;
+    const authUrl = `/api/auth/facebook?redirect=${encodeURIComponent(redirect)}&acceptedTerms=true`;
     window.location.href = authUrl;
   };
 
@@ -329,11 +334,11 @@ export default function RegisterForm() {
             onChange={(event) => {
               const checked = event.target.checked;
               setAcceptedTerms(checked);
-              if (checked && (errors.terms || errors.general === t('auth.registerTermsRequired'))) {
+              if (checked && (errors.terms || errors.general)) {
                 setErrors((current) => ({
                   ...current,
-                  terms: '',
-                  general: current.general === t('auth.registerTermsRequired') ? '' : current.general,
+                  terms: undefined,
+                  general: undefined,
                 }));
               } else if (errors.terms) {
                 setErrors((current) => ({ ...current, terms: '' }));

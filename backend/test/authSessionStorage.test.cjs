@@ -66,7 +66,7 @@ async function withBrowser(run) {
 test('automatic auth clearing preserves browser identity for a later login', async () => {
   await withBrowser(async ({ auth, http, identity }) => {
     auth.useAuthStore.getState().login({ id: 7 }, 'old-signed-session', 'old-refresh');
-    http.clearStoredAuth();
+    http.clearStoredAuth(true);
     assert.equal(sessionStorage.getItem('token'), null);
     assert.equal(localStorage.getItem('auth-storage'), null);
     assert.equal(identity.getPreviousSessionToken(), 'old-signed-session');
@@ -84,6 +84,7 @@ test('automatic auth clearing preserves browser identity for a later login', asy
 
 test('refresh is shared by concurrent requests and persisted for reopening the app', async () => {
   await withBrowser(async ({ auth, http, identity }) => {
+    auth.useAuthStore.getState().setRememberMe(true);
     auth.useAuthStore.getState().login({ id: 7 }, 'old-access', 'old-refresh');
     let refreshCalls = 0;
     rawAxios.defaults.adapter = async config => {

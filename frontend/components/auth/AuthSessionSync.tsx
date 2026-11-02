@@ -23,8 +23,8 @@ export default function AuthSessionSync() {
         if (response?.success && response?.data?.user) {
           setUser(response.data.user);
           // Cập nhật token mới nếu backend gửi kèm (ví dụ: để đồng bộ trạng thái VIP)
-          if ((response.data as any).token) {
-             setTokens((response.data as any).token, useAuthStore.getState().refreshToken || '');
+          if (response.data.token) {
+             setTokens(response.data.token, useAuthStore.getState().refreshToken || '');
           }
         }
       })

@@ -56,7 +56,7 @@ class EmailService {
     if (!apiKey) {
       const variableName = useCriticalAccount ? 'BREVO_CRITICAL_API_KEY' : 'BREVO_API_KEY';
       const error = new Error(`${variableName} not configured`);
-      console.warn(`${error.message}, email skipped:`, subject);
+      console.warn(`${error.message}, email skipped`);
       if (throwOnError) throw error;
       return { sent: false, error: error.message };
     }
@@ -69,11 +69,11 @@ class EmailService {
         htmlContent: html,
         textContent: text || subject,
       });
-      console.log(`Email sent: "${subject}" -> ${Array.isArray(to) ? to.join(', ') : to}`);
+      console.log(`Email sent via Brevo (${useCriticalAccount ? 'critical' : 'default'} account)`);
       return { sent: true };
     } catch (err) {
       const msg = err?.response?.data?.message || err.message;
-      console.error(`Email failed: "${subject}" - ${msg}`);
+      console.error(`Email delivery failed (${useCriticalAccount ? 'critical' : 'default'} account): ${msg}`);
       if (throwOnError) throw err;
       return { sent: false, error: msg };
     }
@@ -910,7 +910,7 @@ class EmailService {
 
     await this._send({
       to: email,
-      subject: `🔐 Mã OTP MOLY - ${otp}`,
+      subject: '🔐 Mã xác thực MOLY',
       account: 'critical',
       throwOnError: true,
       html: this._wrapper({

@@ -286,7 +286,8 @@ async function resendOtpForChallenge(challengeToken) {
   try {
     await client.query("BEGIN");
     const result = await client.query(
-      `SELECT c.id, c.user_id, c.otp_expires_at, c.otp_sent_at, c.consumed_at,
+      `SELECT c.id, c.user_id, c.otp_hash, c.otp_expires_at, c.otp_sent_at,
+               c.attempts, c.consumed_at,
               u.email, u.full_name, u.username, u.is_active
        FROM auth_challenges c
        JOIN users u ON u.id = c.user_id
@@ -316,6 +317,7 @@ async function resendOtpForChallenge(challengeToken) {
 
     const otp = generateOtp();
     const otpHash = await bcrypt.hash(otp, 10);
+    const otpExpiresAt = new Date(Date.now() + OTP_EXPIRY_MS);
 
     await client.query(
       `UPDATE auth_challenges
@@ -324,7 +326,7 @@ async function resendOtpForChallenge(challengeToken) {
            otp_sent_at = NOW(),
            attempts = 0
        WHERE id = $1 AND consumed_at IS NULL`,
-      [challenge.id, otpHash, new Date(Date.now() + OTP_EXPIRY_MS)],
+      [challenge.id, otpHash, otpExpiresAt],
     );
     await client.query("COMMIT");
     return {
@@ -332,6 +334,14 @@ async function resendOtpForChallenge(challengeToken) {
       otp,
       email: challenge.email,
       name: challenge.full_name || challenge.username,
+      restore: {
+        challengeId: challenge.id,
+        replacementOtpHash: otpHash,
+        otpHash: challenge.otp_hash,
+        otpExpiresAt: challenge.otp_expires_at,
+        otpSentAt: challenge.otp_sent_at,
+        attempts: Number(challenge.attempts || 0),
+      },
     };
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
@@ -339,6 +349,28 @@ async function resendOtpForChallenge(challengeToken) {
   } finally {
     client.release();
   }
+}
+
+async function restoreOtpAfterFailedResend(restore) {
+  if (!restore) return;
+  await db.query(
+    `UPDATE auth_challenges
+     SET otp_hash = $1,
+         otp_expires_at = $2,
+         otp_sent_at = $3,
+         attempts = $4
+     WHERE id = $5
+       AND otp_hash = $6
+       AND consumed_at IS NULL`,
+    [
+      restore.otpHash,
+      restore.otpExpiresAt,
+      restore.otpSentAt,
+      restore.attempts,
+      restore.challengeId,
+      restore.replacementOtpHash,
+    ],
+  );
 }
 
 // ─── Parse user agent ────────────────────────────────────────────────────────
@@ -658,8 +690,6 @@ const register = async (req, res) => {
       password,
       full_name,
       acceptedTerms,
-      termsVersion = CURRENT_TERMS_VERSION,
-      privacyVersion = CURRENT_PRIVACY_VERSION,
     } = req.body;
 
     // Validate input
@@ -728,14 +758,14 @@ const register = async (req, res) => {
     }
 
     // Create user
-    const user = await User.create({ username, email, password, full_name });
-
-    await db.query(
-      `UPDATE users
-       SET terms_accepted_at = NOW(), terms_version = $1, privacy_version = $2
-       WHERE id = $3`,
-      [termsVersion, privacyVersion, user.id],
-    );
+    const user = await User.create({
+      username,
+      email,
+      password,
+      full_name,
+      termsVersion: CURRENT_TERMS_VERSION,
+      privacyVersion: CURRENT_PRIVACY_VERSION,
+    });
 
     // ── Email verification (S11) ──────────────────────────────────────────────
     const { verifyUrl } = await createEmailVerification(user.id);
@@ -846,6 +876,9 @@ const login = async (req, res) => {
         .json({ success: false, message: "Tên đăng nhập hoặc mật khẩu không đúng" });
     }
 
+    // Accounts created by the current registration flow always carry legal
+    // consent in the same transaction. Keep pre-consent legacy accounts
+    // compatible while requiring verification for every new registration.
     if (!user.is_verified && user.terms_accepted_at) {
       return res.status(403).json({
         success: false,
@@ -1202,8 +1235,11 @@ const isSafeRedirectUrl = (redirectUrl, fallbackUrl) => {
   }
 };
 
-const createFacebookState = (redirectUrl) => {
-  return jwt.sign({ redirect: redirectUrl }, process.env.JWT_SECRET, {
+const createFacebookState = (redirectUrl, acceptedTerms = false) => {
+  return jwt.sign({
+    redirect: redirectUrl,
+    acceptedTerms: acceptedTerms === true,
+  }, process.env.JWT_SECRET, {
     expiresIn: '10m',
     issuer: 'csca-app',
     audience: 'facebook-oauth',
@@ -1216,11 +1252,17 @@ const parseFacebookState = (state, fallbackUrl) => {
       issuer: 'csca-app',
       audience: 'facebook-oauth',
     });
-    if (decoded?.redirect) return decoded.redirect;
+    if (decoded?.redirect && isSafeRedirectUrl(decoded.redirect, fallbackUrl)) {
+      return {
+        valid: true,
+        redirect: decoded.redirect,
+        acceptedTerms: decoded.acceptedTerms === true,
+      };
+    }
   } catch {
     // Ignore invalid/expired state
   }
-  return fallbackUrl;
+  return { valid: false, redirect: fallbackUrl, acceptedTerms: false };
 };
 
 const getOAuthConfig = async (req, res) => {
@@ -1256,7 +1298,8 @@ const facebookAuthStart = async (req, res) => {
         ? requestedRedirect
         : fallbackRedirect;
 
-    const state = createFacebookState(redirectTarget);
+    const acceptedTerms = req.query.acceptedTerms === 'true';
+    const state = createFacebookState(redirectTarget, acceptedTerms);
     const redirectUri = getFacebookRedirectUri(req);
 
     const authUrl = `https://www.facebook.com/${FACEBOOK_OAUTH_VERSION}/dialog/oauth?client_id=${encodeURIComponent(
@@ -1277,12 +1320,24 @@ const facebookAuthStart = async (req, res) => {
 const facebookAuthCallback = async (req, res) => {
   const fallbackRedirect = getFrontendCallbackUrl();
   const state = typeof req.query.state === 'string' ? req.query.state : '';
-  const redirectTarget = state ? parseFacebookState(state, fallbackRedirect) : fallbackRedirect;
+  const facebookState = state
+    ? parseFacebookState(state, fallbackRedirect)
+    : { valid: false, redirect: fallbackRedirect, acceptedTerms: false };
+  const redirectTarget = facebookState.redirect;
 
   try {
     const { code, error, error_description } = req.query;
     const facebookAppId = process.env.FACEBOOK_APP_ID;
     const facebookAppSecret = process.env.FACEBOOK_APP_SECRET;
+
+    if (!facebookState.valid) {
+      return res.redirect(
+        buildRedirectWithHash(redirectTarget, {
+          error: 'invalid_state',
+          message: 'Phiên đăng nhập Facebook không hợp lệ hoặc đã hết hạn.',
+        }),
+      );
+    }
 
     if (error) {
       return res.redirect(
@@ -1367,7 +1422,23 @@ const facebookAuthCallback = async (req, res) => {
       if (existingUser) {
         user = await User.linkFacebookAccount(existingUser.id, facebookId, avatarUrl);
       } else {
-        user = await User.createFromFacebook({ facebookId, email, name: displayName, picture: avatarUrl });
+        if (!facebookState.acceptedTerms) {
+          return res.redirect(
+            buildRedirectWithHash(redirectTarget, {
+              error: 'legal_consent_required',
+              message:
+                'Để tạo tài khoản mới bằng Facebook, vui lòng đăng ký và đồng ý Điều khoản sử dụng cùng Chính sách bảo mật.',
+            }),
+          );
+        }
+        user = await User.createFromFacebook({
+          facebookId,
+          email,
+          name: displayName,
+          picture: avatarUrl,
+          termsVersion: CURRENT_TERMS_VERSION,
+          privacyVersion: CURRENT_PRIVACY_VERSION,
+        });
         emailService.sendWelcomeEmail(email, displayName).catch(() => {});
       }
     }
@@ -1428,8 +1499,6 @@ const googleAuth = async (req, res) => {
       credential,
       accessToken,
       acceptedTerms,
-      termsVersion = CURRENT_TERMS_VERSION,
-      privacyVersion = CURRENT_PRIVACY_VERSION,
     } = req.body;
 
     if (!credential && !accessToken) {
@@ -1482,14 +1551,14 @@ const googleAuth = async (req, res) => {
               "Để tạo tài khoản mới bằng Google, vui lòng đăng ký và đồng ý Điều khoản sử dụng cùng Chính sách bảo mật.",
           });
         }
-        user = await User.createFromGoogle({ googleId, email, name, picture });
-        await db.query(
-          `UPDATE users
-           SET terms_accepted_at = NOW(), terms_version = $1, privacy_version = $2,
-               is_verified = TRUE, email_verified = TRUE
-           WHERE id = $3`,
-          [termsVersion, privacyVersion, user.id],
-        );
+        user = await User.createFromGoogle({
+          googleId,
+          email,
+          name,
+          picture,
+          termsVersion: CURRENT_TERMS_VERSION,
+          privacyVersion: CURRENT_PRIVACY_VERSION,
+        });
 
         // Gửi email chào mừng (không block response)
         emailService.sendWelcomeEmail(email, name).catch(() => {});
@@ -2115,12 +2184,19 @@ const resendOtp = async (req, res) => {
       });
     }
 
-    await emailService.sendOtpEmail({
-      email: result.email,
-      name: result.name,
-      otp: result.otp,
-      reason: 'login',
-    });
+    try {
+      await emailService.sendOtpEmail({
+        email: result.email,
+        name: result.name,
+        otp: result.otp,
+        reason: 'login',
+      });
+    } catch (emailError) {
+      await restoreOtpAfterFailedResend(result.restore).catch((restoreError) => {
+        console.error('Restore OTP after email failure:', restoreError.message);
+      });
+      throw emailError;
+    }
 
     return res.json({
       success: true,

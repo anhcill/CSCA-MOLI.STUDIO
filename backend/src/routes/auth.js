@@ -4,9 +4,13 @@ const rateLimit = require("express-rate-limit");
 const { ipKeyGenerator } = require("express-rate-limit");
 const authController = require("../controllers/authController");
 const { authenticate } = require("../middleware/authMiddleware");
-const { verifyTurnstile } = require("../middleware/turnstileMiddleware");
+const { createTurnstileVerifier } = require("../middleware/turnstileMiddleware");
 const { validateRegister, validateLogin } = require("../utils/validators");
 const DeviceSessionService = require("../services/deviceSessionService");
+
+const verifyRegisterTurnstile = createTurnstileVerifier("register");
+const verifyLoginTurnstile = createTurnstileVerifier("login");
+const verifyOtpResendTurnstile = createTurnstileVerifier("otp_resend");
 
 const otpLimiter = rateLimit({
   windowMs: Number(process.env.OTP_RATE_LIMIT_WINDOW_MS || 5 * 60 * 1000),
@@ -38,8 +42,8 @@ const verificationEmailLimiter = rateLimit({
 });
 
 // Verify browser challenges in addition to credential, device and rate-limit checks.
-router.post("/register", verifyTurnstile, validateRegister, authController.register);
-router.post("/login", verifyTurnstile, validateLogin, authController.login);
+router.post("/register", verifyRegisterTurnstile, validateRegister, authController.register);
+router.post("/login", verifyLoginTurnstile, validateLogin, authController.login);
 // Ứng dụng di động không thể nhúng widget Turnstile của trình duyệt. Endpoint
 // này vẫn chạy đủ mật khẩu, giới hạn tốc độ, device limit và OTP challenge;
 // không coi header client là một cơ chế bảo mật.
@@ -63,13 +67,13 @@ router.post("/verify-email", authController.verifyEmail);
 router.post(
   "/resend-verification-email",
   verificationEmailLimiter,
-  verifyTurnstile,
+  verifyLoginTurnstile,
   authController.resendVerificationEmail,
 );
 
 // OTP routes
 router.post("/otp/verify", otpLimiter, authController.verifyOtp);
-router.post("/otp/resend", otpLimiter, verifyTurnstile, authController.resendOtp);
+router.post("/otp/resend", otpLimiter, verifyOtpResendTurnstile, authController.resendOtp);
 
 // Admin Microsoft Authenticator MFA. Public because admin has no auth token yet.
 router.post("/admin-mfa/setup/start", otpLimiter, authController.adminMfaSetupStart);

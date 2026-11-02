@@ -11,6 +11,15 @@ export function rememberPreviousSession(token: string | null) {
   }
 }
 
+export function forgetPreviousSession() {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(PREVIOUS_SESSION_KEY);
+  } catch {
+    // Storage cleanup is best-effort.
+  }
+}
+
 export function getPreviousSessionToken(): string | null {
   if (typeof window === 'undefined') return null;
   try {

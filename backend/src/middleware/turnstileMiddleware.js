@@ -40,7 +40,7 @@ const hostnameMatches = (hostname, allowed) => {
   return hostname === allowed;
 };
 
-const verifyTurnstile = async (req, res, next) => {
+const createTurnstileVerifier = (expectedAction = "") => async (req, res, next) => {
   const secret = getTurnstileSecret();
   const disabled = process.env.TURNSTILE_DISABLED === "true";
   if ((!secret || disabled) && (allowFailOpen() || !isProduction())) {
@@ -107,8 +107,8 @@ const verifyTurnstile = async (req, res, next) => {
       });
     }
 
-    const expectedAction = String(process.env.TURNSTILE_EXPECTED_ACTION || "").trim();
-    if (expectedAction && data.action !== expectedAction) {
+    const requiredAction = String(expectedAction || "").trim();
+    if (requiredAction && data.action !== requiredAction) {
       return res.status(403).json({
         success: false,
         message: "Phiên xác minh Cloudflare không hợp lệ.",
@@ -127,6 +127,12 @@ const verifyTurnstile = async (req, res, next) => {
   }
 };
 
+// Kept for callers that do not use action-bound widgets.
+const verifyTurnstile = createTurnstileVerifier(
+  String(process.env.TURNSTILE_EXPECTED_ACTION || "").trim(),
+);
+
 module.exports = {
+  createTurnstileVerifier,
   verifyTurnstile,
 };

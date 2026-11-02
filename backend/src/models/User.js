@@ -152,9 +152,11 @@ class User {
    * @returns {Object} Created user
    */
   static async createFromGoogle(googleData) {
-    const { googleId, email, name, picture } = googleData;
+    const { googleId, email, name, picture, termsVersion, privacyVersion } = googleData;
+    const client = await db.pool.connect();
 
     try {
+      await client.query("BEGIN");
       // Generate username from email (before @)
       const baseUsername = email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
       let username = baseUsername;
@@ -162,16 +164,23 @@ class User {
       // Check if username exists, add number suffix if needed
       let counter = 1;
       while (true) {
-        const existing = await db.query('SELECT id FROM users WHERE username = $1', [username]);
+        const existing = await client.query('SELECT id FROM users WHERE username = $1', [username]);
         if (existing.rows.length === 0) break;
         username = `${baseUsername}${counter}`;
         counter++;
       }
 
-      const result = await db.query(
-        `INSERT INTO users (username, email, full_name, avatar_url, google_id, oauth_provider, email_verified, is_verified, avatar, is_active)
-         VALUES ($1, $2, $3, $4, $5, 'google', true, true, $6, true)
-         RETURNING id, username, email, full_name, avatar, avatar_url, role, is_active, is_verified, is_vip, subscription_tier, vip_expires_at, vip_package_id, vip_allowed_subjects, created_at`,
+      const result = await client.query(
+        `INSERT INTO users (
+           username, email, full_name, avatar_url, google_id, oauth_provider,
+           email_verified, is_verified, avatar, is_active,
+           terms_accepted_at, terms_version, privacy_version
+         )
+         VALUES ($1, $2, $3, $4, $5, 'google', true, true, $6, true, NOW(), $7, $8)
+         RETURNING id, username, email, full_name, avatar, avatar_url, role, is_active,
+                   is_verified, terms_accepted_at, terms_version, privacy_version,
+                   is_vip, subscription_tier, vip_expires_at, vip_package_id,
+                   vip_allowed_subjects, created_at`,
         [
           username,
           email,
@@ -179,16 +188,19 @@ class User {
           picture,
           googleId,
           picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=4F46E5&color=fff`,
+          termsVersion,
+          privacyVersion,
         ]
       );
 
-      // Create user stats entry
-      await db.query("INSERT INTO user_stats (user_id) VALUES ($1)", [
+      await client.query("INSERT INTO user_stats (user_id) VALUES ($1)", [
         result.rows[0].id,
       ]);
 
+      await client.query("COMMIT");
       return result.rows[0];
     } catch (error) {
+      await client.query("ROLLBACK").catch(() => {});
       if (error.code === "23505") {
         // Unique violation
         if (error.constraint === "users_email_key") {
@@ -196,6 +208,8 @@ class User {
         }
       }
       throw error;
+    } finally {
+      client.release();
     }
   }
 
@@ -205,24 +219,33 @@ class User {
    * @returns {Object} Created user
    */
   static async createFromFacebook(facebookData) {
-    const { facebookId, email, name, picture } = facebookData;
+    const { facebookId, email, name, picture, termsVersion, privacyVersion } = facebookData;
+    const client = await db.pool.connect();
 
     try {
+      await client.query("BEGIN");
       const baseUsername = email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
       let username = baseUsername;
 
       let counter = 1;
       while (true) {
-        const existing = await db.query('SELECT id FROM users WHERE username = $1', [username]);
+        const existing = await client.query('SELECT id FROM users WHERE username = $1', [username]);
         if (existing.rows.length === 0) break;
         username = `${baseUsername}${counter}`;
         counter++;
       }
 
-      const result = await db.query(
-        `INSERT INTO users (username, email, full_name, avatar_url, facebook_id, oauth_provider, email_verified, avatar, is_active)
-         VALUES ($1, $2, $3, $4, $5, 'facebook', true, $6, true)
-         RETURNING id, username, email, full_name, avatar, avatar_url, role, is_active, is_vip, subscription_tier, vip_expires_at, vip_package_id, vip_allowed_subjects, created_at`,
+      const result = await client.query(
+        `INSERT INTO users (
+           username, email, full_name, avatar_url, facebook_id, oauth_provider,
+           email_verified, is_verified, avatar, is_active,
+           terms_accepted_at, terms_version, privacy_version
+         )
+         VALUES ($1, $2, $3, $4, $5, 'facebook', true, true, $6, true, NOW(), $7, $8)
+         RETURNING id, username, email, full_name, avatar, avatar_url, role, is_active,
+                   is_verified, terms_accepted_at, terms_version, privacy_version,
+                   is_vip, subscription_tier, vip_expires_at, vip_package_id,
+                   vip_allowed_subjects, created_at`,
         [
           username,
           email,
@@ -230,21 +253,27 @@ class User {
           picture,
           facebookId,
           picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=1877F2&color=fff`,
+          termsVersion,
+          privacyVersion,
         ]
       );
 
-      await db.query("INSERT INTO user_stats (user_id) VALUES ($1)", [
+      await client.query("INSERT INTO user_stats (user_id) VALUES ($1)", [
         result.rows[0].id,
       ]);
 
+      await client.query("COMMIT");
       return result.rows[0];
     } catch (error) {
+      await client.query("ROLLBACK").catch(() => {});
       if (error.code === "23505") {
         if (error.constraint === "users_email_key") {
           throw new Error("Email already exists");
         }
       }
       throw error;
+    } finally {
+      client.release();
     }
   }
 
@@ -254,16 +283,30 @@ class User {
    * @returns {Object} Created user
    */
   static async create(userData) {
-    const { username, email, password, full_name, role = "student" } = userData;
+    const {
+      username,
+      email,
+      password,
+      full_name,
+      role = "student",
+      termsVersion,
+      privacyVersion,
+    } = userData;
+    const hashedPassword = await bcrypt.hash(password, 12);
+    const client = await db.pool.connect();
 
     try {
-      // Hash password with stronger rounds
-      const hashedPassword = await bcrypt.hash(password, 12);
-
-      const result = await db.query(
-        `INSERT INTO users (username, email, password, full_name, role, avatar)
-         VALUES ($1, $2, $3, $4, $5, $6)
-         RETURNING id, username, email, full_name, avatar, role, is_active, is_vip, subscription_tier, vip_expires_at, vip_package_id, vip_allowed_subjects, created_at`,
+      await client.query("BEGIN");
+      const result = await client.query(
+        `INSERT INTO users (
+           username, email, password, full_name, role, avatar,
+           terms_accepted_at, terms_version, privacy_version
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7, $8)
+         RETURNING id, username, email, full_name, avatar, role, is_active,
+                   is_verified, terms_accepted_at, terms_version, privacy_version,
+                   is_vip, subscription_tier, vip_expires_at, vip_package_id,
+                   vip_allowed_subjects, created_at`,
         [
           username,
           email,
@@ -271,21 +314,26 @@ class User {
           full_name || username,
           role,
           `https://ui-avatars.com/api/?name=${encodeURIComponent(username)}&background=4F46E5&color=fff`,
+          termsVersion,
+          privacyVersion,
         ]
       );
 
-      // Create user stats entry
-      await db.query("INSERT INTO user_stats (user_id) VALUES ($1)", [
+      await client.query("INSERT INTO user_stats (user_id) VALUES ($1)", [
         result.rows[0].id,
       ]);
 
+      await client.query("COMMIT");
       return result.rows[0];
     } catch (error) {
+      await client.query("ROLLBACK").catch(() => {});
       if (error.code === "23505") {
         if (error.constraint === "users_email_key") throw new Error("Email already exists");
         if (error.constraint === "users_username_key") throw new Error("Username already exists");
       }
       throw error;
+    } finally {
+      client.release();
     }
   }
 
@@ -323,10 +371,12 @@ class User {
     try {
       const result = await db.query(
         `UPDATE users
-         SET facebook_id = $1, oauth_provider = 'facebook', email_verified = true,
+         SET facebook_id = $1, oauth_provider = 'facebook', email_verified = true, is_verified = true,
              avatar_url = COALESCE(avatar_url, $2), updated_at = NOW()
          WHERE id = $3
-         RETURNING id, username, email, full_name, avatar, avatar_url, role, is_active, is_vip, subscription_tier, vip_expires_at, vip_package_id, vip_allowed_subjects, created_at`,
+         RETURNING id, username, email, full_name, avatar, avatar_url, role, is_active,
+                   is_verified, is_vip, subscription_tier, vip_expires_at,
+                   vip_package_id, vip_allowed_subjects, created_at`,
         [facebookId, avatarUrl, userId]
       );
       return result.rows[0];

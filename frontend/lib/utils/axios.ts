@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { getPreviousSessionToken, rememberPreviousSession } from './previousSession';
+import { forgetPreviousSession, getPreviousSessionToken, rememberPreviousSession } from './previousSession';
 import { getDeviceIdentity } from './deviceIdentity';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
@@ -17,9 +17,13 @@ export function clearTokenCache() {
   tokenLastChecked = 0;
 }
 
-export function clearStoredAuth() {
+export function clearStoredAuth(preservePreviousSession = false) {
   if (typeof window !== 'undefined') {
-    rememberPreviousSession(sessionStorage.getItem('token'));
+    if (preservePreviousSession) {
+      rememberPreviousSession(sessionStorage.getItem('token'));
+    } else {
+      forgetPreviousSession();
+    }
     sessionStorage.removeItem('token');
     sessionStorage.removeItem('refreshToken');
     sessionStorage.removeItem('user');
@@ -30,7 +34,9 @@ export function clearStoredAuth() {
 
 function redirectToLogin() {
   if (typeof window === 'undefined') return;
-  clearStoredAuth();
+  // A revoked or expired token is no longer an authorization credential, but
+  // its signed session identity lets this browser reclaim its device slot.
+  clearStoredAuth(true);
   if (window.location.pathname !== '/login') {
     window.location.href = '/login';
   }

@@ -26,7 +26,6 @@ import {
 } from '@/lib/api/auth';
 import { useAuthStore } from '@/lib/store/authStore';
 import { getDefaultAdminRoute } from '@/lib/utils/permissions';
-import { sanitizeInput } from '@/lib/utils/security';
 import { parseAuthFormError } from '@/lib/utils/authFormErrors';
 import { useLanguage } from '@/context/LanguageContext';
 import axiosInstance from '@/lib/utils/axios';
@@ -37,7 +36,14 @@ import { FiAlertCircle, FiArrowRight, FiLock, FiMessageCircle, FiMonitor, FiPhon
 
 export default function LoginForm() {
   const router = useRouter();
-  const { login: setAuth, logout: clearAuth, setLoading, isAuthenticated } = useAuthStore();
+  const {
+    login: setAuth,
+    logout: clearAuth,
+    setLoading,
+    isAuthenticated,
+    rememberMe,
+    setRememberMe,
+  } = useAuthStore();
   const { t, format } = useLanguage();
 
   const [formData, setFormData] = useState({
@@ -51,6 +57,7 @@ export default function LoginForm() {
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [termsModalType, setTermsModalType] = useState<'terms' | 'privacy'>('terms');
   const [unverifiedEmail, setUnverifiedEmail] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
   const [verificationResending, setVerificationResending] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState('');
   const [turnstileResetKey, setTurnstileResetKey] = useState(0);
@@ -121,6 +128,17 @@ export default function LoginForm() {
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
+    if (params.get('verification') === 'sent') {
+      const registeredEmail = (params.get('email') || '').trim();
+      if (registeredEmail) {
+        setFormData(prev => ({ ...prev, email: registeredEmail }));
+      }
+      setSuccessMessage('Đăng ký thành công. Vui lòng kiểm tra email để xác minh tài khoản trước khi đăng nhập.');
+      params.delete('verification');
+      params.delete('email');
+      const query = params.toString();
+      window.history.replaceState(null, '', `${window.location.pathname}${query ? `?${query}` : ''}`);
+    }
     const token = params.get('deviceApproval') || '';
     if (token) setDeviceApprovalToken(token);
     const requestToken = params.get('deviceRequest') || '';
@@ -138,8 +156,7 @@ export default function LoginForm() {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    const sanitized = sanitizeInput(value);
-    setFormData((prev) => ({ ...prev, [name]: sanitized }));
+    setFormData((prev) => ({ ...prev, [name]: value }));
     if (deviceLimitNotice) setDeviceLimitNotice(null);
     if (errors.general) setErrors((prev) => ({ ...prev, general: undefined }));
     if (errors[name as keyof typeof errors]) {
@@ -207,7 +224,7 @@ export default function LoginForm() {
       const me = await getCurrentUser();
       if (me?.success && me?.data?.user) {
         effectiveUser = me.data.user;
-        setAuth(effectiveUser, token, refreshToken);
+        setAuth(effectiveUser, me.data.token || token, refreshToken);
       }
     } catch {
       // Keep fallback
@@ -319,9 +336,14 @@ export default function LoginForm() {
     setLoading(true);
     setErrors({});
     setUnverifiedEmail('');
+    setSuccessMessage('');
 
     try {
-      const response = await login({ ...formData, turnstileToken });
+      const response = await login({
+        email: formData.email.trim(),
+        password: formData.password,
+        turnstileToken,
+      });
       if (response.success) {
         if (await startAdminMfaFlow(response)) {
           setIsSubmitting(false);
@@ -344,7 +366,11 @@ export default function LoginForm() {
         }
 
         // ── Direct login (no OTP) ─────────────────────────────────────────
-        await completeAuthData(response.data);
+        if (!await completeAuthData(response.data)) {
+          setErrors({ general: 'Máy chủ không trả về phiên đăng nhập hợp lệ. Vui lòng thử lại.' });
+        }
+      } else {
+        setErrors({ general: response.message || t('auth.loginFailed') });
       }
     } catch (error: any) {
       if (error.response?.data?.code === 'DEVICE_LIMIT_LOCKED') {
@@ -431,7 +457,8 @@ export default function LoginForm() {
     setVerificationResending(true);
     try {
       const response = await resendVerificationEmail(unverifiedEmail, turnstileToken);
-      setErrors({ general: response.message });
+      setErrors({});
+      setSuccessMessage(response.message);
       setUnverifiedEmail('');
     } catch (error: any) {
       setErrors({ general: error.response?.data?.message || 'Chưa thể gửi lại email xác minh.' });
@@ -453,7 +480,9 @@ export default function LoginForm() {
       if (response.success && await startAdminMfaFlow(response)) {
         return;
       }
-      if (response.success) await completeAuthData(response.data);
+      if (response.success && !await completeAuthData(response.data)) {
+        setErrors({ general: 'Máy chủ không trả về phiên đăng nhập Google hợp lệ. Vui lòng thử lại.' });
+      }
     } catch (error: any) {
       if (error.response?.data?.code === 'DEVICE_LIMIT_LOCKED') {
         const data = error.response.data.data;
@@ -1117,6 +1146,16 @@ export default function LoginForm() {
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-5">
+        {successMessage && (
+          <div role="status" aria-live="polite" className="flex items-start gap-3 rounded-2xl border-2 border-emerald-400 bg-emerald-50 px-4 py-3.5 text-emerald-900 shadow-sm">
+            <FiShield className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
+            <div>
+              <p className="text-sm font-black">Thao tác thành công</p>
+              <p className="mt-0.5 text-sm font-semibold leading-relaxed">{successMessage}</p>
+            </div>
+          </div>
+        )}
+
         {deviceLimitNotice ? (
           <div className="rounded-2xl border border-rose-200 bg-rose-50/95 p-4 shadow-sm dark:border-rose-900/60 dark:bg-rose-950/40">
             <div className="flex items-start gap-3">
@@ -1221,7 +1260,12 @@ export default function LoginForm() {
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <label className="flex items-center">
-            <input type="checkbox" className="h-4 w-4 rounded border-[#d8bca0] text-[#c1121f] focus:ring-[#c1121f]" />
+            <input
+              type="checkbox"
+              checked={rememberMe}
+              onChange={(event) => setRememberMe(event.target.checked)}
+              className="h-4 w-4 rounded border-[#d8bca0] text-[#c1121f] focus:ring-[#c1121f]"
+            />
             <span className="ml-2 text-sm font-bold text-[#40352e]">{t('auth.remember')}</span>
           </label>
           <Link href="/forgot-password" className="text-sm font-semibold text-[#bd111c] hover:text-[#8d0d14]">{t('auth.forgot')}</Link>

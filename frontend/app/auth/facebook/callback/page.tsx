@@ -56,15 +56,16 @@ export default function FacebookCallbackPage() {
       return;
     }
 
-    setTokens(payload.token, payload.refreshToken);
+    const refreshToken = payload.refreshToken;
+    setTokens(payload.token, refreshToken);
     setLoading(true);
 
     getCurrentUser()
       .then((response) => {
         if (response?.success && response?.data?.user) {
           setUser(response.data.user);
-          if ((response.data as any).token) {
-            setTokens((response.data as any).token, payload.refreshToken as string);
+          if (response.data.token) {
+            setTokens(response.data.token, refreshToken);
           }
           router.push(getDefaultAdminRoute(response.data.user));
           return;
