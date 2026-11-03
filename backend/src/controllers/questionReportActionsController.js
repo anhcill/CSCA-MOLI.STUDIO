@@ -33,6 +33,8 @@ const QuestionReportActions = {
         'missing_data', 'duplicate_question', 'answer_mismatch', 'other',
       ];
       const type = validTypes.includes(report_type) ? report_type : 'other';
+      const highPriorityTypes = new Set(['wrong_answer', 'formula_error', 'answer_mismatch', 'missing_data']);
+      const initialSeverity = highPriorityTypes.has(type) ? 'high' : 'medium';
 
       // Check question exists
       const qCheck = await pool.query(
@@ -58,10 +60,10 @@ const QuestionReportActions = {
       }
 
       const result = await pool.query(`
-        INSERT INTO question_reports (question_id, exam_id, reporter_id, report_type, description)
-        VALUES ($1, $2, $3, $4, $5)
+        INSERT INTO question_reports (question_id, exam_id, reporter_id, report_type, description, severity)
+        VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING *
-      `, [question_id, exam_id, req.user.id, type, description?.trim() || null]);
+      `, [question_id, exam_id, req.user.id, type, String(description || '').trim().slice(0, 4000) || null, initialSeverity]);
 
       // Count total reports for this question
       const countResult = await pool.query(
@@ -69,6 +71,15 @@ const QuestionReportActions = {
         [question_id]
       );
       const reportCount = countResult.rows[0].count;
+      if (reportCount >= 5) {
+        await pool.query(
+          `UPDATE question_reports
+           SET severity = 'critical', updated_at = NOW()
+           WHERE question_id = $1 AND status IN ('open', 'reviewing')`,
+          [question_id],
+        );
+        result.rows[0].severity = 'critical';
+      }
 
       // Notify admins for every new report. The duplicate guard above keeps one
       // user from flooding the same question while the report is still open.
@@ -80,13 +91,11 @@ const QuestionReportActions = {
       const reporterName = reporter.full_name || reporter.email || `User #${req.user.id}`;
       const questionNumber = qCheck.rows[0].question_number || question_id;
       const examTitle = qCheck.rows[0].exam_title || `Đề #${exam_id}`;
-      const highPriorityTypes = new Set(['wrong_answer', 'formula_error', 'answer_mismatch', 'missing_data']);
-
       await AuditLog.notify({
         type: 'question_report',
         severity: reportCount >= 5 ? 'critical' : highPriorityTypes.has(type) ? 'high' : 'medium',
         title: `${reporterName} báo lỗi câu #${questionNumber}`,
-        message: `${examTitle} · ${REPORT_TYPE_LABELS[type] || type}${description?.trim() ? ` · ${description.trim()}` : ''}`,
+        message: `${examTitle} · ${REPORT_TYPE_LABELS[type] || type}${String(description || '').trim() ? ` · ${String(description).trim().slice(0, 1000)}` : ''}`,
         entityType: 'question_report',
         entityId: result.rows[0].id,
         userId: req.user.id,
@@ -294,16 +303,20 @@ const QuestionReportActions = {
       const { id } = req.params;
       const { reason } = req.body;
 
+      const current = await pool.query(
+        'SELECT question_id FROM question_reports WHERE id = $1',
+        [id],
+      );
+      if (!current.rows[0]) return res.status(404).json({ success: false, message: 'Report not found' });
+
       const result = await pool.query(`
         UPDATE question_reports
-        SET status = 'fixed', resolved_by = $2, resolved_at = NOW(),
-            admin_note = COALESCE(admin_note || E'\\n', '') || $3,
+        SET status = 'fixed', resolved_by = $1, resolved_at = NOW(),
+            admin_note = COALESCE(admin_note || E'\\n', '') || $2,
             updated_at = NOW()
-        WHERE id = $1
+        WHERE question_id = $3 AND status IN ('open', 'reviewing', 'escalated')
         RETURNING *
-      `, [id, req.user.id, `[FIXED] ${new Date().toISOString()} ${req.user.email}: ${reason || 'Đã sửa'}`]);
-
-      if (!result.rows[0]) return res.status(404).json({ success: false, message: 'Report not found' });
+      `, [req.user.id, `[FIXED] ${new Date().toISOString()} ${req.user.email}: ${String(reason || 'Đã sửa').slice(0, 2000)}`, current.rows[0].question_id]);
 
       const meta = AuditLog.reqMeta(req);
       await AuditLog.log({
@@ -311,7 +324,7 @@ const QuestionReportActions = {
         entityId: parseInt(id), afterData: { status: 'fixed' }, reason, ...meta,
       });
 
-      res.json({ success: true, data: result.rows[0] });
+      res.json({ success: true, data: result.rows[0], resolvedCount: result.rowCount });
     } catch (error) {
       console.error('[RiskCenter] resolveReport error:', error);
       res.status(500).json({ success: false, message: 'Server error' });

@@ -144,6 +144,7 @@ const ROLE_OPTIONS: AdminRoleOption[] = [
   { code: 'exam_admin', label: 'Exam Admin', color: 'purple' },
   { code: 'content_admin', label: 'Content Admin', color: 'green' },
   { code: 'forum_admin', label: 'Forum Admin', color: 'orange' },
+  { code: 'report_admin', label: 'Report Admin', color: 'rose' },
   { code: 'roadmap_admin', label: 'Roadmap Admin', color: 'cyan' },
 ];
 
@@ -275,7 +276,8 @@ export default function AdminUsersPage() {
     const colorMap: Record<string, string> = {
       red: 'bg-red-100 text-red-700', blue: 'bg-blue-100 text-blue-700',
       purple: 'bg-purple-100 text-purple-700', green: 'bg-green-100 text-green-700',
-      orange: 'bg-orange-100 text-orange-700', cyan: 'bg-cyan-100 text-cyan-700',
+      orange: 'bg-orange-100 text-orange-700', rose: 'bg-rose-100 text-rose-700',
+      cyan: 'bg-cyan-100 text-cyan-700',
     };
     return c?.color ? (colorMap[c.color] || 'bg-gray-100 text-gray-600') : 'bg-gray-100 text-gray-600';
   };

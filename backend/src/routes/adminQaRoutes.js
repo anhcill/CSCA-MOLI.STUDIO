@@ -3,8 +3,7 @@ const router = express.Router();
 const adminQaController = require("../controllers/adminQaController");
 const { authenticate, authorizePermission } = require("../middleware/authMiddleware");
 
-// Yêu cầu quyền admin (giáo vụ, nội dung, system admin...)
-router.use(authenticate, authorizePermission('admin.dashboard.view'));
+router.use(authenticate, authorizePermission('reports.manage'));
 
 router.get("/tickets", adminQaController.getAllTickets);
 router.get("/tickets/:id", adminQaController.getTicketDetail);

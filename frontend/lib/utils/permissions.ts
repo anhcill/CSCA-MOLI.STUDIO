@@ -146,6 +146,7 @@ const ADMIN_PANEL_PERMISSION_PRIORITY: Array<{ permission: string; route: string
   { permission: 'exams.manage', route: '/admin/exams' },
   { permission: 'courses.manage_assigned', route: '/admin/teaching' },
   { permission: 'content.manage', route: '/admin/materials' },
+  { permission: 'reports.view', route: '/admin/report-center' },
   { permission: 'forum.manage', route: '/admin/posts' },
   { permission: 'roadmap.manage', route: '/admin/roadmap' },
   { permission: 'system.manage', route: '/admin' },
@@ -161,6 +162,7 @@ const ADMIN_ROLE_ROUTE_PRIORITY: Array<{ role: string; route: string }> = [
   { role: 'exam_admin', route: '/admin/exams' },
   { role: 'course_teacher', route: '/admin/teaching' },
   { role: 'content_admin', route: '/admin/materials' },
+  { role: 'report_admin', route: '/admin/report-center' },
   { role: 'forum_admin', route: '/admin/posts' },
   { role: 'roadmap_admin', route: '/admin/roadmap' },
 ];

@@ -596,6 +596,8 @@ async function runOptimizations() {
         ('roadmap.manage', 'Roadmap Management', 'Quản trị lộ trình học tập'),
         ('exams.manage', 'Exam Management', 'Quản lý đề thi và lịch thi phòng thi'),
         ('content.manage', 'Content Management', 'Quản lý tài liệu, từ vựng, media admin'),
+        ('reports.view', 'Report Center View', 'Xem danh sách và chi tiết báo cáo, góp ý, hỗ trợ'),
+        ('reports.manage', 'Report Center Manage', 'Phân công và xử lý báo cáo, góp ý, hỗ trợ'),
         ('risk_center.view', 'Risk Center View', 'Xem Risk Center tổng quan'),
         ('risk_center.manage', 'Risk Center Manage', 'Thao tác xử lý case trong Risk Center')
       ON CONFLICT (code) DO UPDATE
@@ -612,6 +614,7 @@ async function runOptimizations() {
         ('roadmap_admin', 'Roadmap Admin', 'Quản trị lộ trình', TRUE),
         ('exam_admin', 'Exam Admin', 'Quản trị đề thi và phòng thi', TRUE),
         ('content_admin', 'Content Admin', 'Quản trị nội dung', TRUE),
+        ('report_admin', 'Report Admin', 'Quản trị báo cáo, góp ý và hỗ trợ người dùng', TRUE),
         ('student', 'Student', 'Người dùng học tập mặc định', TRUE)
       ON CONFLICT (code) DO UPDATE
       SET name = EXCLUDED.name,
@@ -631,6 +634,8 @@ async function runOptimizations() {
         "roadmap.manage",
         "exams.manage",
         "content.manage",
+        "reports.view",
+        "reports.manage",
         "risk_center.view",
         "risk_center.manage",
       ],
@@ -639,6 +644,7 @@ async function runOptimizations() {
       roadmap_admin: ["admin.dashboard.view", "roadmap.manage"],
       exam_admin: ["admin.dashboard.view", "exams.manage"],
       content_admin: ["admin.dashboard.view", "content.manage"],
+      report_admin: ["admin.dashboard.view", "reports.view", "reports.manage"],
       student: [],
     };
 
@@ -665,7 +671,7 @@ async function runOptimizations() {
         SELECT 1 FROM user_roles ur2
         JOIN roles r2 ON r2.id = ur2.role_id
         WHERE ur2.user_id = u.id
-          AND r2.code = ANY(ARRAY['super_admin','user_admin','exam_admin','content_admin','forum_admin','roadmap_admin'])
+          AND r2.code = ANY(ARRAY['super_admin','user_admin','exam_admin','content_admin','forum_admin','roadmap_admin','report_admin'])
       )
       ON CONFLICT (user_id, role_id) DO NOTHING
     `);
@@ -1170,6 +1176,8 @@ async function runOptimizations() {
       "071_remove_trailing_empty_question_markers.sql",
       "072_paid_device_policy.sql",
       "073_topic_practice_exam_classification.sql",
+      "074_admin_report_center.sql",
+      "075_report_admin_rbac.sql",
       "20260714_create_seo_blog_posts.sql",
       "20260714_create_seo_blog_ideas.sql",
       "20260714_remove_seo_blog_bold_markers.sql",

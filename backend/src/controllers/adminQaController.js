@@ -81,10 +81,11 @@ const adminQaController = {
           }).catch((err) => console.error("QA reply email error:", err.message));
 
           await pool.query(
-            `INSERT INTO notifications (user_id, type, title, message, link, is_read)
-             VALUES ($1, 'qa_reply', $2, $3, $4, false)`,
+            `INSERT INTO notifications (recipient_id, actor_id, type, title, message, link, is_read)
+             VALUES ($1, $2, 'qa_reply', $3, $4, $5, false)`,
             [
               owner.id,
+              req.user.id,
               feedback ? "Admin đã phản hồi góp ý của bạn" : "Giảng viên đã trả lời câu hỏi của bạn",
               `${advisorName}: "${preview.substring(0, 100)}${preview.length > 100 ? "..." : ""}"`,
               feedback ? `/gop-y/${id}` : `/hoi-dap/${id}`,
@@ -108,6 +109,9 @@ const adminQaController = {
         return res.status(400).json({ success: false, message: "Trạng thái không hợp lệ." });
       }
       const updated = await Ticket.updateStatus(id, status);
+      if (!updated) {
+        return res.status(404).json({ success: false, message: "Ticket không tồn tại." });
+      }
       res.json({ success: true, data: updated });
     } catch (error) {
       console.error("Change status:", error);
@@ -118,7 +122,7 @@ const adminQaController = {
   async deleteTicket(req, res) {
     try {
       const { id } = req.params;
-      const deleted = await Ticket.deleteTicket(id);
+      const deleted = await Ticket.deleteTicket(id, req.user.id);
       if (!deleted) {
         return res.status(404).json({ success: false, message: "Ticket không tồn tại." });
       }

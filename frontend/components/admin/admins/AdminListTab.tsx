@@ -13,6 +13,7 @@ const ROLE_OPTIONS = [
   { code: 'exam_admin', label: 'Exam Admin', color: 'bg-purple-100 text-purple-700 border-purple-200', desc: 'Quản lý kho đề thi, số liệu thi' },
   { code: 'content_admin', label: 'Content Admin', color: 'bg-green-100 text-green-700 border-green-200', desc: 'Sửa nội dung học, từ vựng' },
   { code: 'forum_admin', label: 'Forum Admin', color: 'bg-orange-100 text-orange-700 border-orange-200', desc: 'Kiểm duyệt bài viết diễn đàn' },
+  { code: 'report_admin', label: 'Report Admin', color: 'bg-rose-100 text-rose-700 border-rose-200', desc: 'Tiếp nhận và xử lý báo cáo người dùng' },
   { code: 'roadmap_admin', label: 'Roadmap Admin', color: 'bg-cyan-100 text-cyan-700 border-cyan-200', desc: 'Quản lý các trạng thái lộ trình' },
 ];
 
@@ -32,7 +33,7 @@ const ACCESS_OPTIONS: AdminAccessOption[] = [
     color: 'bg-red-100 text-red-700 border-red-200',
     desc: 'Vào và chỉnh sửa toàn bộ khu vực admin, bao gồm phân quyền admin khác.',
     pages: ['Tất cả trang admin'],
-    permissions: ['admin.super', 'system.manage', 'users.manage', 'exams.manage', 'content.manage', 'forum.manage', 'forum.post_as_admin', 'roadmap.manage', 'admin.dashboard.view'],
+    permissions: ['admin.super', 'system.manage', 'users.manage', 'exams.manage', 'content.manage', 'forum.manage', 'forum.post_as_admin', 'reports.view', 'reports.manage', 'roadmap.manage', 'admin.dashboard.view'],
   },
   {
     code: 'user_admin',
@@ -60,11 +61,19 @@ const ACCESS_OPTIONS: AdminAccessOption[] = [
   },
   {
     code: 'forum_admin',
-    label: 'Cộng đồng, báo cáo',
+    label: 'Cộng đồng',
     color: 'bg-orange-100 text-orange-700 border-orange-200',
-    desc: 'Kiểm duyệt forum, báo cáo, hỏi đáp VIP và đăng bài dưới danh nghĩa admin.',
-    pages: ['Forum', 'Báo cáo', 'Hỏi-Đáp VIP'],
+    desc: 'Kiểm duyệt forum và đăng bài dưới danh nghĩa admin.',
+    pages: ['Forum'],
     permissions: ['forum.manage', 'forum.post_as_admin', 'admin.dashboard.view'],
+  },
+  {
+    code: 'report_admin',
+    label: 'Quản lý báo cáo',
+    color: 'bg-rose-100 text-rose-700 border-rose-200',
+    desc: 'Tiếp nhận, phân công và xử lý báo cáo người dùng, lỗi đề, góp ý, hỏi đáp và liên hệ.',
+    pages: ['Trung tâm báo cáo', 'Báo cáo người dùng', 'Báo lỗi đề', 'Góp ý & hỗ trợ', 'Hỏi-Đáp VIP', 'Liên hệ'],
+    permissions: ['reports.view', 'reports.manage', 'admin.dashboard.view'],
   },
   {
     code: 'roadmap_admin',
@@ -434,6 +443,8 @@ export default function AdminListTab({ onViewLog }: Props) {
                       'exams.manage': { label: 'Đề thi & Câu hỏi', desc: 'Quản lý đề, câu hỏi, điểm thi' },
                       'content.manage': { label: 'Từ vựng & Tài liệu', desc: 'Sửa đổi từ vựng, ngữ pháp, tài liệu' },
                       'forum.manage': { label: 'Diễn đàn & Hỏi đáp', desc: 'Kiểm duyệt bài viết, bình luận, QA' },
+                      'reports.view': { label: 'Trung tâm báo cáo', desc: 'Xem báo cáo, góp ý, hỗ trợ và liên hệ' },
+                      'reports.manage': { label: 'Xử lý báo cáo', desc: 'Phân công, phản hồi và đóng các báo cáo' },
                       'roadmap.manage': { label: 'Lộ trình học', desc: 'Quản lý các mốc lộ trình, bài học' },
                       'admin.dashboard.view': { label: 'Trang chủ Admin', desc: 'Xem thống kê trên Dashboard' }
                     };

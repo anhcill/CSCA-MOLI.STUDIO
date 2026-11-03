@@ -1,6 +1,7 @@
 const express = require('express');
 const rateLimit = require('express-rate-limit');
 const emailService = require('../services/emailService');
+const db = require('../config/database');
 
 const router = express.Router();
 
@@ -45,16 +46,43 @@ router.post('/', contactLimiter, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Email không hợp lệ.' });
     }
 
-    await emailService.sendContactMessage({
-      to: CONTACT_RECIPIENT,
-      name,
-      email,
-      phone,
-      subject,
-      message,
-    });
+    const submission = await db.query(
+      `INSERT INTO contact_submissions (name, email, phone, subject, message)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id`,
+      [name, email, phone || null, subject, message],
+    );
 
-    res.json({ success: true, message: 'Đã gửi tin nhắn liên hệ.' });
+    try {
+      await emailService.sendContactMessage({
+        to: CONTACT_RECIPIENT,
+        name,
+        email,
+        phone,
+        subject,
+        message,
+      });
+      await db.query(
+        `UPDATE contact_submissions
+         SET email_status = 'sent', updated_at = NOW()
+         WHERE id = $1`,
+        [submission.rows[0].id],
+      );
+    } catch (emailError) {
+      await db.query(
+        `UPDATE contact_submissions
+         SET email_status = 'failed', email_error = $2, updated_at = NOW()
+         WHERE id = $1`,
+        [submission.rows[0].id, String(emailError.message || emailError).slice(0, 2000)],
+      );
+      console.error('Contact form email delivery error:', emailError?.response?.data || emailError.message);
+    }
+
+    res.json({
+      success: true,
+      message: 'Đã ghi nhận tin nhắn liên hệ.',
+      data: { submissionId: submission.rows[0].id },
+    });
   } catch (error) {
     console.error('Contact form email error:', error?.response?.data || error.message);
     res.status(500).json({

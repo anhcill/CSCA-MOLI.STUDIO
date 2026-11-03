@@ -243,6 +243,7 @@ app.use("/api/admin/forum", require("./routes/adminForumRoutes"));
 app.use("/api/admin/roadmap", require("./routes/adminRoadmapRoutes"));
 app.use("/api/admin/vip", require("./routes/adminVipRoutes"));
 app.use("/api/admin/qa", require("./routes/adminQaRoutes")); // Admin QA
+app.use("/api/admin/report-center", require("./routes/adminReportCenterRoutes"));
 app.use("/api/admin/risk-center", require("./routes/adminRiskCenterRoutes")); // Risk Center
 app.use("/api/materials", require("./routes/materials"));
 app.use("/api/vocabulary", require("./routes/vocabulary"));

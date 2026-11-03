@@ -52,7 +52,7 @@ const Ticket = {
       SELECT t.*,
         (SELECT COUNT(*) FROM support_replies WHERE ticket_id = t.id) as reply_count
       FROM support_tickets t
-      WHERE user_id = $1
+      WHERE user_id = $1 AND t.deleted_at IS NULL
       ${Array.isArray(categories) && categories.length > 0 ? "AND category = ANY($2)" : ""}
       ORDER BY updated_at DESC, created_at DESC
     `;
@@ -68,6 +68,7 @@ const Ticket = {
       FROM support_tickets t
       JOIN users u ON t.user_id = u.id
       WHERE t.id = $1
+        AND t.deleted_at IS NULL
     `;
     const params = [ticketId];
     if (!isAdmin) {
@@ -133,6 +134,7 @@ const Ticket = {
       FROM support_tickets t
       JOIN users u ON t.user_id = u.id
     `;
+    conditions.push(`t.deleted_at IS NULL`);
     if (statusFilter !== 'all') {
       params.push(statusFilter);
       conditions.push(`t.status = $${params.length}`);
@@ -149,11 +151,13 @@ const Ticket = {
     return result.rows;
   },
 
-  async deleteTicket(ticketId) {
-    // support_replies will be auto-deleted via ON DELETE CASCADE
+  async deleteTicket(ticketId, adminId) {
     const result = await pool.query(
-      `DELETE FROM support_tickets WHERE id = $1 RETURNING id`,
-      [ticketId]
+      `UPDATE support_tickets
+       SET deleted_at = NOW(), deleted_by = $2, updated_at = NOW()
+       WHERE id = $1 AND deleted_at IS NULL
+       RETURNING id`,
+      [ticketId, adminId]
     );
     return result.rows[0];
   }

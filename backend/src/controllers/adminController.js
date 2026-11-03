@@ -11,6 +11,7 @@ const ADMIN_ROLE_CODES = [
     'roadmap_admin',
     'exam_admin',
     'content_admin',
+    'report_admin',
 ];
 
 const ROLE_PRIORITY = [
@@ -18,6 +19,7 @@ const ROLE_PRIORITY = [
     'user_admin',
     'exam_admin',
     'content_admin',
+    'report_admin',
     'forum_admin',
     'roadmap_admin',
 ];

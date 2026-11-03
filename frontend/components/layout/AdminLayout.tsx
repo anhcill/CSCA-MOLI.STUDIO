@@ -1,14 +1,15 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import type { IconType } from 'react-icons';
 import { useAuthStore } from '@/lib/store/authStore';
 import { hasPermission, canAccessAdminPanel } from '@/lib/utils/permissions';
 import {
   FiActivity, FiUsers, FiFileText, FiBook, FiMessageSquare, FiFlag,
   FiImage, FiTag, FiMap, FiSettings, FiMonitor, FiShield, FiAlertTriangle,
-  FiX, FiChevronLeft, FiChevronRight, FiLogOut, FiHelpCircle, FiGift,
+  FiX, FiChevronLeft, FiChevronRight, FiLogOut, FiGift,
   FiBarChart2, FiAward, FiVideo, FiMail, FiDatabase, FiTarget, FiEye
 } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
@@ -22,7 +23,27 @@ interface AdminLayoutProps {
   description?: string;
 }
 
-const NAV_SECTIONS = [
+type AdminNavChild = {
+  label: string;
+  href: string;
+};
+
+type AdminNavItem = {
+  label: string;
+  icon: IconType;
+  href: string;
+  permission: string;
+  anyPermissions?: string[];
+  roles: string[];
+  children?: AdminNavChild[];
+};
+
+type AdminNavSection = {
+  label: string;
+  items: AdminNavItem[];
+};
+
+const NAV_SECTIONS: AdminNavSection[] = [
   {
     label: 'Quản lý',
     items: [
@@ -163,25 +184,19 @@ const NAV_SECTIONS = [
         roles: [],
       },
       {
-        label: 'Báo cáo',
+        label: 'Quản lý báo cáo',
         icon: FiFlag,
-        href: '/admin/reports',
-        permission: 'forum.manage',
+        href: '/admin/report-center?source=all',
+        permission: 'reports.view',
         roles: [],
-      },
-      {
-        label: 'Hỏi-Đáp VIP',
-        icon: FiHelpCircle,
-        href: '/admin/qa',
-        permission: 'admin.dashboard.view',
-        roles: [],
-      },
-      {
-        label: 'Góp ý người dùng',
-        icon: FiMessageSquare,
-        href: '/admin/feedback',
-        permission: 'admin.dashboard.view',
-        roles: [],
+        children: [
+          { label: 'Tất cả báo cáo', href: '/admin/report-center?source=all' },
+          { label: 'Người dùng & tin nhắn', href: '/admin/report-center?source=forum' },
+          { label: 'Báo lỗi đề', href: '/admin/report-center?source=question' },
+          { label: 'Góp ý & hỗ trợ', href: '/admin/report-center?source=feedback' },
+          { label: 'Hỏi-Đáp VIP', href: '/admin/report-center?source=qa' },
+          { label: 'Liên hệ', href: '/admin/report-center?source=contact' },
+        ],
       },
       {
         label: 'Lộ trình',
@@ -245,9 +260,11 @@ const NAV_SECTIONS = [
 export default function AdminLayout({ children, title, description }: AdminLayoutProps) {
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { user, isAuthenticated, logout } = useAuthStore();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [reportMenuOpen, setReportMenuOpen] = useState(pathname.startsWith('/admin/report-center'));
 
   useEffect(() => {
     setMounted(true);
@@ -258,12 +275,22 @@ export default function AdminLayout({ children, title, description }: AdminLayou
     }
   }, [isAuthenticated, user, router]);
 
+  useEffect(() => {
+    if (pathname.startsWith('/admin/report-center')) setReportMenuOpen(true);
+  }, [pathname]);
+
   const handleLogout = () => {
     logout();
     router.push('/');
   };
 
   const isActive = (href: string) => {
+    const [hrefPath, rawQuery] = href.split('?');
+    if (rawQuery) {
+      const expectedSource = new URLSearchParams(rawQuery).get('source');
+      const currentSource = searchParams.get('source') || 'all';
+      return pathname === hrefPath && expectedSource === currentSource;
+    }
     if (href === '/admin') return pathname === '/admin';
     if (href === '/admin/analytics') return pathname === href;
     return pathname.startsWith(href);
@@ -327,7 +354,50 @@ export default function AdminLayout({ children, title, description }: AdminLayou
               <div className="space-y-0.5">
                 {section.items.map(item => {
                   const Icon = item.icon;
-                  const active = isActive(item.href);
+                  const active = item.children
+                    ? pathname.startsWith('/admin/report-center')
+                    : isActive(item.href);
+                  if (item.children) {
+                    return (
+                      <div key={item.href}>
+                        <button
+                          type="button"
+                          onClick={() => setReportMenuOpen(open => !open)}
+                          aria-expanded={reportMenuOpen}
+                          className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all ${
+                            active
+                              ? 'bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-lg shadow-violet-500/20'
+                              : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                          }`}
+                        >
+                          <Icon size={16} className={active ? 'opacity-90' : ''} />
+                          <span className="flex-1 text-left">{item.label}</span>
+                          <FiChevronRight size={14} className={`transition-transform ${reportMenuOpen ? 'rotate-90' : ''}`} />
+                        </button>
+                        {reportMenuOpen && (
+                          <div className="ml-5 mt-1 space-y-0.5 border-l border-slate-700 pl-3">
+                            {item.children.map(child => {
+                              const childActive = isActive(child.href);
+                              return (
+                                <Link
+                                  key={child.href}
+                                  href={child.href}
+                                  onClick={() => setSidebarOpen(false)}
+                                  className={`block rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
+                                    childActive
+                                      ? 'bg-violet-500/20 text-violet-200'
+                                      : 'text-slate-500 hover:bg-slate-800 hover:text-slate-200'
+                                  }`}
+                                >
+                                  {child.label}
+                                </Link>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
                   return (
                     <Link key={item.href} href={item.href}
                       onClick={() => setSidebarOpen(false)}

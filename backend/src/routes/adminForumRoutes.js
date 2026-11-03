@@ -32,27 +32,27 @@ router.post(
 // ── Report Management ──────────────────────────────────────────────────────────
 
 router.get(
-  "/forum/reports",
+  "/reports",
   authorizePermission("forum.manage"),
   adminReportController.getReports,
 );
 router.get(
-  "/forum/reports/auto-blocks",
+  "/reports/auto-blocks",
   authorizePermission("forum.manage"),
   adminReportController.getAutoBlocks,
 );
 router.get(
-  "/forum/reports/:id",
+  "/reports/:id",
   authorizePermission("forum.manage"),
   adminReportController.getReportById,
 );
 router.put(
-  "/forum/reports/:id",
+  "/reports/:id",
   authorizePermission("forum.manage"),
   adminReportController.resolveReport,
 );
 router.post(
-  "/forum/reports/bulk",
+  "/reports/bulk",
   authorizePermission("forum.manage"),
   adminReportController.bulkResolve,
 );
