@@ -685,10 +685,6 @@ export default function TramDongLucPage() {
   }, [selectedCategory, filteredVideos.length, currentIndex]);
 
   const currentVideo = filteredVideos[currentIndex] || filteredVideos[0];
-  const nextVideo =
-    filteredVideos.length > 1
-      ? filteredVideos[(currentIndex + 1) % filteredVideos.length]
-      : null;
 
   // Fast-reveal skeleton: automatically dismiss overlay after 600ms even if TikTok iframe is still initializing scripts
   useEffect(() => {
@@ -1184,13 +1180,6 @@ export default function TramDongLucPage() {
         crossOrigin="anonymous"
       />
       <link rel="dns-prefetch" href="https://sf16-website-login.neutral.ttwstatic.com" />
-      {nextVideo && (
-        <link
-          rel="prefetch"
-          href={`https://www.tiktok.com/embed/v2/${nextVideo.id}`}
-          as="document"
-        />
-      )}
 
       {/* Toast Alert */}
       {toastMessage && (
@@ -1922,15 +1911,16 @@ export default function TramDongLucPage() {
                           </div>
                         </div>
 
-                        {/* TikTok Embed Player - exact 325px width */}
+                        {/* TikTok player loads directly from TikTok without proxying video through Railway. */}
                         {currentVideo && (
                           <iframe
                             key={currentVideo.id}
-                            src={`https://www.tiktok.com/embed/v2/${currentVideo.id}?autoplay=1`}
+                            src={`https://www.tiktok.com/player/v1/${currentVideo.id}?autoplay=1&loop=1&music_info=1&description=1`}
                             title={currentVideo.title}
                             onLoad={() => setIframeLoading(false)}
                             className="w-[325px] h-full border-none block"
                             scrolling="no"
+                            referrerPolicy="strict-origin-when-cross-origin"
                             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                             allowFullScreen
                           />
