@@ -1,11 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { FaGift, FaHeart, FaMagic, FaStar } from 'react-icons/fa';
 import { useAuthStore } from '@/lib/store/authStore';
 import { useDailyGift } from '@/hooks/useDailyGift';
-import GiftLetterModal from './GiftLetterModal';
 import DailyLetterModal from './DailyLetterModal';
 
 interface DailyGiftBoxProps {
@@ -18,28 +17,50 @@ const FLOATING_DECOR = [
   { Icon: FaMagic, className: 'left-7 -top-2 text-sky-300', delay: 1 },
 ];
 
+/**
+ * Kiểm tra xem hôm nay có phải là Thứ Hai (giờ Việt Nam - Asia/Ho_Chi_Minh) hay không
+ */
+function isMondayInVietnam(date = new Date()): boolean {
+  try {
+    const weekdayStr = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Ho_Chi_Minh',
+      weekday: 'short',
+    }).format(date);
+    return weekdayStr === 'Mon';
+  } catch {
+    return date.getDay() === 1;
+  }
+}
+
 export default function DailyGiftBox({ enabled = true }: DailyGiftBoxProps) {
   const { user, isAuthenticated } = useAuthStore();
   const [open, setOpen] = useState(false);
-  const dailyGift = useDailyGift(enabled && isAuthenticated);
   const displayName = user?.display_name || user?.full_name || user?.username || '';
 
-  // Check if today is the special "Thư Hôm Nay" day (e.g. 2026-07-31)
-  const isSpecialLetterDay = () => {
-    const today = new Date();
-    // 2026-07-31 or current system date check
+  // Chỉ gửi/hiển thị thư vào Thứ Hai đầu tuần (hoặc URL ?letter=true / ?demo=true để kiểm tra)
+  const isMonday = useMemo(() => isMondayInVietnam(), []);
+  const isDemo = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    const search = window.location.search || '';
     return (
-      today.getFullYear() === 2026 &&
-      today.getMonth() === 6 && // 0-indexed July = 6
-      today.getDate() === 31
+      search.includes('letter=true') ||
+      search.includes('demo=true') ||
+      search.includes('thu-dau-tuan')
     );
-  };
+  }, []);
 
-  const isSpecialDay = isSpecialLetterDay();
+  const shouldEnable = enabled && isAuthenticated && (isMonday || isDemo);
+  const dailyGift = useDailyGift(shouldEnable);
 
-  // On normal days, hide if already opened today or no letter.
-  // On special letter days, ALWAYS show the floating button so user can open & listen to music.
-  if (!isSpecialDay && (!dailyGift.shouldShow || !dailyGift.letter)) return null;
+  // Nếu không phải Thứ Hai và không phải chế độ Demo -> Ẩn hoàn toàn
+  if (!isMonday && !isDemo) {
+    return null;
+  }
+
+  // Nếu là Thứ Hai bình thường mà học viên đã mở thư hôm nay rồi -> ẩn để không vướng màn hình
+  if (!isDemo && dailyGift.openedToday && !open) {
+    return null;
+  }
 
   const handleAccept = async () => {
     await dailyGift.markOpened();
@@ -74,9 +95,9 @@ export default function DailyGiftBox({ enabled = true }: DailyGiftBoxProps) {
 
           <motion.button
             type="button"
-            aria-label="Mở thư quà học tập hôm nay"
+            aria-label="Mở thư động lực thứ Hai đầu tuần"
             onClick={() => setOpen(true)}
-            className="group absolute inset-x-0 bottom-0 mx-auto flex h-[52px] w-[52px] sm:h-[60px] sm:w-[60px] items-center justify-center rounded-2xl bg-gradient-to-br from-[#F45C7A] via-[#E84E6E] to-[#A96FD4] text-white shadow-[0_8px_25px_rgba(244,92,122,0.4)] outline-none transition-transform focus-visible:ring-2 focus-visible:ring-rose-400"
+            className="group absolute inset-x-0 bottom-0 mx-auto flex h-[52px] w-[52px] sm:h-[60px] sm:w-[60px] items-center justify-center rounded-2xl bg-gradient-to-br from-[#F45C7A] via-[#E84E6E] to-[#A96FD4] text-white shadow-[0_8px_25px_rgba(244,92,122,0.45)] outline-none transition-transform focus-visible:ring-2 focus-visible:ring-rose-400"
             animate={{
               y: [0, -4, 0],
               rotate: [0, -3, 3, -1, 0],
@@ -95,9 +116,9 @@ export default function DailyGiftBox({ enabled = true }: DailyGiftBoxProps) {
               <FaGift size={22} className="drop-shadow-xs transition-transform duration-300 group-hover:scale-110 sm:size-[24px]" />
             </div>
 
-            {/* Bottom Label Badge */}
-            <span className="absolute -bottom-2.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full border border-rose-100/80 bg-white/95 px-2.5 py-0.5 text-[10px] font-extrabold text-[#F45C7A] shadow-md sm:px-3 sm:text-[11px]">
-              {isSpecialDay ? 'Thư hôm nay 💌' : 'Quà hôm nay'}
+            {/* Bottom Label Badge - Crisp & High Contrast in Light & Dark Mode */}
+            <span className="absolute -bottom-2.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full border border-rose-200 dark:border-rose-800 bg-white dark:bg-slate-900 px-2.5 py-0.5 text-[10px] font-black text-rose-600 dark:text-rose-400 shadow-md sm:px-3 sm:text-[11px]">
+              Thư đầu tuần 💌
             </span>
           </motion.button>
         </div>
@@ -105,30 +126,17 @@ export default function DailyGiftBox({ enabled = true }: DailyGiftBoxProps) {
 
       <AnimatePresence>
         {open && (
-          isSpecialDay ? (
-            <DailyLetterModal
-              isOpen={open}
-              onClose={() => setOpen(false)}
-              userName={displayName || 'bạn'}
-              audioSrc="https://res.cloudinary.com/dvrgrmais/video/upload/v1785448506/moly-studio/audio/thu-hom-nay.mp3"
-              coverSrc="https://res.cloudinary.com/dvrgrmais/image/upload/v1785448822/moly-studio/images/thu-hom-nay-cover.jpg"
-              songTitle="id 072019"
-              artistName="W/n"
-            />
-          ) : (
-            dailyGift.letter && (
-              <GiftLetterModal
-                letter={dailyGift.letter}
-                studentName={displayName}
-                accepting={dailyGift.accepting}
-                onAccept={handleAccept}
-                onClose={() => setOpen(false)}
-              />
-            )
-          )
+          <DailyLetterModal
+            isOpen={open}
+            onClose={handleAccept}
+            userName={displayName || 'bạn'}
+            audioSrc="https://res.cloudinary.com/dvrgrmais/video/upload/v1785448506/moly-studio/audio/thu-hom-nay.mp3"
+            coverSrc="https://res.cloudinary.com/dvrgrmais/image/upload/v1785448822/moly-studio/images/thu-hom-nay-cover.jpg"
+            songTitle="id 072019"
+            artistName="W/n"
+          />
         )}
       </AnimatePresence>
     </>
   );
 }
-

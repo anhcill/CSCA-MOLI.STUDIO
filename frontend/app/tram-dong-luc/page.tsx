@@ -48,6 +48,7 @@ import {
   type StationVideoDTO,
   type StudyLeaderboardData,
 } from '@/lib/api/studyStation';
+import { RICH_MOTIVATION_QUOTES } from '@/lib/data/motivationQuotes';
 
 // ─── TYPES ───────────────────────────────────────────────────────────────────
 interface MotivationVideo {
@@ -130,14 +131,8 @@ const INITIAL_VIDEOS: MotivationVideo[] = [
   },
 ];
 
-// ─── MOTIVATION QUOTES ───────────────────────────────────────────────────────
-const MOTIVATION_QUOTES = [
-  { text: 'Con đường đi đến thành công không bao giờ trải hoa hồng cho kẻ lười biếng.', author: 'Lỗ Tấn' },
-  { text: 'Người ta có thể nghi ngờ những gì bạn nói, nhưng họ sẽ tin những gì bạn làm được.', author: 'Vô danh' },
-  { text: 'Mỗi giờ bạn tập trung hôm nay là một bước tiến gần hơn đến bức thư mời nhập học mơ ước.', author: 'Moly Study' },
-  { text: 'Đừng đợi có cảm hứng mới bắt tay vào học; hành động sẽ tạo ra cảm hứng.', author: 'Kỷ luật bản thân' },
-  { text: 'Chiến thắng vinh quang nhất là chiến thắng chính sự lười nhác của bản thân mình.', author: 'Khổng Tử' },
-];
+// ─── MOTIVATION QUOTES (EXPANDED DIVERSE BANK) ──────────────────────────────
+const MOTIVATION_QUOTES = RICH_MOTIVATION_QUOTES;
 
 // ─── CATEGORY LABELS ─────────────────────────────────────────────────────────
 const CATEGORIES = [
@@ -657,6 +652,10 @@ export default function TramDongLucPage() {
 
   // Quote State
   const [quoteIndex, setQuoteIndex] = useState<number>(0);
+
+  useEffect(() => {
+    setQuoteIndex(Math.floor(Math.random() * MOTIVATION_QUOTES.length));
+  }, []);
 
   // Iframe loading indicator with fast fallback so it never blocks the user
   const [iframeLoading, setIframeLoading] = useState<boolean>(true);

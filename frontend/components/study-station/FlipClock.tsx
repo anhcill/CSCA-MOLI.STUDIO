@@ -28,7 +28,7 @@ interface FlipClockProps {
   isCompact?: boolean;
   studyGoal?: string;
   onEditGoal?: () => void;
-  quote?: { text: string; author: string };
+  quote?: { text: string; author: string; originalChinese?: string };
   onNextQuote?: () => void;
 }
 
@@ -961,7 +961,12 @@ export default function FlipClock({
                       </button>
                     )}
                   </div>
-                  <blockquote className="text-xs font-semibold italic text-slate-200 line-clamp-2 leading-relaxed">
+                  {quote.originalChinese && (
+                    <p className="text-[11px] font-bold text-amber-300 not-italic mb-1 tracking-wide">
+                      {quote.originalChinese}
+                    </p>
+                  )}
+                  <blockquote className="text-xs sm:text-[13px] font-semibold italic text-slate-200 line-clamp-4 leading-relaxed">
                     "{quote.text}"
                   </blockquote>
                 </div>
