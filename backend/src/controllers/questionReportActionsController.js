@@ -1,6 +1,7 @@
 const { pool } = require('../config/database');
 const AuditLog = require('../utils/auditLog');
 const { regradeQuestionAnswers } = require('../services/examRegradeService');
+const questionReportWorkflow = require('../services/questionReportWorkflowService');
 
 const REPORT_TYPE_LABELS = {
   wrong_answer: 'Sai đáp án',
@@ -302,29 +303,9 @@ const QuestionReportActions = {
     try {
       const { id } = req.params;
       const { reason } = req.body;
-
-      const current = await pool.query(
-        'SELECT question_id FROM question_reports WHERE id = $1',
-        [id],
-      );
-      if (!current.rows[0]) return res.status(404).json({ success: false, message: 'Report not found' });
-
-      const result = await pool.query(`
-        UPDATE question_reports
-        SET status = 'fixed', resolved_by = $1, resolved_at = NOW(),
-            admin_note = COALESCE(admin_note || E'\\n', '') || $2,
-            updated_at = NOW()
-        WHERE question_id = $3 AND status IN ('open', 'reviewing', 'escalated')
-        RETURNING *
-      `, [req.user.id, `[FIXED] ${new Date().toISOString()} ${req.user.email}: ${String(reason || 'Đã sửa').slice(0, 2000)}`, current.rows[0].question_id]);
-
-      const meta = AuditLog.reqMeta(req);
-      await AuditLog.log({
-        adminId: req.user.id, action: 'resolve_question_report', entityType: 'question_report',
-        entityId: parseInt(id), afterData: { status: 'fixed' }, reason, ...meta,
-      });
-
-      res.json({ success: true, data: result.rows[0], resolvedCount: result.rowCount });
+      const result = await questionReportWorkflow.resolve({ id, user: req.user, reason, req });
+      if (!result) return res.status(404).json({ success: false, message: 'Report not found' });
+      res.json({ success: true, ...result });
     } catch (error) {
       console.error('[RiskCenter] resolveReport error:', error);
       res.status(500).json({ success: false, message: 'Server error' });
@@ -337,24 +318,9 @@ const QuestionReportActions = {
       const { id } = req.params;
       const { reason } = req.body;
 
-      const result = await pool.query(`
-        UPDATE question_reports
-        SET status = 'ignored', resolved_by = $2, resolved_at = NOW(),
-            admin_note = COALESCE(admin_note || E'\\n', '') || $3,
-            updated_at = NOW()
-        WHERE id = $1
-        RETURNING *
-      `, [id, req.user.id, `[IGNORED] ${new Date().toISOString()} ${req.user.email}: ${reason || 'Bỏ qua'}`]);
-
-      if (!result.rows[0]) return res.status(404).json({ success: false, message: 'Report not found' });
-
-      const meta = AuditLog.reqMeta(req);
-      await AuditLog.log({
-        adminId: req.user.id, action: 'ignore_question_report', entityType: 'question_report',
-        entityId: parseInt(id), afterData: { status: 'ignored' }, reason, ...meta,
-      });
-
-      res.json({ success: true, data: result.rows[0] });
+      const result = await questionReportWorkflow.ignore({ id, user: req.user, reason, req });
+      if (!result) return res.status(404).json({ success: false, message: 'Report not found' });
+      res.json({ success: true, ...result });
     } catch (error) {
       console.error('[RiskCenter] ignoreReport error:', error);
       res.status(500).json({ success: false, message: 'Server error' });

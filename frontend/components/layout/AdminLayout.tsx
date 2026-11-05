@@ -43,7 +43,27 @@ type AdminNavSection = {
   items: AdminNavItem[];
 };
 
+const REPORT_CENTER_ITEM: AdminNavItem = {
+  label: 'Quản lý báo cáo',
+  icon: FiFlag,
+  href: '/admin/report-center?source=all',
+  permission: 'reports.view',
+  roles: [],
+  children: [
+    { label: 'Tất cả báo cáo', href: '/admin/report-center?source=all' },
+    { label: 'Người dùng & tin nhắn', href: '/admin/report-center?source=forum' },
+    { label: 'Báo lỗi đề', href: '/admin/report-center?source=question' },
+    { label: 'Góp ý & hỗ trợ', href: '/admin/report-center?source=feedback' },
+    { label: 'Hỏi-Đáp VIP', href: '/admin/report-center?source=qa' },
+    { label: 'Liên hệ', href: '/admin/report-center?source=contact' },
+  ],
+};
+
 const NAV_SECTIONS: AdminNavSection[] = [
+  {
+    label: 'Ưu tiên',
+    items: [REPORT_CENTER_ITEM],
+  },
   {
     label: 'Quản lý',
     items: [
@@ -184,19 +204,11 @@ const NAV_SECTIONS: AdminNavSection[] = [
         roles: [],
       },
       {
-        label: 'Quản lý báo cáo',
+        label: 'Báo cáo Forum',
         icon: FiFlag,
-        href: '/admin/report-center?source=all',
-        permission: 'reports.view',
+        href: '/admin/reports',
+        permission: 'forum.manage',
         roles: [],
-        children: [
-          { label: 'Tất cả báo cáo', href: '/admin/report-center?source=all' },
-          { label: 'Người dùng & tin nhắn', href: '/admin/report-center?source=forum' },
-          { label: 'Báo lỗi đề', href: '/admin/report-center?source=question' },
-          { label: 'Góp ý & hỗ trợ', href: '/admin/report-center?source=feedback' },
-          { label: 'Hỏi-Đáp VIP', href: '/admin/report-center?source=qa' },
-          { label: 'Liên hệ', href: '/admin/report-center?source=contact' },
-        ],
       },
       {
         label: 'Lộ trình',
@@ -323,13 +335,13 @@ export default function AdminLayout({ children, title, description }: AdminLayou
 
       {/* ── Sidebar ──────────────────────────────────────────── */}
       <aside className={`
-        fixed inset-y-0 left-0 z-30 w-64 bg-slate-900 border-r border-slate-800
+        fixed inset-y-0 left-0 z-30 flex h-dvh w-64 flex-col border-r border-slate-800 bg-slate-900
         transform transition-transform duration-300 ease-in-out
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-        lg:relative lg:translate-x-0 flex flex-col
+        lg:sticky lg:top-0 lg:bottom-auto lg:h-dvh lg:translate-x-0
       `}>
         {/* Logo */}
-        <div className="flex items-center justify-between px-4 py-5 border-b border-slate-800">
+        <div className="flex shrink-0 items-center justify-between border-b border-slate-800 px-4 py-5">
           <Link href="/admin" className="flex items-center gap-3">
             <div className="w-9 h-9 bg-gradient-to-br from-violet-500 to-fuchsia-500 rounded-xl flex items-center justify-center text-white font-black text-sm shadow-lg shadow-violet-500/30">
               CSCA
@@ -345,7 +357,7 @@ export default function AdminLayout({ children, title, description }: AdminLayou
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-5">
+        <nav className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain px-3 py-4 [scrollbar-color:rgb(71_85_105)_transparent] [scrollbar-width:thin]">
           {visibleSections.map((section) => (
             <div key={section.label}>
               <p className="px-3 mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-600">
@@ -418,7 +430,7 @@ export default function AdminLayout({ children, title, description }: AdminLayou
         </nav>
 
         {/* User info + logout */}
-        <div className="border-t border-slate-800 p-3">
+        <div className="shrink-0 border-t border-slate-800 bg-slate-900 p-3">
           <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-slate-800/50 mb-2">
             <div className="w-8 h-8 bg-gradient-to-br from-violet-500 to-fuchsia-500 rounded-full flex items-center justify-center text-white font-bold text-xs">
               {userInitial}
@@ -447,7 +459,7 @@ export default function AdminLayout({ children, title, description }: AdminLayou
         {/* Top bar */}
         <header className="sticky top-0 z-20 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border-b border-slate-200 dark:border-slate-800 px-4 py-3 flex items-center gap-3 sm:px-6 sm:py-4 sm:gap-4">
           <button onClick={() => setSidebarOpen(true)}
-            className="lg:hidden p-2 hover:bg-slate-100 rounded-lg text-slate-600">
+            className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 lg:hidden">
             <FiActivity size={18} />
           </button>
 
@@ -471,7 +483,7 @@ export default function AdminLayout({ children, title, description }: AdminLayou
         </header>
 
         {/* Page content */}
-        <main className="flex-1 p-4 sm:p-6">
+        <main className="admin-dark-surface min-w-0 flex-1 overflow-x-hidden p-4 sm:p-6">
           {children}
         </main>
       </div>

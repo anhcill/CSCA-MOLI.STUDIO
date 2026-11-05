@@ -2,8 +2,13 @@ jest.mock('../../config/database', () => ({
   query: jest.fn(),
   pool: { connect: jest.fn() },
 }));
+jest.mock('../questionReportWorkflowService', () => ({
+  resolve: jest.fn(),
+  ignore: jest.fn(),
+}));
 
 const db = require('../../config/database');
+const questionReportWorkflow = require('../questionReportWorkflowService');
 const controller = require('../../controllers/adminReportCenterController');
 
 function responseMock() {
@@ -67,5 +72,27 @@ describe('admin report center controller', () => {
     expect(client.query).toHaveBeenLastCalledWith('COMMIT');
     expect(client.release).toHaveBeenCalled();
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true, affected: 1 }));
+  });
+
+  test('delegates question resolution without checking out a transaction client', async () => {
+    questionReportWorkflow.resolve.mockResolvedValue({
+      data: { id: 15, status: 'fixed' },
+      resolvedCount: 2,
+    });
+    const req = {
+      params: { source: 'question', id: '15' },
+      body: { action: 'resolve', note: 'Đã sửa đáp án' },
+      user: { id: 1, email: 'admin@example.com' },
+    };
+    const res = responseMock();
+
+    await controller.actionItem(req, res);
+
+    expect(questionReportWorkflow.resolve).toHaveBeenCalledWith(expect.objectContaining({
+      id: 15,
+      reason: 'Đã sửa đáp án',
+    }));
+    expect(db.pool.connect).not.toHaveBeenCalled();
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true, affected: 2 }));
   });
 });

@@ -333,6 +333,51 @@ body {
 }
 
 /*
+ * Legacy admin screens already inherit dark surfaces for their base utility
+ * classes. Mirror the same mapping for hover/focus variants so controls do not
+ * flash into bright white or pastel blocks while the admin shell is dark.
+ */
+:where(.dark) .admin-dark-surface .hover\:bg-white:hover,
+:where(.dark) .admin-dark-surface .hover\:bg-gray-50:hover,
+:where(.dark) .admin-dark-surface .hover\:bg-gray-50\/50:hover,
+:where(.dark) .admin-dark-surface .hover\:bg-slate-50:hover,
+:where(.dark) .admin-dark-surface .hover\:bg-slate-50\/70:hover,
+:where(.dark) .admin-dark-surface .focus\:bg-white:focus,
+:where(.dark) .admin-dark-surface .focus\:bg-gray-50:focus,
+:where(.dark) .admin-dark-surface .disabled\:hover\:bg-white:disabled:hover {
+  background-color: rgb(30 41 59);
+}
+
+:where(.dark) .admin-dark-surface .hover\:bg-gray-100:hover,
+:where(.dark) .admin-dark-surface .hover\:bg-gray-200:hover,
+:where(.dark) .admin-dark-surface .hover\:bg-slate-100:hover {
+  background-color: rgb(51 65 85);
+}
+
+:where(.dark) .admin-dark-surface .hover\:bg-blue-50:hover,
+:where(.dark) .admin-dark-surface .hover\:bg-blue-100:hover,
+:where(.dark) .admin-dark-surface .hover\:bg-blue-200:hover,
+:where(.dark) .admin-dark-surface .hover\:bg-indigo-50:hover,
+:where(.dark) .admin-dark-surface .hover\:bg-indigo-50\/30:hover,
+:where(.dark) .admin-dark-surface .hover\:bg-indigo-100:hover,
+:where(.dark) .admin-dark-surface .hover\:bg-purple-50:hover,
+:where(.dark) .admin-dark-surface .hover\:bg-purple-100:hover,
+:where(.dark) .admin-dark-surface .hover\:bg-purple-200:hover,
+:where(.dark) .admin-dark-surface .hover\:bg-violet-50:hover,
+:where(.dark) .admin-dark-surface .hover\:bg-violet-50\/30:hover,
+:where(.dark) .admin-dark-surface .hover\:bg-violet-50\/40:hover,
+:where(.dark) .admin-dark-surface .hover\:bg-violet-100:hover,
+:where(.dark) .admin-dark-surface .hover\:bg-violet-200:hover,
+:where(.dark) .admin-dark-surface .hover\:bg-violet-200\/60:hover {
+  background-color: rgb(49 46 129 / 0.42);
+}
+
+:where(.dark) .admin-dark-surface .hover\:bg-rose-50:hover,
+:where(.dark) .admin-dark-surface .hover\:bg-rose-100:hover {
+  background-color: rgb(127 29 29 / 0.38);
+}
+
+/*
  * Native text controls default to a white background. Legacy forms that only
  * declare a text utility therefore became white-on-white after the global
  * dark text remapping above. Give only controls without an explicit Tailwind

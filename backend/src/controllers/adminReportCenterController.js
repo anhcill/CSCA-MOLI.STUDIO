@@ -1,4 +1,5 @@
 const db = require('../config/database');
+const questionReportWorkflow = require('../services/questionReportWorkflowService');
 
 const VALID_SOURCES = new Set(['forum', 'question', 'feedback', 'qa', 'contact']);
 
@@ -277,20 +278,43 @@ async function getSourceDetail(source, id) {
   }
   if (source === 'question') {
     const report = await db.query(`
-      SELECT qr.*, q.question_number, q.question_text, q.question_text_cn, q.image_url AS question_image,
-             e.title AS exam_title, reporter.full_name AS reporter_name, reporter.email AS reporter_email
+      SELECT qr.*,
+             q.question_number, q.question_text, q.question_text_cn, q.question_type,
+             q.image_url AS question_image, q.points, q.explanation, q.explanation_cn,
+             q.is_hidden AS question_is_hidden,
+             e.title AS exam_title, e.code AS exam_code, e.is_hidden AS exam_is_hidden,
+             reporter.full_name AS reporter_name, reporter.email AS reporter_email,
+             resolver.full_name AS resolved_by_name
       FROM question_reports qr
       LEFT JOIN questions q ON q.id = qr.question_id
       LEFT JOIN exams e ON e.id = qr.exam_id
       LEFT JOIN users reporter ON reporter.id = qr.reporter_id
+      LEFT JOIN users resolver ON resolver.id = qr.resolved_by
       WHERE qr.id = $1
     `, [id]);
     if (!report.rows[0]) return null;
-    const related = await db.query(`
-      SELECT id, report_type, description, status, severity, reporter_id, created_at
-      FROM question_reports WHERE question_id = $1 ORDER BY created_at DESC LIMIT 100
-    `, [report.rows[0].question_id]);
-    return { ...report.rows[0], relatedReports: related.rows };
+    const [related, answers] = await Promise.all([
+      db.query(`
+        SELECT qr.id, qr.report_type, qr.description, qr.status, qr.severity,
+               qr.reporter_id, qr.created_at, u.full_name AS reporter_name
+        FROM question_reports qr
+        LEFT JOIN users u ON u.id = qr.reporter_id
+        WHERE qr.question_id = $1
+        ORDER BY qr.created_at DESC
+        LIMIT 100
+      `, [report.rows[0].question_id]),
+      db.query(`
+        SELECT id, answer_key, answer_text, answer_text_cn, is_correct
+        FROM answers
+        WHERE question_id = $1
+        ORDER BY answer_key
+      `, [report.rows[0].question_id]),
+    ]);
+    return {
+      ...report.rows[0],
+      relatedReports: related.rows,
+      answers: answers.rows,
+    };
   }
   if (source === 'feedback' || source === 'qa') {
     const categories = source === 'qa'
@@ -340,7 +364,7 @@ exports.getItemDetail = async (req, res) => {
 };
 
 exports.actionItem = async (req, res) => {
-  const client = await db.pool.connect();
+  let client = null;
   try {
     const source = String(req.params.source || '');
     const id = parseInt(req.params.id, 10);
@@ -353,6 +377,17 @@ exports.actionItem = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Thao tác không hợp lệ.' });
     }
 
+    if (source === 'question' && ['resolve', 'ignore', 'dismiss'].includes(action)) {
+      const workflowResult = action === 'resolve'
+        ? await questionReportWorkflow.resolve({ id, user: req.user, reason: note, req })
+        : await questionReportWorkflow.ignore({ id, user: req.user, reason: note, req });
+      if (!workflowResult) {
+        return res.status(404).json({ success: false, message: 'Không tìm thấy báo lỗi câu hỏi.' });
+      }
+      return res.json({ success: true, data: workflowResult.data, affected: workflowResult.resolvedCount || 1 });
+    }
+
+    client = await db.pool.connect();
     await client.query('BEGIN');
     let result;
     if (source === 'forum') {
@@ -444,11 +479,11 @@ exports.actionItem = async (req, res) => {
     await client.query('COMMIT');
     res.json({ success: true, data: result.rows[0], affected: result.rowCount });
   } catch (error) {
-    await client.query('ROLLBACK').catch(() => {});
+    if (client) await client.query('ROLLBACK').catch(() => {});
     console.error('Report center action error:', error);
     res.status(500).json({ success: false, message: 'Không xử lý được báo cáo.' });
   } finally {
-    client.release();
+    client?.release();
   }
 };
 

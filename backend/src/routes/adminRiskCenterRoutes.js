@@ -16,6 +16,8 @@ router.use(authenticate);
 const viewRiskCenter = authorizeAnyPermission('risk_center.view', 'exams.manage');
 const manageRiskCenter = authorizePermission('risk_center.manage');
 const viewPaymentRisk = authorizePermission('risk_center.view');
+const viewQuestionReports = authorizeAnyPermission('risk_center.view', 'exams.manage', 'reports.view');
+const manageQuestionReports = authorizeAnyPermission('risk_center.manage', 'reports.manage');
 
 //  Read-only routes (risk_center.view)
 router.get(
@@ -38,7 +40,7 @@ router.get(
 
 router.get(
   '/question-reports',
-  viewRiskCenter,
+  viewQuestionReports,
   questionReportActions.getQuestionReports
 );
 
@@ -225,19 +227,19 @@ router.post(
 // Get single report detail
 router.get(
   '/question-reports/:id',
-  viewRiskCenter,
+  viewQuestionReports,
   questionReportActions.getReportDetail
 );
 
 router.post(
   '/question-reports/:id/resolve',
-  manageRiskCenter,
+  manageQuestionReports,
   questionReportActions.resolveReport
 );
 
 router.post(
   '/question-reports/:id/ignore',
-  manageRiskCenter,
+  manageQuestionReports,
   questionReportActions.ignoreReport
 );
 
