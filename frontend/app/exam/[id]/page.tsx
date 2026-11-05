@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import examApi, { Exam, PracticeFeedback, Question, type QuestionReportType } from '@/lib/api/exams';
-import { FiClock, FiCheck, FiChevronLeft, FiChevronRight, FiChevronDown, FiAlertCircle, FiSend, FiGrid, FiShield, FiFlag, FiPlay, FiBookOpen, FiEye, FiEyeOff } from 'react-icons/fi';
+import { FiClock, FiCheck, FiChevronLeft, FiChevronRight, FiChevronDown, FiAlertCircle, FiSend, FiGrid, FiShield, FiFlag, FiPlay, FiBookOpen, FiEye, FiEyeOff, FiZap } from 'react-icons/fi';
 import { ProUpgradeModal } from '@/components/common/ProModal';
 import { ViolationWarning } from '@/components/common/ViolationWarning';
 import { useExamProtection } from '@/lib/hooks/useExamProtection';
@@ -183,6 +183,7 @@ export default function ExamPage() {
   const [selectedAnswers, setSelectedAnswers] = useState<Record<number, number | string>>({});
   const [practiceMode, setPracticeMode] = useState(false);
   const [showPracticeFeedback, setShowPracticeFeedback] = useState(true);
+  const [autoAdvance, setAutoAdvance] = useState(false);
   const [showVietnameseTranslations, setShowVietnameseTranslations] = useState(false);
   const [examLanguage, setExamLanguage] = useState<string>('');
   const [explanationLanguage, setExplanationLanguage] = useState<string>('');
@@ -195,6 +196,7 @@ export default function ExamPage() {
       const savedExamLang = localStorage.getItem('csca_selected_exam_lang');
       const savedExpLang = localStorage.getItem('csca_selected_explanation_lang');
       const savedPracticeFeedback = localStorage.getItem('csca_show_practice_feedback');
+      const savedAutoAdvance = localStorage.getItem('csca_auto_advance_questions');
       if (savedExamLang && EXAM_LANGUAGE_OPTIONS.some((o) => o.mode === savedExamLang)) {
         setExamLanguage(savedExamLang);
       }
@@ -203,6 +205,9 @@ export default function ExamPage() {
       }
       if (savedPracticeFeedback === 'false') {
         setShowPracticeFeedback(false);
+      }
+      if (savedAutoAdvance === 'true') {
+        setAutoAdvance(true);
       }
     } catch {
       // ignore
@@ -256,6 +261,15 @@ export default function ExamPage() {
       return next;
     });
   }, []);
+  const toggleAutoAdvance = useCallback(() => {
+    setAutoAdvance((current) => {
+      const next = !current;
+      try {
+        localStorage.setItem('csca_auto_advance_questions', String(next));
+      } catch {}
+      return next;
+    });
+  }, []);
   const [practiceFeedback, setPracticeFeedback] = useState<Record<number, PracticeFeedback>>({});
   const [flaggedQuestions, setFlaggedQuestions] = useState<Set<number>>(new Set());
   const [navFilter, setNavFilter] = useState<'all' | 'unanswered' | 'answered' | 'flagged'>('all');
@@ -278,6 +292,7 @@ export default function ExamPage() {
   const activeSavePromisesRef = useRef<Set<Promise<void>>>(new Set());
   const essaySaveTimersRef = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
   const pendingEssaySavesRef = useRef<Record<number, PendingEssaySave>>({});
+  const autoAdvanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isPdfRoomExam = Boolean(started && exam?.start_time && exam?.has_exam_pdf && !practiceMode);
   const isTopicPdfPractice = Boolean(started && isTopicFileRoute && practiceMode && exam?.has_exam_pdf);
   const violationLimit = isPdfRoomExam ? PDF_ROOM_MAX_VIOLATIONS : DEFAULT_EXAM_MAX_VIOLATIONS;
@@ -421,8 +436,15 @@ export default function ExamPage() {
       Object.values(essaySaveTimersRef.current).forEach(clearTimeout);
       essaySaveTimersRef.current = {};
       pendingEssaySavesRef.current = {};
+      if (autoAdvanceTimerRef.current) clearTimeout(autoAdvanceTimerRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (autoAdvance || !autoAdvanceTimerRef.current) return;
+    clearTimeout(autoAdvanceTimerRef.current);
+    autoAdvanceTimerRef.current = null;
+  }, [autoAdvance]);
 
   useEffect(() => {
     if (!started || !attemptId || draftCheckedAttemptId === attemptId) return;
@@ -831,6 +853,8 @@ export default function ExamPage() {
 
     const questionId = question.id;
     const isEssayAnswer = essayText !== undefined;
+    const questionIndexAtSelection = currentQuestionIndex;
+    const wasAlreadyAnswered = hasAnsweredValue(selectedAnswers[questionId]);
 
     setSelectedAnswers((prev) => {
       const next = { ...prev };
@@ -853,7 +877,20 @@ export default function ExamPage() {
       return;
     }
 
-    await saveAnswerForQuestion(questionId, answerKey, undefined, practiceMode);
+    const savePromise = saveAnswerForQuestion(questionId, answerKey, undefined, practiceMode);
+
+    if (autoAdvance && !wasAlreadyAnswered && questionIndexAtSelection < questions.length - 1) {
+      if (autoAdvanceTimerRef.current) clearTimeout(autoAdvanceTimerRef.current);
+      const delay = practiceMode && showPracticeFeedback ? 800 : 280;
+      autoAdvanceTimerRef.current = setTimeout(() => {
+        setCurrentQuestionIndex((current) => (
+          current === questionIndexAtSelection ? current + 1 : current
+        ));
+        autoAdvanceTimerRef.current = null;
+      }, delay);
+    }
+
+    await savePromise;
   };
 
   const handlePdfAnswerSelect = async (question: Question, answerId: number, answerKey: string) => {
@@ -1760,6 +1797,22 @@ export default function ExamPage() {
               <span className="hidden md:inline">Đáp án mỗi câu: {showPracticeFeedback ? 'Hiện' : 'Ẩn'}</span>
             </button>
           )}
+          <button
+            type="button"
+            role="switch"
+            aria-checked={autoAdvance}
+            aria-label={`Tự động chuyển câu ${autoAdvance ? 'đang bật' : 'đang tắt'}`}
+            onClick={toggleAutoAdvance}
+            title={autoAdvance ? 'Tắt tự động chuyển sang câu tiếp theo' : 'Bật tự động chuyển sau khi chọn đáp án'}
+            className={`flex items-center gap-1.5 rounded-xl border px-2.5 py-2 text-xs font-black transition sm:px-3 sm:text-sm ${
+              autoAdvance
+                ? 'border-violet-300 bg-violet-50 text-violet-700 hover:bg-violet-100 dark:border-violet-400/60 dark:bg-violet-500/20 dark:text-violet-200 dark:hover:bg-violet-500/30'
+                : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800'
+            }`}
+          >
+            <FiZap size={17} className={autoAdvance ? 'fill-current' : ''} />
+            <span className="hidden lg:inline">Tự chuyển: {autoAdvance ? 'Bật' : 'Tắt'}</span>
+          </button>
           <div className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl font-mono text-base sm:text-2xl font-bold tracking-tight shadow-inner border ${
               isTimeCritical 
                 ? 'bg-red-50 text-red-600 border-red-200 animate-pulse' 
