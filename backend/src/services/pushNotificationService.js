@@ -7,7 +7,7 @@ let configured = false;
 function getVapidConfig() {
   const publicKey = process.env.VAPID_PUBLIC_KEY || "";
   const privateKey = process.env.VAPID_PRIVATE_KEY || "";
-  const subject = process.env.VAPID_SUBJECT || process.env.FRONTEND_URL || "mailto:support@moli.studio";
+  const subject = process.env.VAPID_SUBJECT || process.env.FRONTEND_URL || "mailto:khlyp05@gmail.com";
   return { publicKey, privateKey, subject };
 }
 

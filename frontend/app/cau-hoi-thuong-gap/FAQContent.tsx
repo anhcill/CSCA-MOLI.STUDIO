@@ -62,7 +62,7 @@ export default function FAQContent() {
           <div className="text-center py-20">
             <div className="text-6xl mb-4">🔍</div>
             <p className="text-gray-500">Không tìm thấy câu hỏi phù hợp.</p>
-            <p className="text-sm text-gray-400 mt-1">Thử từ khóa khác hoặc liên hệ support@moly-studio.io.vn</p>
+            <p className="text-sm text-gray-400 mt-1">Thử từ khóa khác hoặc liên hệ khlyp05@gmail.com</p>
           </div>
         ) : (
           filtered.map(cat => (
@@ -112,9 +112,9 @@ export default function FAQContent() {
           <p className="text-gray-700 font-medium mb-1">Không tìm thấy câu trả lời?</p>
           <p className="text-sm text-gray-500 mb-4">Liên hệ với đội ngũ MOLI.STUDIO, chúng tôi sẵn sàng hỗ trợ bạn.</p>
           <div className="flex flex-wrap justify-center gap-3">
-            <a href="mailto:support@moly-studio.io.vn"
+            <a href="mailto:khlyp05@gmail.com"
               className="px-5 py-2 bg-amber-500 text-white rounded-lg text-sm font-semibold hover:bg-amber-600 transition-colors">
-              Email: support@moly-studio.io.vn
+              Email: khlyp05@gmail.com
             </a>
             <a href="tel:+840812352005"
               className="px-5 py-2 bg-white border border-amber-300 text-amber-700 rounded-lg text-sm font-semibold hover:bg-amber-50 transition-colors">

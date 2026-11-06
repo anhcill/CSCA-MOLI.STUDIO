@@ -108,7 +108,7 @@ export default function PrivacyPolicyPage() {
           <p>
             Nếu bạn có bất kỳ câu hỏi nào về Chính sách bảo mật, vui lòng liên hệ:
           </p>
-          <Bullet text="Email: support@csca.edu.vn" />
+          <Bullet text="Email: khlyp05@gmail.com" />
           <Bullet text="Điện thoại: 0812 352 005" />
           <Bullet text="Địa chỉ: Hà Nội, Việt Nam" />
         </Section>

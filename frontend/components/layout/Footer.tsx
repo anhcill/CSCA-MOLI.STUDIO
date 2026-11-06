@@ -93,9 +93,9 @@ export default function Footer() {
             <h4 className="text-white font-bold mb-3 text-sm uppercase tracking-wider">Liên Hệ</h4>
             <ul className="space-y-2.5">
               <li>
-                <a href="mailto:support@csca.edu.vn" className="flex items-start gap-2.5 text-sm text-gray-500 hover:text-white transition-colors group">
+                <a href="mailto:khlyp05@gmail.com" className="flex items-start gap-2.5 text-sm text-gray-500 hover:text-white transition-colors group">
                   <FiMail size={15} className="text-purple-500 shrink-0 mt-0.5" />
-                  support@csca.edu.vn
+                  khlyp05@gmail.com
                 </a>
               </li>
               <li>

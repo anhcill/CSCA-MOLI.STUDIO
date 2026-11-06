@@ -164,7 +164,7 @@ function TermsContent() {
       <section>
         <h3 className="text-base font-semibold text-gray-900 mb-2">11. Liên hệ</h3>
         <p>
-          Nếu có câu hỏi về Điều khoản sử dụng, vui lòng liên hệ qua email: <span className="text-indigo-600">support@moly.study</span>
+          Nếu có câu hỏi về Điều khoản sử dụng, vui lòng liên hệ qua email: <span className="text-indigo-600">khlyp05@gmail.com</span>
         </p>
       </section>
     </div>
@@ -234,7 +234,7 @@ function PrivacyContent() {
           <li><strong>Di chuyển:</strong> Yêu cầu xuất dữ liệu dưới định dạng phổ biến</li>
         </ul>
         <p className="mt-2">
-          Để thực hiện các quyền trên, vui lòng gửi email đến <span className="text-indigo-600">support@moly.study</span> hoặc sử dụng tính năng trong trang &ldquo;Cài đặt tài khoản&rdquo;.
+          Để thực hiện các quyền trên, vui lòng gửi email đến <span className="text-indigo-600">khlyp05@gmail.com</span> hoặc sử dụng tính năng trong trang &ldquo;Cài đặt tài khoản&rdquo;.
         </p>
       </section>
 
@@ -278,7 +278,7 @@ function PrivacyContent() {
       <section>
         <h3 className="text-base font-semibold text-gray-900 mb-2">10. Liên hệ</h3>
         <p>
-          Nếu có câu hỏi về Chính sách bảo mật, vui lòng liên hệ: <span className="text-indigo-600">support@moly.study</span>
+          Nếu có câu hỏi về Chính sách bảo mật, vui lòng liên hệ: <span className="text-indigo-600">khlyp05@gmail.com</span>
         </p>
       </section>
     </div>

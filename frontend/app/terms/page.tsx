@@ -72,7 +72,7 @@ export default function TermsPage() {
           <p>Khi tạo tài khoản, bạn cam kết:</p>
           <Bullet text="Không sử dụng tên đăng nhập vi phạm quyền sở hữu trí tuệ hoặc gây nhầm lẫn" />
           <Bullet text="Bảo mật thông tin đăng nhập và chịu trách nhiệm về mọi hoạt động dưới tài khoản của mình" />
-          <Bullet text="Thông báo ngay cho chúng tôi qua support@csca.edu.vn nếu phát hiện truy cập trái phép" />
+          <Bullet text="Thông báo ngay cho chúng tôi qua khlyp05@gmail.com nếu phát hiện truy cập trái phép" />
           <Bullet text="Không chia sẻ, chuyển nhượng hoặc cho người khác sử dụng tài khoản của bạn" />
           <p className="pt-1">Chúng tôi có quyền tạm khóa hoặc xóa tài khoản vi phạm điều khoản mà không cần bồi thường.</p>
         </Section>
@@ -99,7 +99,7 @@ export default function TermsPage() {
 
         <Section title="6. Thanh toán và hoàn tiền">
           <p>
-            Các gói dịch vụ trả phí (nếu có) sẽ được thông báo rõ ràng về giá cả và nội dung trước khi thanh toán. Chính sách hoàn tiền áp dụng trong vòng 7 ngày kể từ ngày thanh toán nếu dịch vụ không đúng như mô tả. Liên hệ support@csca.edu.vn để yêu cầu hoàn tiền.
+            Các gói dịch vụ trả phí (nếu có) sẽ được thông báo rõ ràng về giá cả và nội dung trước khi thanh toán. Chính sách hoàn tiền áp dụng trong vòng 7 ngày kể từ ngày thanh toán nếu dịch vụ không đúng như mô tả. Liên hệ khlyp05@gmail.com để yêu cầu hoàn tiền.
           </p>
         </Section>
 
@@ -126,7 +126,7 @@ export default function TermsPage() {
 
         <Section title="10. Liên hệ">
           <p>Mọi thắc mắc về Điều khoản sử dụng, vui lòng liên hệ:</p>
-          <Bullet text="Email: support@csca.edu.vn" />
+          <Bullet text="Email: khlyp05@gmail.com" />
           <Bullet text="Điện thoại: 0812 352 005" />
           <Bullet text="Địa chỉ: Hà Nội, Việt Nam" />
         </Section>

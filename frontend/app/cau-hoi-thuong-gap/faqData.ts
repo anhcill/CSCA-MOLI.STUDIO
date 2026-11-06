@@ -84,7 +84,7 @@ export const FAQ_DATA: FAQCategory[] = [
       },
       {
         q: 'Tôi có được hoàn tiền không?',
-        a: 'Có. Nếu dịch vụ không đúng như mô tả hoặc bạn hủy trong vòng 7 ngày đầu tiên, vui lòng liên hệ support@moly-studio.io.vn để yêu cầu hoàn tiền.',
+        a: 'Có. Nếu dịch vụ không đúng như mô tả hoặc bạn hủy trong vòng 7 ngày đầu tiên, vui lòng liên hệ khlyp05@gmail.com để yêu cầu hoàn tiền.',
       },
     ],
   },
@@ -94,12 +94,12 @@ export const FAQ_DATA: FAQCategory[] = [
     items: [
       {
         q: 'Website không tải được hoặc bị lỗi, tôi phải làm gì?',
-        a: 'Thử các bước sau: (1) Tải lại trang (F5 hoặc Ctrl+R), (2) Xóa cache trình duyệt, (3) Thử trình duyệt khác (Chrome, Firefox, Edge). Nếu vẫn lỗi, liên hệ support@moly-studio.io.vn kèm ảnh chụp màn hình lỗi.',
+        a: 'Thử các bước sau: (1) Tải lại trang (F5 hoặc Ctrl+R), (2) Xóa cache trình duyệt, (3) Thử trình duyệt khác (Chrome, Firefox, Edge). Nếu vẫn lỗi, liên hệ khlyp05@gmail.com kèm ảnh chụp màn hình lỗi.',
       },
       {
         q: 'Làm sao để liên hệ với CSCA?',
         a: [
-          'Email: support@moly-studio.io.vn',
+          'Email: khlyp05@gmail.com',
           'Điện thoại: 0812 352 005',
           'Zalo: 0812 352 005',
           'Facebook: fb.com/molistudio',
