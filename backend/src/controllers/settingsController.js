@@ -106,7 +106,9 @@ async function testAIModel(req, res) {
     console.error('testAIModel error:', error.providerCode || error.message);
     return res.status(error.statusCode || 502).json({
       success: false,
-      message: 'Model không phản hồi thành công. Kiểm tra cấu hình hoặc thử model khác.',
+      message: error.providerMessage && error.providerMessage !== 'AI_PROVIDER_ERROR'
+        ? `${error.providerMessage} (${error.providerCode || 'Lỗi'})`
+        : 'Model không phản hồi thành công. Kiểm tra cấu hình hoặc thử model khác.',
       code: error.providerCode || 'AI_MODEL_TEST_FAILED',
       latencyMs: error.latencyMs,
     });

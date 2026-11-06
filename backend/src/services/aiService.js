@@ -312,7 +312,7 @@ function extractOpenAICompatibleText(data) {
   if (!data) return '';
   if (typeof data !== 'string') {
     const messageText = data?.choices?.[0]?.message?.content;
-    if (typeof messageText === 'string') return messageText.trim();
+    if (typeof messageText === 'string' && messageText.trim()) return messageText.trim();
     if (Array.isArray(messageText)) {
       const joined = messageText.map(part => part?.text || part?.content || '').filter(Boolean).join('');
       if (joined) return joined.trim();
@@ -320,7 +320,7 @@ function extractOpenAICompatibleText(data) {
     const toolArguments = data?.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
     if (typeof toolArguments === 'string') return toolArguments.trim();
     const reasoningText = data?.choices?.[0]?.message?.reasoning_content;
-    if (typeof reasoningText === 'string' && /[\[{]/.test(reasoningText)) return reasoningText.trim();
+    if (typeof reasoningText === 'string' && reasoningText.trim()) return reasoningText.trim();
     const deltaText = data?.choices?.[0]?.delta?.content;
     if (typeof deltaText === 'string') return deltaText.trim();
     return '';
@@ -806,7 +806,7 @@ async function testAIModel({ provider, model, userId }) {
       {
         model,
         messages: [{ role: 'user', content: 'Trả lời đúng một từ: OK' }],
-        max_tokens: 8,
+        max_tokens: 64,
         temperature: 0,
       },
       {

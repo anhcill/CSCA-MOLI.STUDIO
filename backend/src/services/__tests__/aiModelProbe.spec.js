@@ -30,7 +30,7 @@ describe('admin AI model probe', () => {
     expect(axios.post).toHaveBeenCalledTimes(1);
     expect(axios.post.mock.calls[0][1]).toMatchObject({
       model: 'ag/gemini-4-argon-low',
-      max_tokens: 8,
+      max_tokens: 64,
       temperature: 0,
     });
     expect(axios.post.mock.calls[0][2].headers.Authorization).toBe('Bearer router-key');
