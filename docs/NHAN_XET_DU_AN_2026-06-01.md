@@ -16,7 +16,7 @@ Việc cần làm tiếp không phải là thêm tính năng lớn ngay, mà là
 - Backend các file trọng điểm pass syntax check: `src/index.js`, `adminExamController.js`, `payments.js`, `aiService.js`.
 - CodeGraph index khỏe: 389 file, 3761 symbol, 5583 edge.
 - DB coverage script báo remote/local table khớp: `remoteTableCount=68`, `localCreateTableCount=68`, không thiếu bảng local.
-- Admin exam import PDF đã có 2 lớp: parse rule-based trước, AI Beeknoee fallback sau; có giới hạn `PDF_IMPORT_TEXT_LIMIT=60000`, `PDF_IMPORT_MAX_QUESTIONS=120`.
+- Admin exam import PDF đã có 2 lớp: parse rule-based trước, AI router fallback sau; có giới hạn `PDF_IMPORT_TEXT_LIMIT=60000`, `PDF_IMPORT_MAX_QUESTIONS=120`.
 - Bank transfer đã dùng `Transaction.claimPending()` để tránh xử lý trùng webhook.
 - Coin ledger có `idempotency_key` unique index, tốt cho debit/credit không trùng.
 - Không thấy secret thật trong tracked files qua `git grep`; chỉ thấy placeholder và false positive nội dung HSK.

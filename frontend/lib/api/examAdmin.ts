@@ -4,7 +4,7 @@ import type { PdfImportPreset } from '@/lib/pdf-import/presets';
 
 export type PdfImportLanguageMode = 'auto' | 'vi' | 'en' | 'zh' | 'vi_en' | 'vi_zh' | 'zh_en';
 export type AdminExamAiQualityMode = 'fast' | 'deep';
-export type AdminExamAiFastModel = 'cx/gpt-5.5' | 'ag/claude-opus-4-6-thinking';
+export type AdminExamAiFastModel = 'ag/gemini-4-argon-low' | 'ag/gemini-3.8-flash-low';
 export type AdminExamAiModePayload = {
     qualityMode?: AdminExamAiQualityMode;
     fastModel?: AdminExamAiFastModel;

@@ -721,7 +721,7 @@ export default function AdminExamDetailPage() {
     const [polishingExplanations, setPolishingExplanations] = useState(false);
     const [polishExplanationResult, setPolishExplanationResult] = useState<GenerateMissingExplanationsResult | null>(null);
     const [aiQualityMode, setAiQualityMode] = useState<ExamAiQualityMode>('deep');
-    const [aiFastModel, setAiFastModel] = useState<ExamAiFastModel>('cx/gpt-5.5');
+    const [aiFastModel, setAiFastModel] = useState<ExamAiFastModel>('ag/gemini-4-argon-low');
     const [reviewingQuestionId, setReviewingQuestionId] = useState<number | null>(null);
     const [fixingExplanationQuestionId, setFixingExplanationQuestionId] = useState<number | null>(null);
     const [questionReviewById, setQuestionReviewById] = useState<Record<number, StoredExamReviewResult | null>>({});

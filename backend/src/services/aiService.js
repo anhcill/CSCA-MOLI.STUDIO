@@ -1,7 +1,7 @@
 /**
  * AI Service — Tất cả 7 features AI cho hệ thống thi CSCA
  *
- * Models are configured in src/config/aiConfig.js via Beeknoee env vars.
+ * Models are configured in src/config/aiConfig.js and site settings.
  * Muốn đổi model? Sửa src/config/aiConfig.js
  */
 
@@ -9,6 +9,7 @@ const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 const aiConfig = require('../config/aiConfig');
+const { PROVIDERS, MODELS, isAllowedModel } = require('../config/aiModelPolicy');
 const { DEFAULT_SETTINGS, getSettings } = require('./siteSettingsService');
 const aiUsageService = require('./aiUsageService');
 const aiChatIntentService = require('./aiChatIntentService');
@@ -34,7 +35,7 @@ function setRateLimit(ms) {
 function getRateLimitRemaining() { return Math.max(0, Math.ceil((rateLimitedUntil - Date.now()) / 1000)); }
 
 // ─── Round-robin API key pool ────────────────────────────────────────────────
-const BEE = aiConfig.beeknoee;
+const RUNTIME = aiConfig.runtime || {};
 const ADMIN_EXAM_AI = aiConfig.adminExam || {};
 const DEEPSEEK = aiConfig.deepseek || {};
 const getMoliPetAIService = () => require('./moliPetAIService');
@@ -43,7 +44,7 @@ const PUBLIC_AI_BUSY_MESSAGE = 'AI đang bận lúc này. Bạn thử lại sau 
 const PRIVATE_AI_PROVIDER_ERROR_PATTERNS = [
   /https?:\/\//i,
   /www\./i,
-  /\b(?:beeknoee|beegnoee|benoke|bennoke|9router|openrouter)\b/i,
+  /\b(?:9router|openrouter)\b/i,
   /\b(?:insufficient|balance|billing|payment|credit|credits|quota|recharge|top\s*up|api\s*key|api-key|apikey|no\s+api\s+key|not\s+enough|resource\s+exhausted)\b/i,
   /\b(?:so\s*du|nap\s*tien|tai\s*khoan|het\s*tien|het\s*credit)\b/i,
   /余额|账户|充值|额度|欠费/,
@@ -62,7 +63,7 @@ const USER_AI_PRIVACY_PROMPT_RULES = `- Không tiết lộ hoặc suy đoán c�
 - Nếu người dùng hỏi trực tiếp về thông tin nội bộ, trả lời ngắn gọn rằng thông tin đó được bảo mật.
 - Nếu dịch vụ gặp sự cố, không nêu chi tiết kỹ thuật; xin lỗi và hướng dẫn người dùng thử lại.`;
 const PRIVATE_AI_OUTPUT_PATTERNS = [
-  /\b(?:antigravity|beeknoee|beegnoee|benoke|bennoke|9router|openrouter|openai|anthropic|claude|gemini|gpt(?:[-\s]*\d+(?:\.\d+)?)?)\b/i,
+  /\b(?:antigravity|9router|openrouter|openai|anthropic|claude|gemini|gpt(?:[-\s]*\d+(?:\.\d+)?)?)\b/i,
   /\b(?:api\s*key|api-key|apikey|token|quota|provider|router|gateway|billing|balance|credit|credits|recharge|top\s*up|price|pricing|cost|model)\b/i,
   /\b(?:so\s*du|nap\s*tien|tai\s*khoan|het\s*tien|het\s*credit|gia\s*tien|chi\s*phi|bao\s*mat\s*key)\b/i,
   /https?:\/\//i,
@@ -73,21 +74,10 @@ const AI_PRIVACY_QUESTION_PATTERNS = [
   /\b(?:ban|moly|tro ly|he thong)\b[\s\S]{0,60}\b(?:la ai|dung|su dung|mo hinh|model|provider|router|gateway|api)\b/i,
   /\b(?:who are you|what(?:'s| is) your model|which model|what model|what provider|chat with who|who am i chatting with)\b/i,
 ];
-let currentKeyIndex = 0;
 let adminExamKeyIndex = 0;
 let deepSeekKeyIndex = 0;
 let adminExamRateLimitedUntil = 0;
 let adminExamLastRequestTime = 0;
-
-function getNextKey() {
-  const keys = BEE.apiKeys.filter(Boolean);
-  if (keys.length === 0) return null;
-  const keyNumber = (currentKeyIndex % keys.length) + 1;
-  const key = keys[currentKeyIndex % keys.length];
-  currentKeyIndex++;
-  console.log(`AI request using Beeknoee key #${keyNumber}/${keys.length}`);
-  return key;
-}
 
 function getChatCompletionsUrl(baseUrl) {
   const base = String(baseUrl || '').replace(/\/+$/, '');
@@ -379,7 +369,7 @@ function throwIfAborted(signal) {
 }
 
 async function waitBetweenRequests() {
-  const delay = BEE.delayBetweenRequests || 500;
+  const delay = RUNTIME.delayBetweenRequests || 500;
   const elapsed = Date.now() - lastRequestTime;
   if (elapsed < delay) {
     const wait = delay - elapsed;
@@ -389,7 +379,7 @@ async function waitBetweenRequests() {
 }
 
 async function waitAdminExamBetweenRequests() {
-  const delay = ADMIN_EXAM_AI.delayBetweenRequests || BEE.delayBetweenRequests || 500;
+  const delay = ADMIN_EXAM_AI.delayBetweenRequests || RUNTIME.delayBetweenRequests || 500;
   const elapsed = Date.now() - adminExamLastRequestTime;
   if (elapsed < delay) {
     await new Promise(r => setTimeout(r, delay - elapsed));
@@ -399,7 +389,7 @@ async function waitAdminExamBetweenRequests() {
 
 // Global concurrency: max 3 concurrent AI requests
 let concurrentCount = 0;
-const MAX_CONCURRENT = BEE.maxConcurrent || 3;
+const MAX_CONCURRENT = RUNTIME.maxConcurrent || 3;
 
 async function withConcurrency(fn) {
   while (concurrentCount >= MAX_CONCURRENT) {
@@ -411,90 +401,6 @@ async function withConcurrency(fn) {
   } finally {
     concurrentCount--;
   }
-}
-
-// ─── AI Core: Gọi Beeknoee  ───────────────────────────────────────
-async function callBeeknoeeMessages(messages, options = {}) {
-  if (isRateLimited()) {
-    const e = new Error('RATE_LIMITED');
-    e.retryAfter = getRateLimitRemaining();
-    throw e;
-  }
-
-  await waitBetweenRequests();
-
-  const {
-    maxTokens = BEE.maxTokens,
-    temperature = BEE.temperature,
-    model = BEE.model,
-    timeout = BEE.timeout,
-    signal,
-  } = options;
-  throwIfAborted(signal);
-  const apiKey = getNextKey();
-
-  if (!apiKey) {
-    throw new Error('Không có API key nào được cấu hình');
-  }
-
-  const payload = {
-    model,
-    messages,
-    max_tokens: maxTokens,
-    temperature,
-  };
-
-  return withConcurrency(async () => {
-    try {
-      const beeknoeeStartTime = options._startTime || Date.now();
-      const response = await axios.post(
-        `${BEE.baseUrl}/chat/completions`,
-        payload,
-        {
-          timeout,
-          signal,
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`,
-          },
-        }
-      );
-
-      // OpenAI-compatible response, including SSE text from local routers.
-      const text = extractOpenAICompatibleText(response.data);
-      aiUsageService.logUsageFromResponse(response.data, {
-        userId: options._userId,
-        provider: 'beeknoee',
-        model,
-        feature: options._feature || options.feature || 'beeknoee',
-        durationMs: Date.now() - beeknoeeStartTime,
-      });
-      return text || JSON.stringify(response.data);
-    } catch (err) {
-      if (isAbortError(err, signal)) {
-        throwIfAborted(signal);
-      }
-      if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
-        const e = new Error('AI_TIMEOUT');
-        throw e;
-      }
-      if (err.response?.status === 429) {
-        // Key bị rate limit → chuyển sang key khác ngay
-        const keyCount = BEE.apiKeys.filter(Boolean).length || 1;
-        console.warn(`Beeknoee key #${currentKeyIndex % keyCount} hit rate limit, backing off...`);
-        currentKeyIndex++;
-        setRateLimit(aiConfig.general.globalBackoffMs);
-        const e = new Error('RATE_LIMITED');
-        e.retryAfter = getRateLimitRemaining();
-        throw e;
-      }
-      throw createSafeProviderError(err);
-    }
-  });
-}
-
-async function callBeeknoee(prompt, options = {}) {
-  return callBeeknoeeMessages([{ role: 'user', content: prompt }], { ...options, _startTime: Date.now() });
 }
 
 async function callAdminExamAIMessages(messages, options = {}) {
@@ -515,9 +421,9 @@ async function callAdminExamAIMessages(messages, options = {}) {
   }
 
   const {
-    maxTokens = ADMIN_EXAM_AI.maxTokens || BEE.maxTokens,
-    temperature = ADMIN_EXAM_AI.temperature ?? BEE.temperature,
-    timeout = ADMIN_EXAM_AI.timeout || BEE.timeout,
+    maxTokens = ADMIN_EXAM_AI.maxTokens || RUNTIME.maxTokens,
+    temperature = ADMIN_EXAM_AI.temperature ?? RUNTIME.temperature,
+    timeout = ADMIN_EXAM_AI.timeout || RUNTIME.timeout,
     fallbackOnTimeout = true,
     signal,
   } = options;
@@ -586,7 +492,7 @@ async function callAdminExamAIMessages(messages, options = {}) {
     }
   }
 
-  console.warn(`${ADMIN_EXAM_AI.provider || 'Admin exam AI'} exhausted model chain; admin exam AI will not fall back to Beeknoee.`);
+  console.warn(`${ADMIN_EXAM_AI.provider || 'Admin exam AI'} exhausted model chain.`);
   setAdminExamRateLimit(ADMIN_EXAM_AI.backoffMs || aiConfig.general.globalBackoffMs);
   throw createAdminExamAIError('ADMIN_EXAM_AI_EXHAUSTED', lastError);
 }
@@ -678,9 +584,10 @@ async function callDeepSeekAI(prompt, options = {}) {
 
 const PUBLIC_AI_SETTING_KEYS = [
   'public_ai_provider',
+  'premium_ai_provider',
+  'premium_ai_deepseek_model',
   'public_ai_9router_model',
   'public_ai_free_9router_model',
-  'public_ai_beeknoee_model',
   'public_ai_fallback_provider',
 ];
 
@@ -696,28 +603,30 @@ async function getPublicAISettings() {
 
 function normalizeRuntimeProvider(provider, fallback = '9router') {
   const value = String(provider || '').trim().toLowerCase();
-  return ['9router', 'beeknoee'].includes(value) ? value : fallback;
+  return [PROVIDERS.NINE_ROUTER, PROVIDERS.DEEPSEEK].includes(value) ? value : fallback;
 }
 
 function getPublicAIModel(provider, settings) {
-  if (provider === '9router') {
-    return settings.public_ai_9router_model || process.env.PUBLIC_AI_9ROUTER_MODEL || DEFAULT_SETTINGS.public_ai_9router_model;
+  if (provider === PROVIDERS.DEEPSEEK) {
+    return settings.premium_ai_deepseek_model || DEEPSEEK.chatModel || DEFAULT_SETTINGS.premium_ai_deepseek_model;
   }
-  return settings.public_ai_beeknoee_model || process.env.PUBLIC_AI_BEEKNOEE_MODEL || BEE.model || DEFAULT_SETTINGS.public_ai_beeknoee_model;
+  return settings.public_ai_9router_model || process.env.PUBLIC_AI_9ROUTER_MODEL || DEFAULT_SETTINGS.public_ai_9router_model;
 }
 
 function getPublicAIBaseUrl(provider) {
-  if (provider === '9router') return process.env.PUBLIC_AI_9ROUTER_BASE_URL || ADMIN_EXAM_AI.baseUrl || '';
-  return BEE.baseUrl;
+  return provider === PROVIDERS.DEEPSEEK
+    ? DEEPSEEK.baseUrl
+    : (process.env.PUBLIC_AI_9ROUTER_BASE_URL || ADMIN_EXAM_AI.baseUrl || '');
 }
 
 function getPublicAIKey(provider) {
-  if (provider === '9router') return getNextAdminExamKey()?.key || '';
-  return getNextKey() || '';
+  return provider === PROVIDERS.DEEPSEEK
+    ? getNextDeepSeekKey()?.key || ''
+    : getNextAdminExamKey()?.key || '';
 }
 
 function getPublicAIKeyCount(provider) {
-  const keys = provider === '9router' ? ADMIN_EXAM_AI.apiKeys : BEE.apiKeys;
+  const keys = provider === PROVIDERS.DEEPSEEK ? DEEPSEEK.apiKeys : ADMIN_EXAM_AI.apiKeys;
   return (keys || []).filter(Boolean).length;
 }
 
@@ -729,14 +638,14 @@ function createUnusablePublicAIResponseError(provider) {
   return error;
 }
 
-async function getPublicAIRuntime(preferredProvider) {
+async function getPublicAIRuntime(preferredProvider, preferredFallbackProvider) {
   const settings = await getPublicAISettings();
   const primary = normalizeRuntimeProvider(
     preferredProvider || settings.public_ai_provider || process.env.PUBLIC_AI_PROVIDER,
     DEFAULT_SETTINGS.public_ai_provider,
   );
   const fallback = normalizeRuntimeProvider(
-    settings.public_ai_fallback_provider || process.env.PUBLIC_AI_FALLBACK_PROVIDER,
+    preferredFallbackProvider || settings.public_ai_fallback_provider || process.env.PUBLIC_AI_FALLBACK_PROVIDER,
     DEFAULT_SETTINGS.public_ai_fallback_provider,
   );
   return { primary, fallback, settings };
@@ -753,12 +662,18 @@ function createPublicAIProviderError(provider, err, fallbackMessage = 'AI_PROVID
 
 async function callOpenAICompatibleMessages(provider, messages, options, settings) {
   const {
-    maxTokens = BEE.maxTokens,
-    temperature = BEE.temperature,
-    timeout = provider === '9router' ? (ADMIN_EXAM_AI.timeout || BEE.timeout) : BEE.timeout,
+    maxTokens = RUNTIME.maxTokens,
+    temperature = RUNTIME.temperature,
+    timeout = provider === PROVIDERS.DEEPSEEK
+      ? (DEEPSEEK.timeout || RUNTIME.timeout)
+      : (ADMIN_EXAM_AI.timeout || RUNTIME.timeout),
     signal,
   } = options || {};
-  const model = options?.model || getPublicAIModel(provider, settings);
+  const model = options?.activeProvider === provider && options?.model
+    ? options.model
+    : (options?.fallbackProvider === provider && options?.fallbackModel
+      ? options.fallbackModel
+      : getPublicAIModel(provider, settings));
   const baseUrl = getPublicAIBaseUrl(provider);
   const keyCount = getPublicAIKeyCount(provider);
 
@@ -822,20 +737,21 @@ async function callPublicAIMessages(messages, options = {}) {
   }
 
   await waitBetweenRequests();
-  const runtime = await getPublicAIRuntime(options.provider);
+  const runtime = await getPublicAIRuntime(options.provider, options.fallbackProvider);
   const providers = [...new Set([runtime.primary, runtime.fallback].filter(Boolean))];
   let lastError = null;
 
   for (const provider of providers) {
     try {
-      return await withConcurrency(() => callOpenAICompatibleMessages(provider, messages, options, runtime.settings));
+      return await withConcurrency(() => callOpenAICompatibleMessages(
+        provider,
+        messages,
+        { ...options, activeProvider: runtime.primary },
+        runtime.settings,
+      ));
     } catch (err) {
       lastError = err;
       if (isAbortError(err, options.signal)) throwIfAborted(options.signal);
-      if (err.response?.status === 429 && provider === 'beeknoee') {
-        currentKeyIndex++;
-        setRateLimit(aiConfig.general.globalBackoffMs);
-      }
       console.warn(`Public AI ${provider} failed, trying fallback if available:`, getProviderResponseMessage(err));
     }
   }
@@ -845,6 +761,82 @@ async function callPublicAIMessages(messages, options = {}) {
 
 async function callPublicAI(prompt, options = {}) {
   return callPublicAIMessages([{ role: 'user', content: prompt }], options);
+}
+
+function getFeatureRoute(routing = {}, tier = 'premium') {
+  const defaultModel = tier === 'free' ? MODELS.FREE : MODELS.PREMIUM;
+  const provider = normalizeRuntimeProvider(routing.aiProvider || routing.provider, PROVIDERS.NINE_ROUTER);
+  const requestedModel = routing.aiModel || routing.model;
+  const model = isAllowedModel(provider, requestedModel)
+    ? requestedModel
+    : (provider === PROVIDERS.DEEPSEEK ? (DEEPSEEK.chatModel || 'deepseek-v4-pro') : defaultModel);
+  const fallbackProvider = normalizeRuntimeProvider(
+    routing.aiFallbackProvider || routing.fallbackProvider,
+    provider === PROVIDERS.NINE_ROUTER ? PROVIDERS.DEEPSEEK : PROVIDERS.NINE_ROUTER,
+  );
+  const requestedFallbackModel = routing.aiFallbackModel || routing.fallbackModel;
+  const fallbackModel = isAllowedModel(fallbackProvider, requestedFallbackModel)
+    ? requestedFallbackModel
+    : (fallbackProvider === PROVIDERS.DEEPSEEK ? (DEEPSEEK.chatModel || 'deepseek-v4-pro') : defaultModel);
+  return { provider, model, fallbackProvider, fallbackModel };
+}
+
+async function testAIModel({ provider, model, userId }) {
+  const normalizedProvider = normalizeRuntimeProvider(provider, '');
+  if (!normalizedProvider || !isAllowedModel(normalizedProvider, model)) {
+    const error = new Error('AI_MODEL_NOT_ALLOWED');
+    error.statusCode = 400;
+    error.providerCode = 'AI_MODEL_NOT_ALLOWED';
+    throw error;
+  }
+
+  const baseUrl = getPublicAIBaseUrl(normalizedProvider);
+  const apiKey = getPublicAIKey(normalizedProvider);
+  if (!baseUrl || !apiKey) {
+    const error = new Error('AI_PROVIDER_NOT_CONFIGURED');
+    error.statusCode = 503;
+    error.providerCode = 'AI_PROVIDER_NOT_CONFIGURED';
+    throw error;
+  }
+
+  const startedAt = Date.now();
+  try {
+    const response = await axios.post(
+      getChatCompletionsUrl(baseUrl),
+      {
+        model,
+        messages: [{ role: 'user', content: 'Trả lời đúng một từ: OK' }],
+        max_tokens: 8,
+        temperature: 0,
+      },
+      {
+        timeout: Math.min(
+          normalizedProvider === PROVIDERS.DEEPSEEK ? (DEEPSEEK.timeout || 30000) : (ADMIN_EXAM_AI.timeout || 30000),
+          30000,
+        ),
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+      },
+    );
+    const text = extractOpenAICompatibleText(response.data);
+    if (!text || hasPrivateAIOutputDetails(text)) throw createUnusablePublicAIResponseError(normalizedProvider);
+    const latencyMs = Date.now() - startedAt;
+    aiUsageService.logUsageFromResponse(response.data, {
+      userId,
+      provider: normalizedProvider,
+      model,
+      feature: 'admin_model_test',
+      durationMs: latencyMs,
+    });
+    return { latencyMs, preview: text.slice(0, 120) };
+  } catch (cause) {
+    const error = createPublicAIProviderError(normalizedProvider, cause, 'AI_MODEL_TEST_FAILED');
+    error.latencyMs = Date.now() - startedAt;
+    error.statusCode = 502;
+    throw error;
+  }
 }
 
 // ─── Parse JSON từ AI response ────────────────────────────────────────────────
@@ -1094,14 +1086,14 @@ function ruleBasedExamAnalysis(attemptData) {
  * Phân tích kết quả 1 bài thi cụ thể
  * @param {Object} attemptData - { totalScore, totalQuestions, correctCount, subjectName, duration, questions }
  */
-async function analyzeExamResult(attemptData) {
+async function analyzeExamResult(attemptData, routing = {}) {
   const { questions = [] } = attemptData;
   const { correctCount, totalQuestions } = attemptData;
   const safeTotal = Number(totalQuestions) || questions.length || 1;
   const safeCorrect = Number(correctCount) || 0;
   const percentage = Math.round((safeCorrect / safeTotal) * 100);
-  const examAnalysisMaxTokens = Math.min(BEE.examAnalysisMaxTokens || 1600, 1800);
-  const examAnalysisModel = BEE.examAnalysisModel || BEE.ocrModel || BEE.importModel || BEE.model;
+  const examAnalysisMaxTokens = Math.min(RUNTIME.examAnalysisMaxTokens || 1600, 1800);
+  const route = getFeatureRoute(routing, 'premium');
 
   // Nếu không có câu hỏi chi tiết → rule-based
   if (!questions.length || questions.length < 3) {
@@ -1232,8 +1224,8 @@ TRẢ VỀ JSON. Mỗi trường text dùng \\n để tách ý.
 
   try {
     const fallback = ruleBasedExamAnalysis(attemptData);
-    const raw = await callBeeknoee(prompt, {
-      model: examAnalysisModel,
+    const raw = await callPublicAI(prompt, {
+      ...route,
       temperature: 0.2,
       maxTokens: examAnalysisMaxTokens,
       feature: 'exam_analysis',
@@ -1260,7 +1252,7 @@ TRẢ VỀ JSON. Mỗi trường text dùng \\n để tách ý.
  * Giải thích chi tiết các câu sai cho 1 bài thi
  * @param {Array} questions - Mảng câu hỏi đã làm
  */
-async function explainWrongAnswers(questions) {
+async function explainWrongAnswers(questions, routing = {}) {
   const wrongQuestions = questions.filter(q => !q.is_correct && q.selected_answer_key);
   if (!wrongQuestions.length) return { explanations: [], message: 'Bạn không có câu sai!' };
 
@@ -1323,7 +1315,12 @@ TRẢ VỀ JSON:
   ]
 }`;
 
-    const raw = await callPublicAI(prompt, { temperature: 0.35, maxTokens: BEE.explanationMaxTokens || 1800, feature: 'wrong_answer_explain' });
+    const raw = await callPublicAI(prompt, {
+      ...getFeatureRoute(routing, 'premium'),
+      temperature: 0.35,
+      maxTokens: RUNTIME.explanationMaxTokens || 1800,
+      feature: 'wrong_answer_explain',
+    });
     const ai = parseAIMaybeJSON(raw);
     return normalizeExplanationResult(ai, batch).explanations;
   }
@@ -1350,7 +1347,7 @@ TRẢ VỀ JSON:
  * Phân tích điểm mạnh/yếu theo môn/chủ đề qua nhiều bài thi
  * @param {Array} examAttempts - Lịch sử làm bài
  */
-async function analyzeTopics(examAttempts) {
+async function analyzeTopics(examAttempts, routing = {}) {
   if (!examAttempts || examAttempts.length === 0) {
     return { hasEnoughData: false, message: 'Cần ít nhất 1 bài thi để phân tích.' };
   }
@@ -1398,8 +1395,8 @@ TRẢ VỀ JSON:
 }`;
 
   try {
-    const raw = await callBeeknoee(prompt, {
-      model: BEE.insightModel || BEE.ocrModel || BEE.importModel || BEE.model,
+    const raw = await callPublicAI(prompt, {
+      ...getFeatureRoute(routing, routing.aiTier || 'premium'),
       temperature: 0.3,
       maxTokens: 1800,
       feature: 'learning_insight',
@@ -1447,7 +1444,7 @@ TRẢ VỀ JSON:
 /**
  * Gợi ý bài học và dạng bài cần luyện dựa trên điểm yếu
  */
-async function getPracticeRecommendations(weaknesses, availableExams = []) {
+async function getPracticeRecommendations(weaknesses, availableExams = [], routing = {}) {
   const weakSubjects = (weaknesses || []).map(w => w.name || w.subject || '').filter(Boolean);
 
   if (!weakSubjects.length) {
@@ -1482,8 +1479,8 @@ TRẢ VỀ JSON:
 }`;
 
   try {
-    const raw = await callBeeknoee(prompt, {
-      model: BEE.insightModel || BEE.ocrModel || BEE.importModel || BEE.model,
+    const raw = await callPublicAI(prompt, {
+      ...getFeatureRoute(routing, routing.aiTier || 'premium'),
       temperature: 0.4,
       maxTokens: 1600,
       feature: 'learning_recommendation',
@@ -1732,7 +1729,7 @@ async function askAI(question, context = {}) {
     provider: isDeepSeekRoute ? context.aiFallbackProvider : context.aiProvider,
     model: isDeepSeekRoute ? context.aiFallbackModel : context.aiModel,
     temperature: 0.5,
-    maxTokens: BEE.chatMaxTokens || 2200,
+    maxTokens: RUNTIME.chatMaxTokens || 2200,
     feature: 'chat',
     _userId: context.userId,
   };
@@ -1742,7 +1739,7 @@ async function askAI(question, context = {}) {
       ? await callDeepSeekMessages(messages, {
         model: context.aiModel || DEEPSEEK.chatModel || 'deepseek-v4-pro',
         temperature: 0.35,
-        maxTokens: DEEPSEEK.chatMaxTokens || BEE.chatMaxTokens || 2200,
+        maxTokens: DEEPSEEK.chatMaxTokens || RUNTIME.chatMaxTokens || 2200,
         timeout: DEEPSEEK.timeout || 50000,
         thinking: DEEPSEEK.chatThinking || 'disabled',
         feature: 'chat',
@@ -1799,7 +1796,7 @@ async function askAIStream(question, context = {}, res) {
     provider: isDeepSeekRoute ? context.aiFallbackProvider : context.aiProvider,
     model: isDeepSeekRoute ? context.aiFallbackModel : context.aiModel,
     temperature: 0.5,
-    maxTokens: BEE.chatMaxTokens || 2200,
+    maxTokens: RUNTIME.chatMaxTokens || 2200,
     feature: 'chat',
     _userId: context.userId,
   };
@@ -1809,7 +1806,7 @@ async function askAIStream(question, context = {}, res) {
       ? await callDeepSeekMessages(messages, {
         model: context.aiModel || DEEPSEEK.chatModel || 'deepseek-v4-pro',
         temperature: 0.35,
-        maxTokens: DEEPSEEK.chatMaxTokens || BEE.chatMaxTokens || 2200,
+        maxTokens: DEEPSEEK.chatMaxTokens || RUNTIME.chatMaxTokens || 2200,
         timeout: DEEPSEEK.timeout || 50000,
         thinking: DEEPSEEK.chatThinking || 'disabled',
         feature: 'chat',
@@ -1837,114 +1834,6 @@ async function askAIStream(question, context = {}, res) {
     return;
   }
 
-  if (isRateLimited()) {
-    writeAIStreamPublicError(res, PUBLIC_AI_BUSY_MESSAGE);
-    return;
-  }
-
-  await waitBetweenRequests();
-
-  const apiKey = getNextKey();
-  if (!apiKey) {
-    writeAIStreamPublicError(res);
-    return;
-  }
-
-  const payload = {
-    model: BEE.model,
-    messages: [buildVisionUserMessage(prompt, context.imageDataUrl)],
-    max_tokens: BEE.chatMaxTokens || 2200,
-    temperature: 0.5,
-    stream: true
-  };
-
-  try {
-    await withConcurrency(async () => {
-      const response = await axios.post(
-        `${BEE.baseUrl}/chat/completions`,
-        payload,
-        {
-          timeout: BEE.timeout,
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`,
-          },
-          responseType: 'stream'
-        }
-      );
-
-      let buffer = '';
-      let sentDone = false;
-
-      await new Promise((resolve) => {
-        let streamFinished = false;
-        let settled = false;
-        const resolveOnce = () => {
-          if (settled) return;
-          settled = true;
-          resolve();
-        };
-        const finishWithPublicError = (message = PUBLIC_AI_UNAVAILABLE_MESSAGE) => {
-          if (streamFinished) return;
-          console.warn('AI provider stream returned an error; hiding provider details from user.');
-          streamFinished = true;
-          writeAIStreamPublicError(res, message);
-          response.data.destroy();
-          resolveOnce();
-        };
-
-        response.data.on('data', chunk => {
-          if (streamFinished) return;
-          buffer += chunk.toString('utf8');
-          const parts = buffer.split(/\r?\n/);
-          buffer = parts.pop() || '';
-
-          for (const line of parts) {
-            if (!line.startsWith('data:')) continue;
-            const data = line.slice(5).trim();
-            if (!data) continue;
-            if (data === '[DONE]') {
-              sentDone = true;
-              res.write(`data: ${data}\n\n`);
-              continue;
-            }
-            const publicError = getPublicProviderStreamError(data);
-            if (publicError) {
-              finishWithPublicError(publicError);
-              break;
-            }
-            res.write(`data: ${data}\n\n`);
-          }
-        });
-
-        response.data.on('end', () => {
-          if (streamFinished) return resolveOnce();
-          if (!sentDone) {
-            res.write('data: [DONE]\n\n');
-          }
-          streamFinished = true;
-          res.end();
-          resolveOnce();
-        });
-
-        response.data.on('error', err => {
-          if (streamFinished) return resolveOnce();
-          console.error('AI Stream Error:', err);
-          streamFinished = true;
-          writeAIStreamPublicError(res);
-          resolveOnce();
-        });
-      });
-    });
-  } catch (err) {
-    console.error('Lỗi khi stream AI:', err.message);
-    if (err.response?.status === 429) {
-      console.warn(`⚠️ Key bị rate limit, chuyển key`);
-      currentKeyIndex++;
-      setRateLimit(aiConfig.general?.globalBackoffMs || 60000);
-    }
-    writeAIStreamPublicError(res, getPublicAIErrorMessage(err));
-  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1954,7 +1843,7 @@ async function askAIStream(question, context = {}, res) {
  * So sánh kết quả giữa các lần thi, nhận xét tiến bộ/thụt lùi
  * @param {Array} examAttempts - Lịch sử thi (đã sort theo thời gian)
  */
-async function analyzeProgress(examAttempts) {
+async function analyzeProgress(examAttempts, routing = {}) {
   if (!examAttempts || examAttempts.length < 2) {
     return {
       hasEnoughData: false,
@@ -2007,8 +1896,8 @@ TRẢ VỀ JSON:
 }`;
 
   try {
-    const raw = await callBeeknoee(prompt, {
-      model: BEE.insightModel || BEE.ocrModel || BEE.importModel || BEE.model,
+    const raw = await callPublicAI(prompt, {
+      ...getFeatureRoute(routing, routing.aiTier || 'premium'),
       temperature: 0.3,
       maxTokens: 1400,
       feature: 'progress_insight',
@@ -2053,7 +1942,7 @@ TRẢ VỀ JSON:
  * Gợi ý đề thi phù hợp với trình độ hiện tại
  * @param {Object} context - { userLevel, weaknesses, strongSubjects, allExams }
  */
-async function recommendNextExam(context = {}) {
+async function recommendNextExam(context = {}, routing = {}) {
   const { userScore, subjectName, allExams = [] } = context;
 
   if (!allExams.length) {
@@ -2093,8 +1982,8 @@ TRẢ VỀ JSON:
 }`;
 
   try {
-    const raw = await callBeeknoee(prompt, {
-      model: BEE.insightModel || BEE.ocrModel || BEE.importModel || BEE.model,
+    const raw = await callPublicAI(prompt, {
+      ...getFeatureRoute(routing, routing.aiTier || 'premium'),
       temperature: 0.35,
       maxTokens: 900,
       feature: 'exam_recommendation',
@@ -2125,10 +2014,10 @@ TRẢ VỀ JSON:
 // ─────────────────────────────────────────────────────────────────────────────
 // FEATURE 8: Phân tích toàn diện (tổng hợp tất cả)
 // ─────────────────────────────────────────────────────────────────────────────
-async function generateFullAnalysis(examAttempts, allExams = []) {
+async function generateFullAnalysis(examAttempts, allExams = [], routing = {}) {
   const [topicResult, progressResult] = await Promise.allSettled([
-    analyzeTopics(examAttempts),
-    analyzeProgress(examAttempts),
+    analyzeTopics(examAttempts, routing),
+    analyzeProgress(examAttempts, routing),
   ]);
 
   const topics = topicResult.status === 'fulfilled' ? topicResult.value : null;
@@ -2136,7 +2025,7 @@ async function generateFullAnalysis(examAttempts, allExams = []) {
 
   const latestAttempt = examAttempts?.[0] || examAttempts?.[examAttempts.length - 1];
   const recResult = await Promise.allSettled([
-    getPracticeRecommendations(topics?.weaknesses || [], allExams),
+    getPracticeRecommendations(topics?.weaknesses || [], allExams, routing),
   ]);
   const recs = recResult[0].status === 'fulfilled'
     ? recResult[0].value
@@ -2194,7 +2083,7 @@ async function generateFullAnalysis(examAttempts, allExams = []) {
           : parseFloat(latestAttempt?.total_score) || 60),
       subjectName: latestAttempt?.subject_name,
       allExams,
-    }).catch(() => ({
+    }, routing).catch(() => ({
       recommendedExam: null,
       alternativeExams: [],
       studyAdvice: 'Hãy làm lại các câu sai gần đây và chọn một đề chưa làm để tiếp tục luyện.',
@@ -2234,7 +2123,7 @@ async function recommendMaterials(weaknesses, allMaterials) {
  * AI chấm điểm câu trả lời tự luận hoặc bài dịch
  * @param {Object} params - { questionText, questionTextCn, userAnswer, correctAnswer, questionType }
  */
-async function gradeEssay({ questionText, questionTextCn, userAnswer, correctAnswer, questionType = 'essay' }) {
+async function gradeEssay({ questionText, questionTextCn, userAnswer, correctAnswer, questionType = 'essay', routing = {} }) {
   const isTranslation = questionType === 'translation';
 
   const prompt = `Bạn là giáo viên tiếng Trung chấm bài. Chấm bằng TIẾNG VIỆT.
@@ -2274,7 +2163,12 @@ TRẢ VỀ JSON:
 }`;
 
   try {
-    const raw = await callBeeknoee(prompt, { temperature: 0.25, maxTokens: BEE.essayMaxTokens || 3000, feature: 'essay_grading' });
+    const raw = await callPublicAI(prompt, {
+      ...getFeatureRoute(routing, 'premium'),
+      temperature: 0.25,
+      maxTokens: RUNTIME.essayMaxTokens || 3000,
+      feature: 'essay_grading',
+    });
     const ai = parseAIMaybeJSON(raw);
 
     if (!ai) throw new Error('Parse failed');
@@ -2315,7 +2209,7 @@ async function teachGrammar({
 }) {
   const levelMap = { beginner: 'sơ cấp', intermediate: 'trung cấp', advanced: 'nâng cao' };
   const levelText = levelMap[userLevel] || 'sơ cấp';
-  const lessonMaxTokens = DEEPSEEK.lessonMaxTokens || Math.min(BEE.lessonMaxTokens || 1600, 1800);
+  const lessonMaxTokens = DEEPSEEK.lessonMaxTokens || Math.min(RUNTIME.lessonMaxTokens || 1600, 1800);
 
   const prompt = `Bạn là gia sư giỏi, giải thích bằng TIẾNG VIỆT cho học sinh trình độ ${levelText}.
 ${USER_AI_PRIVACY_PROMPT_RULES}
@@ -2391,7 +2285,7 @@ JSON schema:
           provider: aiFallbackProvider,
           model: aiFallbackModel,
           temperature: 0.25,
-          maxTokens: Math.min(BEE.lessonMaxTokens || 1800, 2200),
+          maxTokens: Math.min(RUNTIME.lessonMaxTokens || 1800, 2200),
           feature: 'lesson',
           _userId: userId,
         });
@@ -2428,8 +2322,6 @@ module.exports = {
   sanitizePublicAIText,
   sanitizePublicAIValue,
   // Core functions
-  callBeeknoee,
-  callBeeknoeeMessages,
   callAdminExamAI,
   callAdminExamAIMessages,
   callDeepSeekAI,
@@ -2437,6 +2329,7 @@ module.exports = {
   isDeepSeekConfigured,
   isRateLimited,
   getRateLimitRemaining,
+  testAIModel,
   // Features
   analyzeExamResult,
   explainWrongAnswers,

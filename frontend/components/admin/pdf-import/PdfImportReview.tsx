@@ -973,7 +973,7 @@ export default function PdfImportReview({ preview, items: sourceItems, saving, o
         range: `${questionCount} câu`,
         status: 'requesting',
         expectedReviews: questionCount,
-        message: 'Đang gửi yêu cầu AI review. Nếu không thấy log Beeknoee mới, request chưa tới backend hoặc bị chặn trước khi gọi model.',
+        message: 'Đang gửi yêu cầu AI review. Nếu không thấy log 9Router mới, request chưa tới backend hoặc bị chặn trước khi gọi model.',
         }]);
       });
       await waitForNextPaint();

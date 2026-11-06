@@ -7,6 +7,7 @@ const dailyGiftLetterService = require('../services/dailyGiftLetterService');
 const aiAskCacheService = require('../services/aiAskCacheService');
 const { getSettings, DEFAULT_SETTINGS } = require('../services/siteSettingsService');
 const ExamAttempt = require('../models/ExamAttempt');
+const { PROVIDERS, MODELS } = require('../config/aiModelPolicy');
 
 // ─── Per-user cooldown ──────────────────────────────────────────────────────────────
 const userCooldowns = new Map();
@@ -39,21 +40,22 @@ async function getUserAIRouting(user) {
     'premium_ai_deepseek_model',
     'public_ai_9router_model',
     'public_ai_free_9router_model',
-    'public_ai_beeknoee_model',
     'public_ai_fallback_provider',
   ]).catch(() => DEFAULT_SETTINGS);
 
   if (canUseAIFeatures(user)) {
-    const provider = ['deepseek', '9router', 'beeknoee'].includes(settings.premium_ai_provider)
+    const provider = [PROVIDERS.DEEPSEEK, PROVIDERS.NINE_ROUTER].includes(settings.premium_ai_provider)
       ? settings.premium_ai_provider
-      : 'deepseek';
-    const fallbackProvider = ['9router', 'beeknoee'].includes(settings.public_ai_fallback_provider)
+      : PROVIDERS.NINE_ROUTER;
+    const configuredFallback = [PROVIDERS.DEEPSEEK, PROVIDERS.NINE_ROUTER].includes(settings.public_ai_fallback_provider)
       ? settings.public_ai_fallback_provider
-      : 'beeknoee';
+      : PROVIDERS.DEEPSEEK;
+    const fallbackProvider = configuredFallback === provider
+      ? (provider === PROVIDERS.NINE_ROUTER ? PROVIDERS.DEEPSEEK : PROVIDERS.NINE_ROUTER)
+      : configuredFallback;
     const models = {
       deepseek: settings.premium_ai_deepseek_model || 'deepseek-v4-pro',
-      '9router': settings.public_ai_9router_model || 'ag/claude-sonnet-4-6',
-      beeknoee: settings.public_ai_beeknoee_model || 'gpt-5.4-mini',
+      '9router': settings.public_ai_9router_model || MODELS.PREMIUM,
     };
     return {
       aiTier: 'premium',
@@ -67,7 +69,9 @@ async function getUserAIRouting(user) {
   return {
     aiTier: 'free',
     aiProvider: '9router',
-    aiModel: process.env.PUBLIC_AI_FREE_9ROUTER_MODEL || process.env.PUBLIC_AI_9ROUTER_MODEL || settings.public_ai_free_9router_model || 'ag/gemini-3.7-flash-high',
+    aiModel: process.env.PUBLIC_AI_FREE_9ROUTER_MODEL || settings.public_ai_free_9router_model || MODELS.FREE,
+    aiFallbackProvider: 'deepseek',
+    aiFallbackModel: settings.premium_ai_deepseek_model || 'deepseek-v4-pro',
   };
 }
 
@@ -607,13 +611,14 @@ async function analyzeExamResult(req, res) {
     };
 
     const inflightKey = `${INSIGHT_TYPES.examAnalysis}:${userId}:${attemptId}`;
+    const aiRouting = await getUserAIRouting(req.user);
     let aiAnalysis;
     let fromInflight = false;
     if (inFlightRequests.has(inflightKey)) {
       fromInflight = true;
       aiAnalysis = await inFlightRequests.get(inflightKey);
     } else {
-      const analysisPromise = aiService.analyzeExamResult(attemptData)
+      const analysisPromise = aiService.analyzeExamResult(attemptData, aiRouting)
         .finally(() => inFlightRequests.delete(inflightKey));
       inFlightRequests.set(inflightKey, analysisPromise);
       aiAnalysis = await analysisPromise;
@@ -742,7 +747,8 @@ async function explainWrongAnswers(req, res) {
       });
     }
 
-    const explanations = aiService.sanitizePublicAIValue(await aiService.explainWrongAnswers(questions));
+    const aiRouting = await getUserAIRouting(req.user);
+    const explanations = aiService.sanitizePublicAIValue(await aiService.explainWrongAnswers(questions, aiRouting));
 
     try {
       await db.query(
@@ -801,7 +807,7 @@ async function analyzeTopics(req, res) {
       return handleRateLimit(res, userId, aiService.getRateLimitRemaining(), 'AI đang bận.');
     }
 
-    const result = await aiService.analyzeTopics(attempts.rows);
+    const result = await aiService.analyzeTopics(attempts.rows, await getUserAIRouting(req.user));
     res.json({ success: true, ...result });
   } catch (error) {
     console.error('analyzeTopics error:', error);
@@ -846,6 +852,7 @@ async function getPracticeRecommendations(req, res) {
     const result = await aiService.getPracticeRecommendations(
       weaknesses || [],
       exams.rows,
+      await getUserAIRouting(req.user),
     );
 
     res.json({ success: true, ...result });
@@ -1241,7 +1248,7 @@ async function analyzeProgress(req, res) {
       });
     }
 
-    const result = await aiService.analyzeProgress(attempts.rows);
+    const result = await aiService.analyzeProgress(attempts.rows, await getUserAIRouting(req.user));
     res.json({ success: true, ...result });
   } catch (error) {
     console.error('analyzeProgress error:', error);
@@ -1301,7 +1308,7 @@ async function recommendNextExam(req, res) {
       userScore,
       subjectName: last?.subject_name,
       allExams: exams.rows,
-    });
+    }, await getUserAIRouting(req.user));
 
     res.json({ success: true, userScore, ...result });
   } catch (error) {
@@ -1407,7 +1414,8 @@ async function analyzeUserPerformance(req, res) {
 
     let fullAnalysis;
     try {
-      fullAnalysis = await aiService.generateFullAnalysis(attempts.rows, []);
+      const analysisRouting = await getUserAIRouting(req.user);
+      fullAnalysis = await aiService.generateFullAnalysis(attempts.rows, [], analysisRouting);
     } catch (analysisError) {
       console.error('generateFullAnalysis fallback:', analysisError.message);
       const subjects = new Map();
@@ -1690,6 +1698,7 @@ async function gradeEssay(req, res) {
       userAnswer: context.essay_answer,
       correctAnswer: context.correct_answer,
       questionType: context.question_type,
+      routing: await getUserAIRouting(req.user),
     });
 
     const persisted = await ExamAttempt.applySubjectiveGrade(

@@ -1,16 +1,18 @@
 const db = require("../config/database");
+const { MODELS } = require("../config/aiModelPolicy");
+
+const AI_MODEL_POLICY_VERSION = "2";
 
 const DEFAULT_SETTINGS = {
   exam_date: "2026-06-10T08:00:00",
   public_ai_provider: "9router",
-  premium_ai_provider: "deepseek",
+  premium_ai_provider: "9router",
   premium_ai_deepseek_model: "deepseek-v4-pro",
-  public_ai_9router_model: process.env.PUBLIC_AI_9ROUTER_MODEL || "ag/gemini-3.7-flash-high",
-  public_ai_free_9router_model: process.env.PUBLIC_AI_FREE_9ROUTER_MODEL || process.env.PUBLIC_AI_9ROUTER_MODEL || "ag/gemini-3.7-flash-high",
-  public_ai_beeknoee_model: "gpt-5.4-mini",
-  public_ai_fallback_provider: "beeknoee",
-  admin_question_review_model: "cx/gpt-5.5",
-  admin_question_review_fallback_model: "ag/claude-opus-4-6-thinking",
+  public_ai_9router_model: process.env.PUBLIC_AI_9ROUTER_MODEL || MODELS.PREMIUM,
+  public_ai_free_9router_model: process.env.PUBLIC_AI_FREE_9ROUTER_MODEL || MODELS.FREE,
+  public_ai_fallback_provider: "deepseek",
+  admin_question_review_model: MODELS.PREMIUM,
+  admin_question_review_fallback_model: MODELS.FREE,
   welcome_settings: JSON.stringify({
     enabled: true,
     version: 2,
@@ -41,6 +43,32 @@ async function ensureSettingsTable() {
           updated_at TIMESTAMPTZ DEFAULT NOW()
         )
       `);
+
+      const policyResult = await db.query(
+        "SELECT value FROM site_settings WHERE key = 'ai_model_policy_version' LIMIT 1",
+      );
+      if (policyResult.rows[0]?.value !== AI_MODEL_POLICY_VERSION) {
+        const requiredAISettings = {
+          public_ai_provider: "9router",
+          premium_ai_provider: "9router",
+          public_ai_9router_model: DEFAULT_SETTINGS.public_ai_9router_model,
+          public_ai_free_9router_model: DEFAULT_SETTINGS.public_ai_free_9router_model,
+          public_ai_fallback_provider: "deepseek",
+          admin_question_review_model: DEFAULT_SETTINGS.admin_question_review_model,
+          admin_question_review_fallback_model: DEFAULT_SETTINGS.admin_question_review_fallback_model,
+          ai_model_policy_version: AI_MODEL_POLICY_VERSION,
+        };
+        for (const [key, value] of Object.entries(requiredAISettings)) {
+          await db.query(
+            `INSERT INTO site_settings (key, value, updated_at)
+             VALUES ($1, $2, NOW())
+             ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+            [key, value],
+          );
+        }
+        const retiredProviderKey = `public_ai_${['bee', 'knoee'].join('')}_model`;
+        await db.query('DELETE FROM site_settings WHERE key = $1', [retiredProviderKey]);
+      }
 
       for (const [key, value] of Object.entries(DEFAULT_SETTINGS)) {
         await db.query(

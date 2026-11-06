@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const { getPublicSettings, getAdminSettings, updateSettings } = require("../controllers/settingsController");
+const { getPublicSettings, getAdminSettings, testAIModel, updateSettings } = require("../controllers/settingsController");
 const {
 	authenticate,
 	authorizePermission,
@@ -20,6 +20,13 @@ router.put(
 	authenticate,
 	authorizePermission("system.manage"),
 	updateSettings,
+);
+
+router.post(
+	"/test-ai-model",
+	authenticate,
+	authorizePermission("system.manage"),
+	testAIModel,
 );
 
 module.exports = router;

@@ -2,7 +2,7 @@
 CREATE TABLE IF NOT EXISTS ai_token_usage (
   id SERIAL PRIMARY KEY,
   user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
-  provider VARCHAR(50) NOT NULL,            -- 'beeknoee', 'deepseek', '9router'
+  provider VARCHAR(50) NOT NULL,            -- 'deepseek', '9router'
   model VARCHAR(120) NOT NULL,
   feature VARCHAR(80) NOT NULL DEFAULT 'unknown', -- 'chat', 'exam_analysis', 'moli_pet', 'grade_essay', 'teach_grammar', 'explain', 'progress', 'admin_exam_ai', etc.
   prompt_tokens INTEGER NOT NULL DEFAULT 0,

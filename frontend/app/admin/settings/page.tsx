@@ -1,93 +1,118 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
 import AdminLayout from '@/components/layout/AdminLayout';
-import { FiCalendar, FiCheckCircle, FiCpu, FiSave, FiSettings } from 'react-icons/fi';
+import { FiActivity, FiAlertCircle, FiCalendar, FiCheckCircle, FiCpu, FiSave, FiSettings } from 'react-icons/fi';
 import axiosInstance from '@/lib/utils/axios';
 
-type Provider = 'deepseek' | '9router' | 'beeknoee';
+type Provider = '9router' | 'deepseek';
 
 interface SettingsData {
-    exam_date?: string;
-    public_ai_provider?: Provider;
-    premium_ai_provider?: Provider;
-    premium_ai_deepseek_model?: string;
-    public_ai_9router_model?: string;
-    public_ai_free_9router_model?: string;
-    public_ai_beeknoee_model?: string;
-    public_ai_fallback_provider?: Provider;
-    admin_question_review_model?: string;
-    admin_question_review_fallback_model?: string;
+    exam_date: string;
+    public_ai_provider: '9router';
+    premium_ai_provider: Provider;
+    premium_ai_deepseek_model: string;
+    public_ai_9router_model: string;
+    public_ai_free_9router_model: string;
+    public_ai_fallback_provider: Provider;
+    admin_question_review_model: string;
+    admin_question_review_fallback_model: string;
 }
 
-const DEFAULT_SETTINGS: Required<SettingsData> = {
-    exam_date: '',
-    public_ai_provider: '9router',
-    premium_ai_provider: 'deepseek',
-    premium_ai_deepseek_model: 'deepseek-v4-pro',
-    public_ai_9router_model: 'ag/claude-sonnet-4-6',
-    public_ai_free_9router_model: 'ag/gemini-3-flash-agent',
-    public_ai_beeknoee_model: 'gpt-5.4-mini',
-    public_ai_fallback_provider: 'beeknoee',
-    admin_question_review_model: 'cx/gpt-5.5',
-    admin_question_review_fallback_model: 'ag/claude-opus-4-6-thinking',
+type TestResult = {
+    status: 'testing' | 'success' | 'error';
+    latencyMs?: number;
+    token?: string;
+    message?: string;
 };
 
-const QUESTION_REVIEW_MODEL_OPTIONS = [
-    { value: 'cx/gpt-5.5', label: 'cx/gpt-5.5' },
-    { value: 'ag/claude-opus-4-6-thinking', label: 'ag/claude-opus-4-6-thinking' },
+const DEFAULT_SETTINGS: SettingsData = {
+    exam_date: '',
+    public_ai_provider: '9router',
+    premium_ai_provider: '9router',
+    premium_ai_deepseek_model: 'deepseek-v4-pro',
+    public_ai_9router_model: 'ag/gemini-4-argon-low',
+    public_ai_free_9router_model: 'ag/gemini-3.8-flash-low',
+    public_ai_fallback_provider: 'deepseek',
+    admin_question_review_model: 'ag/gemini-4-argon-low',
+    admin_question_review_fallback_model: 'ag/gemini-3.8-flash-low',
+};
+
+const NINE_ROUTER_MODELS = [
+    { value: 'ag/gemini-4-argon-low', label: 'Gemini 4 Argon Low', note: 'Chất lượng cao, khoảng 4 giây' },
+    { value: 'ag/gemini-3.8-flash-low', label: 'Gemini 3.8 Flash Low', note: 'Cân bằng tốc độ và chất lượng' },
+    { value: 'ag/gemini-3-flash', label: 'Gemini 3 Flash', note: 'Nhanh, phù hợp hội thoại nhẹ' },
+    { value: 'ag/gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash Lite', note: 'Rất nhanh' },
+    { value: 'ag/gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash Lite', note: 'Rất nhanh' },
+    { value: 'ag/gemini-2.5-flash', label: 'Gemini 2.5 Flash', note: 'Ổn định' },
+    { value: 'ag/gemini-2.5-flash-thinking', label: 'Gemini 2.5 Flash Thinking', note: 'Có suy luận' },
 ];
 
-const DEEPSEEK_MODEL_OPTIONS = [
-    'deepseek-v4-pro',
-    'deepseek-v4-flash',
-    'deepseek-chat',
-    'deepseek-reasoner',
+const DEEPSEEK_MODELS = [
+    { value: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro' },
+    { value: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash' },
+    { value: 'deepseek-chat', label: 'DeepSeek Chat' },
+    { value: 'deepseek-reasoner', label: 'DeepSeek Reasoner' },
 ];
 
-const renderQuestionReviewModelOptions = (currentValue: string) => (
-    <>
-        {currentValue && !QUESTION_REVIEW_MODEL_OPTIONS.some(option => option.value === currentValue) && (
-            <option value={currentValue}>{currentValue}</option>
-        )}
-        {QUESTION_REVIEW_MODEL_OPTIONS.map(option => (
-            <option key={option.value} value={option.value}>{option.label}</option>
-        ))}
-    </>
-);
+const signature = (provider: Provider, model: string) => `${provider}:${model}`;
+
+function toDateTimeLocal(value?: string) {
+    if (!value) return '';
+    const dateObj = new Date(value);
+    if (Number.isNaN(dateObj.getTime())) return '';
+    const tzOffset = dateObj.getTimezoneOffset() * 60000;
+    return new Date(dateObj.getTime() - tzOffset).toISOString().slice(0, 16);
+}
+
+function ModelSelect({ provider, value, onChange }: {
+    provider: Provider;
+    value: string;
+    onChange: (value: string) => void;
+}) {
+    const options = provider === '9router' ? NINE_ROUTER_MODELS : DEEPSEEK_MODELS;
+    return (
+        <select
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+            className="w-full rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm font-medium dark:border-slate-700 dark:bg-slate-800"
+        >
+            {options.map((option) => (
+                <option key={option.value} value={option.value}>{option.label} — {option.value}</option>
+            ))}
+        </select>
+    );
+}
 
 export default function AdminSettingsPage() {
-    const [settings, setSettings] = useState<Required<SettingsData>>(DEFAULT_SETTINGS);
+    const [settings, setSettings] = useState<SettingsData>(DEFAULT_SETTINGS);
+    const [savedSettings, setSavedSettings] = useState<SettingsData>(DEFAULT_SETTINGS);
+    const [tests, setTests] = useState<Record<string, TestResult>>({});
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [successMessage, setSuccessMessage] = useState('');
 
-    useEffect(() => {
-        loadSettings();
-    }, []);
+    useEffect(() => { void loadSettings(); }, []);
 
     const patchSettings = (patch: Partial<SettingsData>) => {
         setSettings((current) => ({ ...current, ...patch }));
-    };
-
-    const toDateTimeLocal = (value?: string) => {
-        if (!value) return '';
-        const dateObj = new Date(value);
-        if (Number.isNaN(dateObj.getTime())) return '';
-        const tzOffset = dateObj.getTimezoneOffset() * 60000;
-        return new Date(dateObj.getTime() - tzOffset).toISOString().slice(0, 16);
+        setSuccessMessage('');
     };
 
     const loadSettings = async () => {
         try {
             setLoading(true);
             const res = await axiosInstance.get('/settings');
-            const data = res.data?.data || {};
-            setSettings({
+            const loaded = {
                 ...DEFAULT_SETTINGS,
-                ...data,
-                exam_date: toDateTimeLocal(data.exam_date),
-            });
+                ...(res.data?.data || {}),
+                exam_date: toDateTimeLocal(res.data?.data?.exam_date),
+                public_ai_provider: '9router' as const,
+            };
+            setSettings(loaded);
+            setSavedSettings(loaded);
+            setTests({});
         } catch (error) {
             console.error('Error loading settings:', error);
         } finally {
@@ -95,223 +120,200 @@ export default function AdminSettingsPage() {
         }
     };
 
-    const handleSave = async () => {
-        if (!settings.exam_date) {
-            alert('Vui lòng chọn ngày!');
-            return;
+    const premiumModel = settings.premium_ai_provider === '9router'
+        ? settings.public_ai_9router_model
+        : settings.premium_ai_deepseek_model;
+
+    const requiredTestSignatures = useMemo(() => {
+        const required = new Set<string>();
+        if (settings.public_ai_free_9router_model !== savedSettings.public_ai_free_9router_model) {
+            required.add(signature('9router', settings.public_ai_free_9router_model));
         }
+        if (settings.public_ai_9router_model !== savedSettings.public_ai_9router_model) {
+            required.add(signature('9router', settings.public_ai_9router_model));
+        }
+        if (settings.premium_ai_deepseek_model !== savedSettings.premium_ai_deepseek_model) {
+            required.add(signature('deepseek', settings.premium_ai_deepseek_model));
+        }
+        if (settings.premium_ai_provider !== savedSettings.premium_ai_provider) {
+            required.add(signature(settings.premium_ai_provider, premiumModel));
+        }
+        if (settings.admin_question_review_model !== savedSettings.admin_question_review_model) {
+            required.add(signature('9router', settings.admin_question_review_model));
+        }
+        if (settings.admin_question_review_fallback_model !== savedSettings.admin_question_review_fallback_model) {
+            required.add(signature('9router', settings.admin_question_review_fallback_model));
+        }
+        return [...required];
+    }, [premiumModel, savedSettings, settings]);
+
+    const missingTests = requiredTestSignatures.filter((key) => tests[key]?.status !== 'success');
+
+    const testModel = async (provider: Provider, model: string) => {
+        const key = signature(provider, model);
+        setTests((current) => ({ ...current, [key]: { status: 'testing' } }));
+        try {
+            const res = await axiosInstance.post('/settings/test-ai-model', { provider, model });
+            const data = res.data?.data || {};
+            setTests((current) => ({
+                ...current,
+                [key]: { status: 'success', latencyMs: data.latencyMs, token: data.testToken },
+            }));
+        } catch (error: any) {
+            setTests((current) => ({
+                ...current,
+                [key]: {
+                    status: 'error',
+                    latencyMs: error.response?.data?.latencyMs,
+                    message: error.response?.data?.message || 'Test model thất bại.',
+                },
+            }));
+        }
+    };
+
+    const handleSave = async () => {
+        if (!settings.exam_date) return alert('Vui lòng chọn ngày thi.');
+        if (missingTests.length) return alert('Hãy test thành công tất cả model đã thay đổi trước khi lưu.');
 
         try {
             setSaving(true);
             setSuccessMessage('');
-            const res = await axiosInstance.put('/settings', {
+            const testTokens = requiredTestSignatures
+                .map((key) => tests[key]?.token)
+                .filter((token): token is string => Boolean(token));
+            const payload = {
                 ...settings,
+                public_ai_provider: '9router' as const,
+                public_ai_fallback_provider: settings.premium_ai_provider === '9router' ? 'deepseek' : '9router',
                 exam_date: new Date(settings.exam_date).toISOString(),
-            });
+                ai_model_test_tokens: testTokens,
+            };
+            const res = await axiosInstance.put('/settings', payload);
             if (res.data?.success) {
-                setSuccessMessage('Cập nhật cài đặt thành công!');
-                const data = res.data.data || {};
-                setSettings((current) => ({
-                    ...current,
-                    ...data,
-                    exam_date: toDateTimeLocal(data.exam_date || current.exam_date),
-                }));
-                setTimeout(() => setSuccessMessage(''), 3000);
+                const saved = {
+                    ...settings,
+                    ...(res.data.data || {}),
+                    exam_date: toDateTimeLocal(res.data.data?.exam_date || settings.exam_date),
+                    public_ai_provider: '9router' as const,
+                };
+                setSettings(saved);
+                setSavedSettings(saved);
+                setTests({});
+                setSuccessMessage('Đã lưu cấu hình AI đã kiểm thử.');
             }
         } catch (error: any) {
             console.error('Error saving settings:', error);
-            alert(error.response?.data?.message || 'Có lỗi xảy ra khi lưu cài đặt');
+            alert(error.response?.data?.message || 'Có lỗi xảy ra khi lưu cài đặt.');
         } finally {
             setSaving(false);
         }
     };
 
+    const renderTest = (provider: Provider, model: string) => {
+        const result = tests[signature(provider, model)];
+        return (
+            <div className="flex flex-wrap items-center gap-3">
+                <button
+                    type="button"
+                    onClick={() => void testModel(provider, model)}
+                    disabled={result?.status === 'testing'}
+                    className="inline-flex items-center gap-2 rounded-lg border border-sky-300 bg-sky-50 px-4 py-2 text-sm font-bold text-sky-700 transition hover:bg-sky-100 disabled:opacity-60 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-300"
+                >
+                    <FiActivity />
+                    {result?.status === 'testing' ? 'Đang test...' : 'Test model'}
+                </button>
+                {result?.status === 'success' && (
+                    <span className="inline-flex items-center gap-1 text-sm font-semibold text-emerald-600">
+                        <FiCheckCircle /> Hoạt động tốt · {result.latencyMs} ms
+                    </span>
+                )}
+                {result?.status === 'error' && (
+                    <span className="inline-flex items-center gap-1 text-sm font-semibold text-rose-600">
+                        <FiAlertCircle /> {result.message}
+                    </span>
+                )}
+            </div>
+        );
+    };
+
+    const routeCard = (title: string, description: string, provider: Provider, model: string, controls: ReactNode) => (
+        <section className="space-y-4 rounded-xl border border-gray-200 bg-gray-50/70 p-5 dark:border-slate-700 dark:bg-slate-950/40">
+            <div>
+                <h3 className="font-bold text-gray-900 dark:text-white">{title}</h3>
+                <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-slate-400">{description}</p>
+            </div>
+            {controls}
+            <div className="rounded-lg bg-white px-3 py-2 text-xs text-gray-500 ring-1 ring-gray-200 dark:bg-slate-900 dark:text-slate-400 dark:ring-slate-700">
+                Route hiện tại: <strong>{provider}</strong> / <span className="font-mono">{model}</span>
+            </div>
+            {renderTest(provider, model)}
+        </section>
+    );
+
     return (
-        <AdminLayout
-            title="Cấu hình hệ thống"
-            description="Quản lý cài đặt chung và AI public"
-        >
-            <div className="max-w-4xl space-y-6">
+        <AdminLayout title="Cấu hình hệ thống" description="Quản lý lịch thi và định tuyến model AI">
+            <div className="max-w-5xl space-y-6">
                 {successMessage && (
                     <div className="flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-700">
-                        <FiCheckCircle size={20} />
-                        <span className="text-sm font-medium">{successMessage}</span>
+                        <FiCheckCircle size={20} /><span className="text-sm font-medium">{successMessage}</span>
                     </div>
                 )}
 
-                <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
                     <div className="flex items-center gap-3 border-b border-gray-200 px-6 py-4 dark:border-slate-800">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400">
-                            <FiSettings size={20} />
-                        </div>
-                        <div>
-                            <h2 className="text-lg font-bold text-gray-900 dark:text-white">Cài đặt chung</h2>
-                            <p className="text-xs text-gray-500 dark:text-slate-400">Mốc thời gian hiển thị trên website</p>
-                        </div>
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"><FiSettings /></div>
+                        <div><h2 className="font-bold text-gray-900 dark:text-white">Cài đặt chung</h2><p className="text-xs text-gray-500">Mốc thời gian hiển thị trên website</p></div>
                     </div>
-
                     <div className="p-6">
-                        {loading ? (
-                            <div className="space-y-4">
-                                <div className="h-4 w-1/4 rounded bg-slate-200 dark:bg-slate-800" />
-                                <div className="h-12 w-full max-w-sm rounded bg-slate-200 dark:bg-slate-800" />
-                            </div>
-                        ) : (
-                            <div className="max-w-sm">
-                                <label className="mb-2 flex items-center gap-2 text-sm font-semibold text-gray-700 dark:text-slate-300">
-                                    <FiCalendar className="text-violet-500" />
-                                    Ngày đếm ngược kỳ thi
-                                </label>
-                                <input
-                                    type="datetime-local"
-                                    value={settings.exam_date}
-                                    onChange={(event) => patchSettings({ exam_date: event.target.value })}
-                                    className="w-full rounded-lg bg-gray-50 px-4 py-3 text-sm font-medium outline-none ring-1 ring-transparent transition focus:ring-2 focus:ring-violet-500 dark:bg-slate-800"
-                                />
-                            </div>
-                        )}
+                        <label className="block max-w-sm space-y-2">
+                            <span className="flex items-center gap-2 text-sm font-semibold"><FiCalendar /> Ngày đếm ngược kỳ thi</span>
+                            <input type="datetime-local" value={settings.exam_date} onChange={(event) => patchSettings({ exam_date: event.target.value })} className="w-full rounded-lg bg-gray-50 px-4 py-3 text-sm outline-none ring-1 ring-gray-200 focus:ring-2 focus:ring-amber-500 dark:bg-slate-800 dark:ring-slate-700" />
+                        </label>
                     </div>
                 </div>
 
-                <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
                     <div className="flex items-center gap-3 border-b border-gray-200 px-6 py-4 dark:border-slate-800">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-sky-100 text-sky-600 dark:bg-sky-900/30 dark:text-sky-400">
-                            <FiCpu size={20} />
-                        </div>
-                        <div>
-                            <h2 className="text-lg font-bold text-gray-900 dark:text-white">AI người dùng</h2>
-                            <p className="text-xs text-gray-500 dark:text-slate-400">VIP/Premium mặc định dùng DeepSeek; có thể chuyển nhanh sang 9Router hoặc Beeknoee</p>
-                        </div>
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300"><FiCpu /></div>
+                        <div><h2 className="font-bold text-gray-900 dark:text-white">Định tuyến AI người dùng</h2><p className="text-xs text-gray-500">Chỉ dùng 9Router và DeepSeek. Model mới phải test thành công trước khi lưu.</p></div>
                     </div>
+                    <div className="grid gap-5 p-6 lg:grid-cols-2">
+                        {routeCard('User thường', 'Chat, giảng lại lý thuyết và phân tích tổng hợp 50 Xu.', '9router', settings.public_ai_free_9router_model,
+                            <ModelSelect provider="9router" value={settings.public_ai_free_9router_model} onChange={(value) => patchSettings({ public_ai_free_9router_model: value })} />)}
 
-                    <div className="grid gap-5 p-6 md:grid-cols-2">
-                        <label className="space-y-2">
-                            <span className="text-sm font-semibold text-gray-700 dark:text-slate-300">Provider VIP/Premium</span>
-                            <select
-                                value={settings.premium_ai_provider}
-                                onChange={(event) => patchSettings({ premium_ai_provider: event.target.value as Provider })}
-                                className="w-full rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm dark:border-slate-700 dark:bg-slate-800"
-                            >
-                                <option value="deepseek">DeepSeek (Railway keys)</option>
-                                <option value="9router">9Router production</option>
-                                <option value="beeknoee">Beeknoee fallback</option>
-                            </select>
-                        </label>
+                        {routeCard('VIP / Premium', 'Chat, lý thuyết, phân tích bài thi, câu sai, tiến bộ và chấm tự luận.', settings.premium_ai_provider, premiumModel,
+                            <div className="space-y-3">
+                                <select value={settings.premium_ai_provider} onChange={(event) => patchSettings({ premium_ai_provider: event.target.value as Provider })} className="w-full rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm font-medium dark:border-slate-700 dark:bg-slate-800">
+                                    <option value="9router">9Router production</option>
+                                    <option value="deepseek">DeepSeek</option>
+                                </select>
+                                <ModelSelect provider={settings.premium_ai_provider} value={premiumModel} onChange={(value) => patchSettings(settings.premium_ai_provider === '9router' ? { public_ai_9router_model: value } : { premium_ai_deepseek_model: value })} />
+                            </div>)}
 
-                        <label className="space-y-2">
-                            <span className="text-sm font-semibold text-gray-700 dark:text-slate-300">Fallback provider</span>
-                            <select
-                                value={settings.public_ai_fallback_provider}
-                                onChange={(event) => patchSettings({ public_ai_fallback_provider: event.target.value as Provider })}
-                                className="w-full rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm dark:border-slate-700 dark:bg-slate-800"
-                            >
-                                <option value="beeknoee">Beeknoee</option>
-                                <option value="9router">9Router</option>
-                            </select>
-                        </label>
+                        {routeCard('Admin soát câu — model chính', 'Model 9Router dùng cho thao tác AI soát và sửa câu hỏi.', '9router', settings.admin_question_review_model,
+                            <ModelSelect provider="9router" value={settings.admin_question_review_model} onChange={(value) => patchSettings({ admin_question_review_model: value })} />)}
 
-                        <label className="space-y-2">
-                            <span className="text-sm font-semibold text-gray-700 dark:text-slate-300">9Router model VIP/Pre & lượt Xu</span>
-                            <select
-                                value={settings.public_ai_9router_model}
-                                onChange={(event) => patchSettings({ public_ai_9router_model: event.target.value })}
-                                className="w-full rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm dark:border-slate-700 dark:bg-slate-800"
-                            >
-                                <option value="ag/claude-sonnet-4-6">ag/claude-sonnet-4-6</option>
-                                <option value="cx/gpt-5.4-mini">cx/gpt-5.4-mini</option>
-                            </select>
-                        </label>
+                        {routeCard('Admin soát câu — dự phòng', 'Model dự phòng khi model chính không đáp ứng.', '9router', settings.admin_question_review_fallback_model,
+                            <ModelSelect provider="9router" value={settings.admin_question_review_fallback_model} onChange={(value) => patchSettings({ admin_question_review_fallback_model: value })} />)}
 
-                        <label className="space-y-2">
-                            <span className="text-sm font-semibold text-gray-700 dark:text-slate-300">DeepSeek model VIP/Premium</span>
-                            <select
-                                value={settings.premium_ai_deepseek_model}
-                                onChange={(event) => patchSettings({ premium_ai_deepseek_model: event.target.value })}
-                                className="w-full rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm dark:border-slate-700 dark:bg-slate-800"
-                            >
-                                {settings.premium_ai_deepseek_model && !DEEPSEEK_MODEL_OPTIONS.includes(settings.premium_ai_deepseek_model) && (
-                                    <option value={settings.premium_ai_deepseek_model}>{settings.premium_ai_deepseek_model}</option>
-                                )}
-                                {DEEPSEEK_MODEL_OPTIONS.map((model) => (
-                                    <option key={model} value={model}>{model}</option>
-                                ))}
-                            </select>
-                        </label>
-
-                        <label className="space-y-2">
-                            <span className="text-sm font-semibold text-gray-700 dark:text-slate-300">9Router model Free</span>
-                            <select
-                                value={settings.public_ai_free_9router_model}
-                                onChange={(event) => patchSettings({ public_ai_free_9router_model: event.target.value })}
-                                className="w-full rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm dark:border-slate-700 dark:bg-slate-800"
-                            >
-                                <option value="ag/gemini-3-flash-agent">ag/gemini-3-flash-agent</option>
-                            </select>
-                        </label>
-
-                        <label className="space-y-2">
-                            <span className="text-sm font-semibold text-gray-700 dark:text-slate-300">Beeknoee model</span>
-                            <select
-                                value={settings.public_ai_beeknoee_model}
-                                onChange={(event) => patchSettings({ public_ai_beeknoee_model: event.target.value })}
-                                className="w-full rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm dark:border-slate-700 dark:bg-slate-800"
-                            >
-                                <option value="gpt-5.4-mini">gpt-5.4-mini</option>
-                                <option value="google/gemini-3.1-pro-preview">google/gemini-3.1-pro-preview</option>
-                                <option value="google/gemini-3.1-flash-lite">google/gemini-3.1-flash-lite</option>
-                            </select>
-                        </label>
+                        <section className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-5 dark:border-emerald-900 dark:bg-emerald-950/20 lg:col-span-2">
+                            <h3 className="font-bold text-emerald-900 dark:text-emerald-200">MoliPet — cố định</h3>
+                            <p className="mt-1 text-sm text-emerald-700 dark:text-emerald-300">Mọi tài khoản đăng nhập dùng <strong>9Router</strong> / <span className="font-mono">ag/gemini-3-flash</span>. Route này không đổi từ màn admin để tránh lệch cấu hình pet.</p>
+                        </section>
                     </div>
                 </div>
 
-                <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-                    <div className="flex items-center gap-3 border-b border-gray-200 px-6 py-4 dark:border-slate-800">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400">
-                            <FiCpu size={20} />
-                        </div>
-                        <div>
-                            <h2 className="text-lg font-bold text-gray-900 dark:text-white">AI soát riêng câu</h2>
-                            <p className="text-xs text-gray-500 dark:text-slate-400">Model cho nút AI riêng trong từng câu hỏi</p>
-                        </div>
+                {missingTests.length > 0 && (
+                    <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-amber-800">
+                        <FiAlertCircle className="mt-0.5 shrink-0" />
+                        <span className="text-sm">Còn {missingTests.length} model đã thay đổi chưa test thành công. Nút lưu sẽ mở sau khi test đủ.</span>
                     </div>
-
-                    <div className="grid gap-5 p-6 md:grid-cols-2">
-                        <label className="space-y-2">
-                            <span className="text-sm font-semibold text-gray-700 dark:text-slate-300">Model chính</span>
-                            <select
-                                value={settings.admin_question_review_model}
-                                onChange={(event) => patchSettings({ admin_question_review_model: event.target.value })}
-                                className="w-full rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm dark:border-slate-700 dark:bg-slate-800"
-                            >
-                                {renderQuestionReviewModelOptions(settings.admin_question_review_model)}
-                            </select>
-                        </label>
-
-                        <label className="space-y-2">
-                            <span className="text-sm font-semibold text-gray-700 dark:text-slate-300">Model dự phòng</span>
-                            <select
-                                value={settings.admin_question_review_fallback_model}
-                                onChange={(event) => patchSettings({ admin_question_review_fallback_model: event.target.value })}
-                                className="w-full rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm dark:border-slate-700 dark:bg-slate-800"
-                            >
-                                {renderQuestionReviewModelOptions(settings.admin_question_review_fallback_model)}
-                            </select>
-                        </label>
-                    </div>
-                </div>
+                )}
 
                 <div className="flex justify-end">
-                    <button
-                        onClick={handleSave}
-                        disabled={loading || saving}
-                        className="flex items-center gap-2 rounded-lg bg-violet-600 px-6 py-2.5 font-bold text-white shadow-sm transition hover:bg-violet-700 disabled:opacity-50"
-                    >
-                        {saving ? (
-                            <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                        ) : (
-                            <FiSave size={18} />
-                        )}
-                        {saving ? 'Đang lưu...' : 'Lưu cài đặt'}
+                    <button onClick={() => void handleSave()} disabled={loading || saving || missingTests.length > 0} className="flex items-center gap-2 rounded-lg bg-slate-900 px-6 py-3 font-bold text-white shadow-sm transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-45 dark:bg-amber-500 dark:text-slate-950 dark:hover:bg-amber-400">
+                        {saving ? <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white" /> : <FiSave />}
+                        {saving ? 'Đang lưu...' : 'Lưu cấu hình'}
                     </button>
                 </div>
             </div>

@@ -32,7 +32,7 @@ const EXPLANATION_MAX_ITEMS = Number.parseInt(process.env.AI_EXAM_EXPLANATION_MA
 const REVIEW_APPLY_MIN_CONFIDENCE = Number.parseFloat(process.env.AI_EXAM_REVIEW_APPLY_MIN_CONFIDENCE || "0.75");
 
 function getReviewModel() {
-  return aiConfig.adminExam?.reviewModel || "cx/gpt-5.5";
+  return aiConfig.adminExam?.reviewModel || "ag/gemini-4-argon-low";
 }
 
 function getReviewModels() {
@@ -48,7 +48,7 @@ function getContextReviewModels(context = {}) {
 }
 
 function getFixModel() {
-  return aiConfig.adminExam?.fixModel || aiConfig.adminExam?.reviewModel || "cx/gpt-5.5";
+  return aiConfig.adminExam?.fixModel || aiConfig.adminExam?.reviewModel || "ag/gemini-4-argon-low";
 }
 
 function getFixModels() {

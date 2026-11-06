@@ -1,165 +1,210 @@
+const jwt = require('jsonwebtoken');
 const {
-  DEFAULT_SETTINGS,
   ensureSettingsTable,
   getSettings,
   updateSettings: saveSettings,
-} = require("../services/siteSettingsService");
+} = require('../services/siteSettingsService');
+const aiService = require('../services/aiService');
+const { PROVIDERS, normalizeProvider, isAllowedModel } = require('../config/aiModelPolicy');
 
-const PUBLIC_KEYS = ["exam_date", "welcome_settings"];
-const ADMIN_KEYS = [
-  "exam_date",
-  "public_ai_provider",
-  "premium_ai_provider",
-  "premium_ai_deepseek_model",
-  "public_ai_9router_model",
-  "public_ai_free_9router_model",
-  "public_ai_beeknoee_model",
-  "public_ai_fallback_provider",
-  "admin_question_review_model",
-  "admin_question_review_fallback_model",
-  "welcome_settings",
+const PUBLIC_KEYS = ['exam_date', 'welcome_settings'];
+const AI_KEYS = [
+  'public_ai_provider',
+  'premium_ai_provider',
+  'premium_ai_deepseek_model',
+  'public_ai_9router_model',
+  'public_ai_free_9router_model',
+  'public_ai_fallback_provider',
+  'admin_question_review_model',
+  'admin_question_review_fallback_model',
 ];
+const ADMIN_KEYS = ['exam_date', ...AI_KEYS, 'welcome_settings'];
 
-ensureSettingsTable().catch((error) => {
-  console.error("initSettings error:", error.message);
-});
+ensureSettingsTable().catch((error) => console.error('initSettings error:', error.message));
 
-function normalizeProvider(value, fallback = "9router", allowDeepSeek = false) {
-  const provider = String(value || "").trim().toLowerCase();
-  const allowed = allowDeepSeek ? ["deepseek", "9router", "beeknoee"] : ["9router", "beeknoee"];
-  return allowed.includes(provider) ? provider : fallback;
+function normalizeModel(value) {
+  return String(value || '').trim();
 }
 
-function normalizeModel(value, fallback) {
-  const model = String(value || "").trim();
-  return model || fallback;
+function parseWelcomeSettings(data) {
+  try {
+    return data.welcome_settings ? JSON.parse(data.welcome_settings) : null;
+  } catch {
+    return null;
+  }
+}
+
+function modelTestSecret() {
+  const secret = process.env.AI_MODEL_TEST_SECRET || process.env.JWT_SECRET;
+  if (!secret) throw new Error('AI_MODEL_TEST_SECRET_NOT_CONFIGURED');
+  return secret;
+}
+
+function createModelTestToken(userId, provider, model) {
+  return jwt.sign(
+    { scope: 'ai-model-test', userId: String(userId), provider, model },
+    modelTestSecret(),
+    { expiresIn: '10m' },
+  );
+}
+
+function verifyModelTestTokens(tokens, userId, requiredPairs) {
+  const verified = new Set();
+  for (const token of Array.isArray(tokens) ? tokens : []) {
+    try {
+      const payload = jwt.verify(token, modelTestSecret());
+      if (payload.scope !== 'ai-model-test' || String(payload.userId) !== String(userId)) continue;
+      verified.add(`${payload.provider}:${payload.model}`);
+    } catch {}
+  }
+  return requiredPairs.every(({ provider, model }) => verified.has(`${provider}:${model}`));
+}
+
+function addRequiredPair(pairs, provider, model) {
+  const key = `${provider}:${model}`;
+  if (!pairs.some((item) => `${item.provider}:${item.model}` === key)) pairs.push({ provider, model });
 }
 
 async function getPublicSettings(req, res) {
   try {
     const data = await getSettings(PUBLIC_KEYS);
-    let parsedWelcome = null;
-    try {
-      parsedWelcome = data.welcome_settings ? JSON.parse(data.welcome_settings) : null;
-    } catch {}
-    res.json({
-      success: true,
-      data: {
-        exam_date: data.exam_date,
-        welcome_settings: parsedWelcome,
-      },
-    });
-  } catch (e) {
-    res.status(500).json({ success: false, message: "Loi server" });
+    res.json({ success: true, data: { exam_date: data.exam_date, welcome_settings: parseWelcomeSettings(data) } });
+  } catch {
+    res.status(500).json({ success: false, message: 'Lỗi server' });
   }
 }
 
 async function getAdminSettings(req, res) {
   try {
     const data = await getSettings(ADMIN_KEYS);
-    let parsedWelcome = null;
-    try {
-      parsedWelcome = data.welcome_settings ? JSON.parse(data.welcome_settings) : null;
-    } catch {}
-    res.json({
+    res.json({ success: true, data: { ...data, welcome_settings: parseWelcomeSettings(data) } });
+  } catch {
+    res.status(500).json({ success: false, message: 'Lỗi server' });
+  }
+}
+
+async function testAIModel(req, res) {
+  const provider = normalizeProvider(req.body?.provider, '');
+  const model = normalizeModel(req.body?.model);
+  if (!provider || !isAllowedModel(provider, model)) {
+    return res.status(400).json({ success: false, message: 'Provider hoặc model không hợp lệ.' });
+  }
+
+  try {
+    const result = await aiService.testAIModel({ provider, model, userId: req.user.id });
+    return res.json({
       success: true,
       data: {
-        ...data,
-        welcome_settings: parsedWelcome,
+        provider,
+        model,
+        latencyMs: result.latencyMs,
+        preview: result.preview,
+        testToken: createModelTestToken(req.user.id, provider, model),
       },
     });
-  } catch (e) {
-    res.status(500).json({ success: false, message: "Loi server" });
+  } catch (error) {
+    console.error('testAIModel error:', error.providerCode || error.message);
+    return res.status(error.statusCode || 502).json({
+      success: false,
+      message: 'Model không phản hồi thành công. Kiểm tra cấu hình hoặc thử model khác.',
+      code: error.providerCode || 'AI_MODEL_TEST_FAILED',
+      latencyMs: error.latencyMs,
+    });
   }
 }
 
 async function updateSettings(req, res) {
   try {
+    const current = await getSettings(ADMIN_KEYS);
     const next = {};
+    const requiredTests = [];
 
     if (req.body.exam_date !== undefined) {
-      if (!req.body.exam_date) {
-        return res.status(400).json({ success: false, message: "Thieu exam_date" });
-      }
-      if (Number.isNaN(Date.parse(req.body.exam_date))) {
-        return res.status(400).json({ success: false, message: "exam_date khong hop le" });
+      if (!req.body.exam_date || Number.isNaN(Date.parse(req.body.exam_date))) {
+        return res.status(400).json({ success: false, message: 'Ngày thi không hợp lệ.' });
       }
       next.exam_date = req.body.exam_date;
     }
 
     if (req.body.public_ai_provider !== undefined) {
-      next.public_ai_provider = normalizeProvider(req.body.public_ai_provider);
+      if (normalizeProvider(req.body.public_ai_provider, '') !== PROVIDERS.NINE_ROUTER) {
+        return res.status(400).json({ success: false, message: 'User thường chỉ dùng 9Router.' });
+      }
+      next.public_ai_provider = PROVIDERS.NINE_ROUTER;
     }
-    if (req.body.premium_ai_provider !== undefined) {
-      next.premium_ai_provider = normalizeProvider(req.body.premium_ai_provider, "deepseek", true);
+
+    const premiumProvider = req.body.premium_ai_provider !== undefined
+      ? normalizeProvider(req.body.premium_ai_provider, '')
+      : normalizeProvider(current.premium_ai_provider);
+    if (!premiumProvider) {
+      return res.status(400).json({ success: false, message: 'Provider VIP/Premium không hợp lệ.' });
     }
+    if (req.body.premium_ai_provider !== undefined) next.premium_ai_provider = premiumProvider;
+
+    const modelFields = [
+      ['public_ai_9router_model', PROVIDERS.NINE_ROUTER],
+      ['public_ai_free_9router_model', PROVIDERS.NINE_ROUTER],
+      ['premium_ai_deepseek_model', PROVIDERS.DEEPSEEK],
+      ['admin_question_review_model', PROVIDERS.NINE_ROUTER],
+      ['admin_question_review_fallback_model', PROVIDERS.NINE_ROUTER],
+    ];
+    for (const [field, provider] of modelFields) {
+      if (req.body[field] === undefined) continue;
+      const model = normalizeModel(req.body[field]);
+      if (!isAllowedModel(provider, model)) {
+        return res.status(400).json({ success: false, message: `Model không hợp lệ cho ${provider}: ${model}` });
+      }
+      next[field] = model;
+      if (String(current[field]) !== model) addRequiredPair(requiredTests, provider, model);
+    }
+
     if (req.body.public_ai_fallback_provider !== undefined) {
-      next.public_ai_fallback_provider = normalizeProvider(req.body.public_ai_fallback_provider, "beeknoee");
+      const fallbackProvider = normalizeProvider(req.body.public_ai_fallback_provider, '');
+      if (!fallbackProvider) {
+        return res.status(400).json({ success: false, message: 'Fallback provider không hợp lệ.' });
+      }
+      next.public_ai_fallback_provider = fallbackProvider;
     }
-    if (req.body.public_ai_9router_model !== undefined) {
-      next.public_ai_9router_model = normalizeModel(
-        req.body.public_ai_9router_model,
-        DEFAULT_SETTINGS.public_ai_9router_model,
-      );
+
+    const premiumModel = premiumProvider === PROVIDERS.DEEPSEEK
+      ? (next.premium_ai_deepseek_model || current.premium_ai_deepseek_model)
+      : (next.public_ai_9router_model || current.public_ai_9router_model);
+    if (!isAllowedModel(premiumProvider, premiumModel)) {
+      return res.status(400).json({ success: false, message: 'Model VIP/Premium không khớp provider.' });
     }
-    if (req.body.public_ai_free_9router_model !== undefined) {
-      next.public_ai_free_9router_model = normalizeModel(
-        req.body.public_ai_free_9router_model,
-        DEFAULT_SETTINGS.public_ai_free_9router_model,
-      );
+    if (String(current.premium_ai_provider) !== premiumProvider) {
+      addRequiredPair(requiredTests, premiumProvider, premiumModel);
     }
-    if (req.body.public_ai_beeknoee_model !== undefined) {
-      next.public_ai_beeknoee_model = normalizeModel(
-        req.body.public_ai_beeknoee_model,
-        DEFAULT_SETTINGS.public_ai_beeknoee_model,
-      );
-    }
-    if (req.body.premium_ai_deepseek_model !== undefined) {
-      next.premium_ai_deepseek_model = normalizeModel(
-        req.body.premium_ai_deepseek_model,
-        DEFAULT_SETTINGS.premium_ai_deepseek_model,
-      );
-    }
-    if (req.body.admin_question_review_model !== undefined) {
-      next.admin_question_review_model = normalizeModel(
-        req.body.admin_question_review_model,
-        DEFAULT_SETTINGS.admin_question_review_model,
-      );
-    }
-    if (req.body.admin_question_review_fallback_model !== undefined) {
-      next.admin_question_review_fallback_model = normalizeModel(
-        req.body.admin_question_review_fallback_model,
-        DEFAULT_SETTINGS.admin_question_review_fallback_model,
-      );
-    }
+
     if (req.body.welcome_settings !== undefined) {
-      next.welcome_settings = typeof req.body.welcome_settings === "string"
+      next.welcome_settings = typeof req.body.welcome_settings === 'string'
         ? req.body.welcome_settings
         : JSON.stringify(req.body.welcome_settings);
     }
 
     if (!Object.keys(next).length) {
-      return res.status(400).json({ success: false, message: "Khong co cai dat can luu" });
+      return res.status(400).json({ success: false, message: 'Không có cài đặt cần lưu.' });
+    }
+    if (requiredTests.length && !verifyModelTestTokens(req.body.ai_model_test_tokens, req.user.id, requiredTests)) {
+      return res.status(400).json({
+        success: false,
+        code: 'AI_MODEL_TEST_REQUIRED',
+        message: 'Hãy test thành công từng model đã thay đổi trước khi lưu.',
+        requiredModels: requiredTests,
+      });
     }
 
     await saveSettings(next);
     const data = await getSettings(ADMIN_KEYS);
-    let parsedWelcome = null;
-    try {
-      parsedWelcome = data.welcome_settings ? JSON.parse(data.welcome_settings) : null;
-    } catch {}
-    res.json({
+    return res.json({
       success: true,
-      message: "Cap nhat thanh cong",
-      data: {
-        ...data,
-        welcome_settings: parsedWelcome,
-      },
+      message: 'Cập nhật thành công',
+      data: { ...data, welcome_settings: parseWelcomeSettings(data) },
     });
-  } catch (e) {
-    console.error("updateSettings error:", e.message);
-    res.status(500).json({ success: false, message: "Loi server" });
+  } catch (error) {
+    console.error('updateSettings error:', error.message);
+    return res.status(500).json({ success: false, message: 'Lỗi server' });
   }
 }
 
-module.exports = { getPublicSettings, getAdminSettings, updateSettings };
+module.exports = { getPublicSettings, getAdminSettings, testAIModel, updateSettings };

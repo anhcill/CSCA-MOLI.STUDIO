@@ -2,11 +2,10 @@ const axios = require('axios');
 const aiConfig = require('../config/aiConfig');
 const aiUsageService = require('./aiUsageService');
 
-const BEE = aiConfig.beeknoee;
+const RUNTIME = aiConfig.runtime || {};
 const ADMIN_EXAM_AI = aiConfig.adminExam || {};
 const MOLI = aiConfig.moliPet || {};
 
-let beeknoeeKeyIndex = 0;
 let nineRouterKeyIndex = 0;
 
 const AI_ACCURACY_PROMPT_RULES = `- Đọc kỹ đề gốc, đáp án và ngữ cảnh trước khi suy luận.
@@ -23,14 +22,6 @@ function getChatCompletionsUrl(baseUrl) {
   return `${base}/v1/chat/completions`;
 }
 
-function getNextBeeknoeeKey() {
-  const keys = (BEE.apiKeys || []).filter(Boolean);
-  if (!keys.length) return '';
-  const key = keys[beeknoeeKeyIndex % keys.length];
-  beeknoeeKeyIndex += 1;
-  return key;
-}
-
 function getNextNineRouterKey() {
   const keys = (ADMIN_EXAM_AI.apiKeys || []).filter(Boolean);
   if (!keys.length) return '';
@@ -39,21 +30,12 @@ function getNextNineRouterKey() {
   return key;
 }
 
-function getProviderConfig(provider) {
-  if (provider === '9router') {
-    return {
-      baseUrl: ADMIN_EXAM_AI.baseUrl,
-      apiKey: getNextNineRouterKey(),
-      model: MOLI.model || 'ag/gemini-3-flash-agent',
-      timeout: MOLI.timeout || ADMIN_EXAM_AI.timeout || BEE.timeout || 45000,
-    };
-  }
-
+function getProviderConfig() {
   return {
-    baseUrl: BEE.baseUrl,
-    apiKey: getNextBeeknoeeKey(),
-    model: MOLI.fallbackModel || BEE.petChatModel || BEE.model,
-    timeout: MOLI.timeout || BEE.timeout || 45000,
+    baseUrl: ADMIN_EXAM_AI.baseUrl,
+    apiKey: getNextNineRouterKey(),
+    model: MOLI.model || 'ag/gemini-3-flash',
+    timeout: MOLI.timeout || ADMIN_EXAM_AI.timeout || RUNTIME.timeout || 45000,
   };
 }
 
@@ -100,9 +82,10 @@ function buildVisionUserMessage(prompt, imageDataUrl, imageText = 'Read the imag
   };
 }
 
-async function callProvider(provider, messages, options = {}) {
-  const config = getProviderConfig(provider);
-  if (!config.baseUrl || !config.apiKey) throw new Error(`${provider.toUpperCase()}_NOT_CONFIGURED`);
+async function callProvider(messages, options = {}) {
+  const provider = '9router';
+  const config = getProviderConfig();
+  if (!config.baseUrl || !config.apiKey) throw new Error('9ROUTER_NOT_CONFIGURED');
   const startedAt = Date.now();
   const model = options.model || config.model;
 
@@ -111,7 +94,7 @@ async function callProvider(provider, messages, options = {}) {
     {
       model,
       messages,
-      max_tokens: options.maxTokens || MOLI.maxTokens || BEE.petChatMaxTokens || 3000,
+      max_tokens: options.maxTokens || MOLI.maxTokens || RUNTIME.petChatMaxTokens || 3000,
       temperature: options.temperature ?? 0.35,
     },
     {
@@ -135,26 +118,13 @@ async function callProvider(provider, messages, options = {}) {
 }
 
 async function callMoliMessages(messages, options = {}) {
-  const primary = String(MOLI.provider || '9router').trim().toLowerCase();
-  const fallback = String(MOLI.fallbackProvider || 'beeknoee').trim().toLowerCase();
-  const providers = [...new Set([primary, fallback].filter(value => ['9router', 'beeknoee'].includes(value)))];
-  let lastError = null;
-
-  for (const provider of providers) {
-    try {
-      return await callProvider(provider, messages, options);
-    } catch (error) {
-      lastError = error;
-      console.warn(`Moli pet AI ${provider} failed:`, error.message);
-    }
-  }
-
-  throw lastError || new Error('MOLI_PET_AI_FAILED');
+  return callProvider(messages, options);
 }
 
-async function callProviderStream(provider, messages, options = {}, onDelta) {
-  const config = getProviderConfig(provider);
-  if (!config.baseUrl || !config.apiKey) throw new Error(`${provider.toUpperCase()}_NOT_CONFIGURED`);
+async function callProviderStream(messages, options = {}, onDelta) {
+  const provider = '9router';
+  const config = getProviderConfig();
+  if (!config.baseUrl || !config.apiKey) throw new Error('9ROUTER_NOT_CONFIGURED');
   const startedAt = Date.now();
   const model = options.model || config.model;
   let emittedText = false;
@@ -165,7 +135,7 @@ async function callProviderStream(provider, messages, options = {}, onDelta) {
       {
         model,
         messages,
-        max_tokens: options.maxTokens || MOLI.maxTokens || BEE.petChatMaxTokens || 3000,
+        max_tokens: options.maxTokens || MOLI.maxTokens || RUNTIME.petChatMaxTokens || 3000,
         temperature: options.temperature ?? 0.35,
         stream: true,
       },
@@ -262,22 +232,7 @@ async function callProviderStream(provider, messages, options = {}, onDelta) {
 }
 
 async function callMoliMessagesStream(messages, options = {}, onDelta) {
-  const primary = String(MOLI.provider || '9router').trim().toLowerCase();
-  const fallback = String(MOLI.fallbackProvider || 'beeknoee').trim().toLowerCase();
-  const providers = [...new Set([primary, fallback].filter(value => ['9router', 'beeknoee'].includes(value)))];
-  let lastError = null;
-
-  for (const provider of providers) {
-    try {
-      return await callProviderStream(provider, messages, options, onDelta);
-    } catch (error) {
-      lastError = error;
-      console.warn(`Moli pet AI ${provider} stream failed:`, error.message);
-      if (error.moliStreamStarted) throw error;
-    }
-  }
-
-  throw lastError || new Error('MOLI_PET_AI_FAILED');
+  return callProviderStream(messages, options, onDelta);
 }
 
 function buildConversationHistoryContext(history = []) {

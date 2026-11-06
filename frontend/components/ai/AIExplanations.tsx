@@ -40,7 +40,7 @@ const PUBLIC_AI_UNAVAILABLE_MESSAGE = 'Xin lỗi, AI đang gặp sự cố tạm
 const PRIVATE_AI_ERROR_PATTERNS = [
     /https?:\/\//i,
     /www\./i,
-    /\b(?:beeknoee|beegnoee|benoke|bennoke|9router|openrouter)\b/i,
+    /\b(?:9router|openrouter)\b/i,
     /\b(?:insufficient|balance|billing|payment|credit|credits|quota|recharge|top\s*up|api\s*key|api-key|apikey|no\s+api\s+key|not\s+enough|resource\s+exhausted)\b/i,
     /\b(?:so\s*du|nap\s*tien|tai\s*khoan|het\s*tien|het\s*credit)\b/i,
     /余额|账户|充值|额度|欠费/,

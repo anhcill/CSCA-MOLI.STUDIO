@@ -1,7 +1,7 @@
 import { FiAlertCircle, FiRefreshCw } from 'react-icons/fi';
 
 export type ExamAiQualityMode = 'fast' | 'deep';
-export type ExamAiFastModel = 'cx/gpt-5.5' | 'ag/claude-opus-4-6-thinking';
+export type ExamAiFastModel = 'ag/gemini-4-argon-low' | 'ag/gemini-3.8-flash-low';
 
 interface ExamAiActionsProps {
   qualityMode: ExamAiQualityMode;
@@ -71,8 +71,8 @@ export default function ExamAiActions({
           title="Model dùng cho chế độ Nhanh"
           className="h-8 rounded-lg border border-blue-200 bg-white px-2 text-xs font-bold text-blue-800 shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
         >
-          <option value="cx/gpt-5.5">5.5</option>
-          <option value="ag/claude-opus-4-6-thinking">Opus 4.6</option>
+          <option value="ag/gemini-4-argon-low">Gemini 4 Argon Low</option>
+          <option value="ag/gemini-3.8-flash-low">Gemini 3.8 Flash Low</option>
         </select>
       </div>
       <button
