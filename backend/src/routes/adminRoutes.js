@@ -5,6 +5,7 @@ const adminAnalyticsController = require("../controllers/adminAnalyticsControlle
 const adminCampaignController = require("../controllers/adminCampaignController");
 const adminBackupController = require("../controllers/adminBackupController");
 const adminDeviceController = require("../controllers/adminDeviceController");
+const adminUserCourseAccessController = require("../controllers/adminUserCourseAccessController");
 const {
 	authenticate,
 	authorizePermission,
@@ -57,6 +58,9 @@ router.get("/users/:userId/activities", authorizePermission("users.manage"), adm
 router.get("/users/:userId/devices", authorizePermission("users.manage"), adminDeviceController.listDevices);
 router.delete("/users/:userId/devices/:deviceId", authorizePermission("users.manage"), adminDeviceController.revokeDevice);
 router.post("/users/:userId/devices/reset", authorizePermission("users.manage"), adminDeviceController.resetDevicesAndUnlock);
+router.get("/users/:userId/course-access", authorizePermission("users.manage"), adminUserCourseAccessController.getAccess);
+router.post("/users/:userId/course-access/grant", authorizePermission("users.manage"), adminUserCourseAccessController.grantAccess);
+router.post("/users/:userId/course-access/:enrollmentId/revoke", authorizePermission("users.manage"), adminUserCourseAccessController.revokeAccess);
 router.get("/roles", authorizePermission("admin.super"), adminController.getAdminRoleOptions);
 router.put("/users/:userId/status", authorizePermission("users.manage"), adminController.updateUserStatus);
 router.delete(

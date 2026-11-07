@@ -11,6 +11,7 @@ const { authenticate } = require('../middleware/authMiddleware');
 const db = require('../config/database');
 const coinService = require('../services/coinService');
 const { isVideoPayment } = require('../utils/videoPaymentIdentity');
+const { bankNameFromBin } = require('../utils/vietqrBanks');
 const {
   canAccessSubject,
   hasAllSubjects,
@@ -190,7 +191,8 @@ async function buildPayOSBankResponse(transaction, paymentData) {
     errorCorrectionLevel: 'M',
   });
   return {
-    bankCode: paymentData.bin === '970422' ? 'MB' : (paymentData.bin || 'Ngân hàng'),
+    bankCode: bankNameFromBin(paymentData.bin) || 'Ngân hàng',
+    bin: paymentData.bin || null,
     accountNumber: paymentData.accountNumber || '',
     accountName: paymentData.accountName || '',
     amount: Number(paymentData.amount || transaction.amount || 0),
@@ -1621,6 +1623,50 @@ router.get('/check-status', authenticate, async (req, res) => {
   } catch (err) {
     console.error('Check status error:', err);
     res.status(500).json({ success: false });
+  }
+});
+
+/**
+ * @route POST /api/payments/orders/:transactionCode/cancel
+ * @desc Hủy đơn hàng đang chờ thanh toán để giải phóng coupon / xu giữ chỗ
+ * @access Private
+ */
+router.post('/orders/:transactionCode/cancel', authenticate, async (req, res) => {
+  try {
+    const transactionCode = String(req.params.transactionCode || '').trim();
+    if (!transactionCode) {
+      return res.status(400).json({ success: false, message: 'Thiếu mã đơn hàng.' });
+    }
+    let transaction = await Transaction.findByTransactionCode(transactionCode);
+    if (!transaction || transaction.user_id !== req.user.id) {
+      return res.status(404).json({ success: false, message: 'Không tìm thấy đơn hàng.' });
+    }
+    if (isVideoPayment(transaction)) {
+      const data = await require('../services/videoPaymentRuntime').cancel(req.user.id, transactionCode);
+      return res.json({ success: true, status: data.status, data });
+    }
+    if (transaction.status === 'completed') {
+      return res.status(409).json({ success: false, message: 'Đơn hàng đã thanh toán thành công, không thể hủy.' });
+    }
+    if (['cancelled', 'expired', 'failed'].includes(transaction.status)) {
+      return res.json({ success: true, status: transaction.status });
+    }
+    if (transaction.payment_method === 'bank_transfer' && transaction.status === 'pending') {
+      transaction = await reconcilePendingPayOSPayment(transaction);
+      if (transaction.status === 'completed') {
+        return res.status(409).json({ success: false, message: 'Đơn hàng vừa được thanh toán thành công.' });
+      }
+      const payos = getPayOSMeta(transaction);
+      const client = createPayOSClient();
+      if (client && payos.provider === 'payos' && Number.isFinite(payos.orderCode) && payos.orderCode > 0) {
+        await client.paymentRequests.cancel(payos.orderCode, 'Cancelled by user').catch(() => {});
+      }
+    }
+    await Transaction.updateStatus(transaction.id, 'cancelled');
+    return res.json({ success: true, status: 'cancelled' });
+  } catch (err) {
+    console.error('Cancel order error:', err);
+    return res.status(err.status || 500).json({ success: false, message: err.message || 'Không thể hủy đơn hàng.' });
   }
 });
 

@@ -48,6 +48,22 @@ class DeviceSessionService {
     return crypto.createHash('sha256').update(stable).digest('hex');
   }
 
+  static getSessionMatch({ userId, deviceType, deviceId, previousSessionToken }) {
+    const params = [userId, deviceType];
+    const clauses = [];
+    const previousJti = getPreviousSessionJti(previousSessionToken, userId);
+    if (previousJti) {
+      params.push(previousJti);
+      clauses.push(`jti = $${params.length}`);
+    }
+    if (/^[A-Za-z0-9_-]{16,128}$/.test(String(deviceId || '').trim())) {
+      params.push(this.getDeviceKey({ deviceId }));
+      clauses.push(`device_key = $${params.length}`);
+    }
+    // IP and User-Agent are shared by many browsers and are not device identity.
+    return { params, clause: clauses.length ? `(${clauses.join(' OR ')})` : null };
+  }
+
   static async isUserAdmin(userId) {
     if (!userId) return false;
     try {
@@ -170,7 +186,9 @@ class DeviceSessionService {
        WHERE user_id = $1 AND expires_at > NOW()`, [userId],
     );
     for (const session of rows) {
-      const deviceKey = session.device_key || this.getDeviceKey(session);
+      const deviceKey = session.device_key || this.getDeviceKey({
+        userAgent: session.user_agent, deviceInfo: session.device_info, ipAddress: session.ip_address,
+      });
       await client.query(
         `INSERT INTO user_remembered_devices
           (user_id, device_key, device_type, device_info, user_agent, ip_address)
@@ -283,28 +301,12 @@ class DeviceSessionService {
          WHERE user_id = $1 AND device_key = $2 AND revoked_at IS NULL LIMIT 1`,
         [userId, deviceKey],
       );
-      return rows.length > 0;
+      return rows.length > 0 || Boolean(await this.getPreviousRememberedDeviceKey(userId, previousSessionToken));
     }
-    const params = [userId, resolvedDeviceType];
-    let matchClause = "";
-
-    if (previousSessionToken) {
-      const previousJti = getPreviousSessionJti(previousSessionToken, userId);
-      if (!previousJti) return false;
-      params.push(previousJti);
-      matchClause = "AND jti = $3";
-    } else if (userAgent && ipAddress) {
-      params.push(userAgent, ipAddress);
-      matchClause = "AND user_agent = $3 AND ip_address = $4";
-    } else if (userAgent) {
-      params.push(userAgent);
-      matchClause = "AND user_agent = $3";
-    } else if (deviceInfo) {
-      params.push(deviceInfo);
-      matchClause = "AND device_info = $3";
-    } else {
-      return false;
-    }
+    const { params, clause } = this.getSessionMatch({
+      userId, deviceType: resolvedDeviceType, deviceId, previousSessionToken,
+    });
+    if (!clause) return false;
 
     const { rows } = await db.query(
       `SELECT 1
@@ -312,12 +314,33 @@ class DeviceSessionService {
        WHERE user_id = $1
          AND COALESCE(device_type, 'desktop') = $2
          AND expires_at > NOW()
-         ${matchClause}
+         AND ${clause}
        LIMIT 1`,
       params,
     );
 
     return rows.length > 0;
+  }
+
+  static async getPreviousRememberedDeviceKey(userId, previousSessionToken, client = db) {
+    const previousJti = getPreviousSessionJti(previousSessionToken, userId);
+    if (!previousJti) return null;
+    const { rows } = await client.query(
+      `SELECT device_key, device_info, user_agent, ip_address FROM user_sessions
+       WHERE user_id = $1 AND jti = $2 AND expires_at > NOW()
+         AND NOT EXISTS (SELECT 1 FROM token_blacklist WHERE token_jti = $2)`,
+      [userId, previousJti],
+    );
+    const session = rows[0];
+    if (!session) return null;
+    const key = session.device_key || this.getDeviceKey({
+      userAgent: session.user_agent, deviceInfo: session.device_info, ipAddress: session.ip_address,
+    });
+    const remembered = await client.query(
+      `SELECT revoked_at FROM user_remembered_devices WHERE user_id = $1 AND device_key = $2`,
+      [userId, key],
+    );
+    return remembered.rows[0]?.revoked_at ? null : key;
   }
 
   static async registerSession({ userId, jti, deviceInfo, deviceType, ipAddress, userAgent, expiresAt, previousSessionToken, deviceId }) {
@@ -349,11 +372,32 @@ class DeviceSessionService {
           const error = new DeviceLimitError({ userId, deviceType: resolvedDeviceType, maxDevices: 2, sessions: [], paidPolicy: true, locked: true, attempts: Number(userState.attempts || 0) });
           throw error;
         }
-        const known = await client.query(
+        let known = await client.query(
           `SELECT id FROM user_remembered_devices
            WHERE user_id = $1 AND device_key = $2 AND revoked_at IS NULL
            FOR UPDATE`, [userId, deviceKey],
         );
+        if (known.rows.length === 0) {
+          const previousKey = await this.getPreviousRememberedDeviceKey(userId, previousSessionToken, client);
+          if (previousKey && previousKey !== deviceKey) {
+            // Migrate a proven old browser identity before enforcing capacity.
+            // Never infer this relationship from a shared IP or browser string.
+            known = await client.query(
+              `UPDATE user_remembered_devices SET device_key = $3
+               WHERE user_id = $1 AND device_key = $2 AND revoked_at IS NULL
+                 AND NOT EXISTS (SELECT 1 FROM user_remembered_devices WHERE user_id = $1 AND device_key = $3)
+               RETURNING id`, [userId, previousKey, deviceKey],
+            );
+            if (known.rows.length) {
+              const previousJti = getPreviousSessionJti(previousSessionToken, userId);
+              await client.query(
+                `UPDATE user_sessions SET device_key = $3
+                 WHERE user_id = $1 AND (device_key = $2 OR jti = $4)`,
+                [userId, previousKey, deviceKey, previousJti],
+              );
+            }
+          }
+        }
         if (known.rows.length === 0) {
           const active = await client.query(
             `SELECT id, device_key, device_info, device_type, ip_address, last_seen_at
@@ -423,24 +467,9 @@ class DeviceSessionService {
         return { deviceType: resolvedDeviceType };
       }
 
-      const matchParams = [userId, resolvedDeviceType];
-      let matchClause = null;
-      if (previousSessionToken) {
-        const previousJti = getPreviousSessionJti(previousSessionToken, userId);
-        if (previousJti) {
-          matchParams.push(previousJti);
-          matchClause = "jti = $3";
-        }
-      } else if (userAgent && ipAddress) {
-        matchParams.push(userAgent, ipAddress);
-        matchClause = "user_agent = $3 AND ip_address = $4";
-      } else if (userAgent) {
-        matchParams.push(userAgent);
-        matchClause = "user_agent = $3";
-      } else if (deviceInfo) {
-        matchParams.push(deviceInfo);
-        matchClause = "device_info = $3";
-      }
+      const { params: matchParams, clause: matchClause } = this.getSessionMatch({
+        userId, deviceType: resolvedDeviceType, deviceId, previousSessionToken,
+      });
       if (matchClause) {
         const matching = await client.query(
           `DELETE FROM user_sessions
@@ -479,16 +508,18 @@ class DeviceSessionService {
       }
 
       await client.query(
-        `INSERT INTO user_sessions (user_id, jti, device_info, device_type, ip_address, user_agent, expires_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+        `INSERT INTO user_sessions (user_id, jti, device_info, device_type, ip_address, user_agent, expires_at, device_key)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          ON CONFLICT (jti) DO UPDATE
          SET last_active = NOW(),
              device_info = COALESCE($3, user_sessions.device_info),
              device_type = COALESCE($4, user_sessions.device_type),
              ip_address = COALESCE($5, user_sessions.ip_address),
              user_agent = COALESCE($6, user_sessions.user_agent),
-             expires_at = COALESCE($7, user_sessions.expires_at)`,
-        [userId, jti, deviceInfo, resolvedDeviceType, ipAddress, userAgent, expiresAt],
+             expires_at = COALESCE($7, user_sessions.expires_at),
+             device_key = COALESCE($8, user_sessions.device_key)`,
+        [userId, jti, deviceInfo, resolvedDeviceType, ipAddress, userAgent, expiresAt,
+          /^[A-Za-z0-9_-]{16,128}$/.test(String(deviceId || '').trim()) ? deviceKey : null],
       );
       await client.query("COMMIT");
       return { deviceType: resolvedDeviceType };
@@ -799,6 +830,18 @@ class DeviceSessionService {
          AND expires_at > NOW()
        LIMIT 1`,
       [jti, userId],
+    );
+    return rows.length > 0;
+  }
+
+  static async renewSession(jti, userId, expiresAt) {
+    const { rows } = await db.query(
+      `UPDATE user_sessions
+       SET last_active = NOW(), expires_at = GREATEST(expires_at, $3)
+       WHERE jti = $1 AND user_id = $2 AND expires_at > NOW()
+         AND NOT EXISTS (SELECT 1 FROM token_blacklist WHERE token_jti = $1)
+       RETURNING jti`,
+      [jti, userId, expiresAt],
     );
     return rows.length > 0;
   }

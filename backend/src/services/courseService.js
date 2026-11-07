@@ -30,6 +30,8 @@ function hasEntitlement(user, course, enrollment = null, packageEntitlement = nu
   if (user?.role === "admin") return true;
   if (!course) return false;
   if (videoEntitlement) return true;
+  // An explicit, live admin grant opens the course regardless of its access type.
+  if (isActiveEnrollment(enrollment) && enrollment.source === "admin") return true;
   if (course.access_type === "free") return true;
   if (course.access_type === "package") return Boolean(packageEntitlement);
   if (course.access_type === "vip") {

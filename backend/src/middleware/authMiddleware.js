@@ -151,12 +151,15 @@ const authMiddleware = async (req, res, next) => {
           code: "TOKEN_EXPIRED",
         });
       }
-      return res.status(401).json({ success: false, message: "Invalid token" });
+      if (error.name === "JsonWebTokenError" || error.name === "NotBeforeError") {
+        return res.status(401).json({ success: false, code: "INVALID_TOKEN", message: "Invalid token" });
+      }
+      throw error;
     }
   } catch (error) {
     console.error("Auth middleware error:", error);
     res
-      .status(500)
+      .status(503)
       .json({ success: false, message: "Server error in authentication" });
   }
 };

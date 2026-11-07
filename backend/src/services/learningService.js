@@ -59,7 +59,7 @@ function catalogCourse(row, progress = null) {
   };
 }
 
-function curriculum(sections, lessons) {
+function curriculum(sections, lessons, { previewOnly = false } = {}) {
   const mapped = courseService.buildCurriculum(sections, lessons);
   return mapped.map((section) => {
     const mappedLessons = section.lessons.map((lesson) => ({
@@ -73,7 +73,7 @@ function curriculum(sections, lessons) {
       durationSeconds: lesson.estimatedDurationSeconds,
       isFreePreview: lesson.isFreePreview,
       isRequired: lesson.isRequired,
-      isLocked: false,
+      isLocked: previewOnly ? !lesson.isFreePreview : false,
       progressStatus: lesson.progress?.status || "not_started",
     }));
     return {
@@ -126,22 +126,39 @@ async function getLearningLesson(lessonIdValue, user) {
   const lessonId = courseService.positiveInteger(lessonIdValue, "lessonId");
   const lesson = await learningRepository.findPublishedLesson(lessonId);
   if (!lesson) throw new CourseApiError(404, "LESSON_NOT_FOUND", "Lesson not found.");
-  const { course, enrollment } = await courseService.requireLearningAccess(lesson.course_id, user);
+  let access = null;
+  try {
+    access = await courseService.requireLearningAccess(lesson.course_id, user);
+  } catch (err) {
+    if (!lesson.is_free_preview) throw err;
+  }
+  const course = access ? access.course : await courseRepository.findPublishedById(lesson.course_id);
+  if (!course) throw new CourseApiError(404, "COURSE_NOT_FOUND", "Course not found.");
+  const enrollment = access ? access.enrollment : null;
+  const previewOnly = !access;
   const [{ sections, lessons }, resources, navigation, progressRow, assignment] = await Promise.all([
     courseRepository.listCurriculum(course.id, { userId: user.id, includeContent: true }),
     learningRepository.listLessonResources(lesson.id),
     learningRepository.getLessonNavigation(course.id, lesson.id),
     learningRepository.getCourseProgress(user.id, course.id),
-    courseAssignmentService.getLearnerAssignment(lesson.id, user),
+    previewOnly ? Promise.resolve(null) : courseAssignmentService.getLearnerAssignment(lesson.id, user),
   ]);
   const fullLesson = mapLesson(lessons.find((item) => String(item.id) === String(lesson.id)) || lesson);
+  const effectiveDuration = Math.max(fullLesson.estimatedDurationSeconds, toFiniteNumber(lesson.effective_duration_seconds));
+  const enrollmentDto = enrollment
+    ? { ...mapEnrollment(enrollment), courseSlug: course.slug, progress: progressSummary(progressRow) }
+    : {
+      id: 0, courseId: toFiniteNumber(course.id), courseSlug: course.slug,
+      source: "free", status: "active", startsAt: new Date().toISOString(),
+      expiresAt: null, completedAt: null, progress: progressSummary(progressRow),
+    };
   return {
     course: {
       id: toFiniteNumber(course.id), slug: course.slug, title: course.title,
       subjectCode: course.subject_code, thumbnailUrl: course.thumbnail_url,
     },
-    enrollment: { ...mapEnrollment(enrollment), courseSlug: course.slug, progress: progressSummary(progressRow) },
-    curriculum: curriculum(sections, lessons),
+    enrollment: enrollmentDto,
+    curriculum: curriculum(sections, lessons, { previewOnly }),
     lesson: {
       id: fullLesson.id,
       externalKey: fullLesson.externalKey,
@@ -150,7 +167,7 @@ async function getLearningLesson(lessonIdValue, user) {
       summary: fullLesson.summary,
       lessonType: fullLesson.lessonType,
       sortOrder: fullLesson.sortOrder,
-      durationSeconds: fullLesson.estimatedDurationSeconds,
+      durationSeconds: effectiveDuration,
       isFreePreview: fullLesson.isFreePreview,
       isRequired: fullLesson.isRequired,
       isLocked: false,
@@ -201,9 +218,11 @@ async function updateLessonProgress(lessonIdValue, body, user) {
   const lessonId = courseService.positiveInteger(lessonIdValue, "lessonId");
   const lesson = await learningRepository.findPublishedLesson(lessonId);
   if (!lesson) throw new CourseApiError(404, "LESSON_NOT_FOUND", "Lesson not found.");
-  await courseService.requireLearningAccess(lesson.course_id, user);
+  if (!lesson.is_free_preview) {
+    await courseService.requireLearningAccess(lesson.course_id, user);
+  }
 
-  const duration = Math.max(0, toFiniteNumber(lesson.estimated_duration_seconds));
+  const duration = Math.max(0, toFiniteNumber(lesson.effective_duration_seconds ?? lesson.estimated_duration_seconds));
   const position = clampSeconds(body.positionSeconds ?? body.lastPositionSeconds, duration);
   const existing = await learningRepository.findProgress(user.id, lesson.id);
   const existingWatched = Math.max(0, toFiniteNumber(existing?.watched_seconds));
@@ -233,7 +252,8 @@ async function completeLesson(lessonIdValue, user) {
   await courseService.requireLearningAccess(lesson.course_id, user);
   const existing = await learningRepository.findProgress(user.id, lesson.id);
   if (existing?.status === "completed") return mapProgress(existing);
-  if (lesson.lesson_type === "video" && toFiniteNumber(existing?.completion_pct) < 85) {
+  const effectiveDuration = Math.max(0, toFiniteNumber(lesson.effective_duration_seconds ?? lesson.estimated_duration_seconds));
+  if (lesson.lesson_type === "video" && effectiveDuration > 0 && toFiniteNumber(existing?.completion_pct) < 85) {
     throw new CourseApiError(400, "VIDEO_COMPLETION_THRESHOLD_NOT_MET", "Video completion requires at least 85 percent watched.");
   }
   if (lesson.lesson_type === "quiz") {
@@ -244,7 +264,7 @@ async function completeLesson(lessonIdValue, user) {
     status: "completed", watchedDeltaSeconds: 0,
     maxPositionSeconds: toFiniteNumber(existing?.max_position_seconds),
     lastPositionSeconds: toFiniteNumber(existing?.last_position_seconds), completionPct: 100,
-    durationSeconds: toFiniteNumber(lesson.estimated_duration_seconds), autoCompleteVideo: false,
+    durationSeconds: effectiveDuration, autoCompleteVideo: false,
   }));
 }
 

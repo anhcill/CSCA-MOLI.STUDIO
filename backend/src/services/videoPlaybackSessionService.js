@@ -77,7 +77,9 @@ async function createLessonPlaybackSessionUnsafe(lessonIdValue, user) {
   const lesson = await learningRepository.findPublishedLesson(lessonId);
   if (!lesson) throw new CourseApiError(404, "LESSON_NOT_FOUND", "Lesson not found.");
 
-  await courseService.requireLearningAccess(lesson.course_id, user);
+  if (!lesson.is_free_preview) {
+    await courseService.requireLearningAccess(lesson.course_id, user);
+  }
   if (lesson.lesson_type !== "video") {
     throw new CourseApiError(409, "LESSON_NOT_VIDEO", "This lesson does not contain video playback.");
   }
@@ -92,10 +94,14 @@ async function createLessonPlaybackSessionUnsafe(lessonIdValue, user) {
     const config = bunnyConfigFromEnv();
     if (process.env.CSCA_BUNNY_STREAM_ENABLED !== 'true' || String(config.libraryId) !== asset.bunny_library_id)
       throw new CourseApiError(503, 'BUNNY_NOT_CONFIGURED', 'Bunny playback is not configured.');
-    const signed = createBunnyStreamAdapter(config).createEmbedUrl(asset.bunny_video_id, 300);
-    const resume = await videoPlaybackRepository.getResumePosition(user.id, lessonId);
-    return { sessionId: crypto.randomUUID(),viewerCode: `CSCA-${user.id}`,lessonId,deliveryType:'bunny',manifestUrl:'',embedUrl:signed.url,
-      expiresAt:signed.expiresAt,variants:[],resumePositionSeconds:Math.min(Math.max(0,Number(resume)||0),Number(asset.duration_seconds)||0) };
+    const bunnyTtl = Math.max(300, Number.parseInt(process.env.BUNNY_EMBED_TTL_SECONDS || '7200', 10) || 7200);
+    const signed = createBunnyStreamAdapter(config).createEmbedUrl(asset.bunny_video_id, bunnyTtl);
+    const rawResume = Math.max(0, Math.floor(Number(await videoPlaybackRepository.getResumePosition(user.id, lessonId)) || 0));
+    const maxDur = Math.max(0, Math.floor(Number(asset.duration_seconds) || Number(lesson.estimated_duration_seconds) || 0));
+    const clampedResume = maxDur > 0 ? Math.min(rawResume, maxDur) : rawResume;
+    const resumePositionSeconds = maxDur > 10 && clampedResume >= maxDur - 2 ? 0 : clampedResume;
+    return { sessionId: crypto.randomUUID(), viewerCode: `CSCA-${user.id}`, lessonId, deliveryType: 'bunny', manifestUrl: '', embedUrl: signed.url,
+      expiresAt: signed.expiresAt, variants: [], resumePositionSeconds };
   }
 
   const [variantRows, resumePosition] = await Promise.all([

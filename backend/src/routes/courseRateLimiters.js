@@ -78,9 +78,19 @@ const mediaUploadLimiter = createLimiter({
   skip: skipOptions,
 });
 
+const mediaStatusLimiter = createLimiter({
+  windowEnv: "COURSE_MEDIA_STATUS_RATE_LIMIT_WINDOW_MS",
+  maxEnv: "COURSE_MEDIA_STATUS_RATE_LIMIT_MAX",
+  defaultWindowMs: 15 * 60 * 1000,
+  productionMax: 300,
+  developmentMax: 3000,
+  skip: skipOptions,
+});
+
 module.exports = {
   adminWriteLimiter,
   enrollmentLimiter,
+  mediaStatusLimiter,
   mediaUploadLimiter,
   playbackLimiter,
   progressLimiter,

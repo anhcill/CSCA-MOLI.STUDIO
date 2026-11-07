@@ -54,7 +54,13 @@ async function listUserEnrollments(userId) {
 
 async function findPublishedLesson(lessonId) {
   const result = await db.query(
-    `SELECT l.* FROM course_lessons l
+    `SELECT l.*,
+       GREATEST(
+         COALESCE(l.estimated_duration_seconds, 0),
+         COALESCE((SELECT CEIL(va.duration_seconds)::int FROM video_assets va
+           WHERE va.id = l.video_asset_id AND va.deleted_at IS NULL AND va.duration_seconds > 0), 0)
+       ) AS effective_duration_seconds
+     FROM course_lessons l
      JOIN course_sections s ON s.id = l.section_id AND s.course_id = l.course_id
      JOIN courses c ON c.id = l.course_id
      WHERE l.id = $1 AND l.is_published = TRUE AND s.is_published = TRUE

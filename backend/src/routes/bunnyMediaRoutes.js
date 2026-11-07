@@ -1,6 +1,6 @@
 const express = require('express');
 const { authenticate, authorizeAnyPermission } = require('../middleware/authMiddleware');
-const { mediaUploadLimiter } = require('./courseRateLimiters');
+const { mediaUploadLimiter, mediaStatusLimiter } = require('./courseRateLimiters');
 const { sendData, sendCourseError } = require('../utils/courseResponses');
 const { createBunnyMediaService } = require('../services/bunnyMediaService');
 const router = express.Router();
@@ -14,6 +14,8 @@ router.get('/assets/:assetId',handle((s,r)=>s.status(r.params.assetId,r.user)));
 router.post('/assets/:assetId/preview',handle((s,r)=>s.preview(r.params.assetId,r.user)));
 router.post('/uploads',mediaUploadLimiter,handle((s,r)=>s.create(r.body || {},r.user)));
 router.post('/assets/:assetId/authorization',mediaUploadLimiter,handle((s,r)=>s.authorization(r.params.assetId,r.user)));
-router.post('/assets/:assetId/sync',mediaUploadLimiter,handle((s,r)=>s.sync(r.params.assetId,r.user)));
+// Sync is polled while Bunny encodes, so it uses the higher status budget instead of the upload limiter.
+router.post('/assets/:assetId/sync',mediaStatusLimiter,handle((s,r)=>s.sync(r.params.assetId,r.user)));
 router.post('/assets/:assetId/recover',mediaUploadLimiter,handle((s,r)=>s.recover(r.params.assetId,r.body?.videoId,r.user)));
+router.delete('/assets/:assetId',mediaUploadLimiter,handle((s,r)=>s.remove(r.params.assetId,r.user)));
 module.exports = router;

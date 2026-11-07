@@ -1,6 +1,9 @@
 const service = require("../services/adminCourseService");
 const assignmentService = require("../services/courseAssignmentService");
 const { sendCourseError, sendData } = require("../utils/courseResponses");
+const { createCourseEnrollmentAdminService } = require("../services/courseEnrollmentAdminService");
+
+const enrollmentService = () => createCourseEnrollmentAdminService();
 
 function action(handler, options = {}) {
   return async (req, res) => {
@@ -62,6 +65,13 @@ const replaceCourseTeachers = action((req) => service.replaceCourseTeachers(
 const publish = action((req) => service.publishCourse(req.params.courseId));
 const unpublish = action((req) => service.unpublishCourse(req.params.courseId));
 const archive = action((req) => service.archiveCourse(req.params.courseId));
+const deleteSection = action((req) => service.deleteSection(req.params.courseId, req.params.sectionId));
+const deleteLesson = action((req) => service.deleteLesson(req.params.courseId, req.params.lessonId));
+const reorderCurriculum = action((req) => service.reorderCurriculum(req.params.courseId, req.body || {}));
+const publishReady = action((req) => service.publishReadyCurriculum(req.params.courseId));
+const listEnrollments = action((req) => enrollmentService().listCourseEnrollments(req.params.courseId, req.query));
+const grantEnrollments = action((req) => enrollmentService().grantCourseEnrollments(req.params.courseId, req.body || {}));
+const revokeEnrollment = action((req) => enrollmentService().revokeCourseEnrollment(req.params.courseId, req.params.enrollmentId));
 
 module.exports = {
   list, get, create, update, createSection, updateSection,
@@ -69,4 +79,6 @@ module.exports = {
   getLessonWork, uploadLessonResources, deleteLessonResource, saveAssignment,
   uploadAssignmentAttachments, deleteAssignmentAttachment, gradeSubmission,
   listTeacherOptions, listCourseTeachers, replaceCourseTeachers,
+  deleteSection, deleteLesson, reorderCurriculum, publishReady,
+  listEnrollments, grantEnrollments, revokeEnrollment,
 };

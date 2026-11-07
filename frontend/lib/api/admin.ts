@@ -33,7 +33,65 @@ export interface AdminRememberedDevice {
     ip_address?: string | null;
     first_seen_at?: string;
     last_seen_at?: string;
+    last_login_at?: string | null;
     revoked_at?: string | null;
+    revoked_by?: number | null;
+}
+
+export interface AdminDeviceUserInfo {
+    id: number;
+    email: string;
+    full_name: string;
+    role: string;
+    is_active?: boolean;
+    is_banned?: boolean;
+    ban_reason?: string | null;
+    device_limit_attempts: number;
+    device_limit_locked_at: string | null;
+}
+
+export interface AdminActiveSession {
+    id: number;
+    jti?: string;
+    device_info?: string | null;
+    device_type?: 'mobile' | 'desktop' | string;
+    ip_address?: string | null;
+    last_active?: string | null;
+    expires_at?: string | null;
+    created_at?: string | null;
+}
+
+export interface AdminUserDevicesData {
+    user: AdminDeviceUserInfo;
+    policy: { paid: boolean; maxDevices: number | null; isAdmin?: boolean };
+    rememberedDevices: AdminRememberedDevice[];
+    activeSessions: AdminActiveSession[];
+}
+
+export interface AdminUserCourseEnrollment {
+    id: number;
+    courseId: number;
+    title: string;
+    slug: string;
+    subjectCode?: string;
+    source: string;
+    status: string;
+    progressPercent: number;
+    expiresAt: string | null;
+    enrolledAt?: string | null;
+}
+
+export interface AdminCourseOption {
+    id: number;
+    title: string;
+    subjectCode?: string;
+    status?: string;
+    accessType?: string;
+}
+
+export interface AdminUserCourseAccessData {
+    enrollments: AdminUserCourseEnrollment[];
+    courses: AdminCourseOption[];
 }
 
 export interface AdminActivity {
@@ -227,7 +285,10 @@ export const adminApi = {
 
     async getUserDevices(userId: number) {
         const response = await axios.get(`/admin/users/${userId}/devices`);
-        return response.data as { success: boolean; data: { policy: { paid: boolean; maxDevices: number | null }; rememberedDevices: AdminRememberedDevice[]; activeSessions: Array<Record<string, unknown>>; user: Record<string, unknown> } };
+        return response.data as {
+            success: boolean;
+            data: AdminUserDevicesData;
+        };
     },
 
     async revokeUserDevice(userId: number, deviceId: number) {
@@ -238,6 +299,40 @@ export const adminApi = {
     async resetUserDevices(userId: number) {
         const response = await axios.post(`/admin/users/${userId}/devices/reset`);
         return response.data as { success: boolean; message: string };
+    },
+
+    async getUserCourseAccess(userId: number) {
+        const response = await axios.get(`/admin/users/${userId}/course-access`);
+        return response.data as {
+            success: boolean;
+            data: AdminUserCourseAccessData;
+        };
+    },
+
+    async grantUserCourseAccess(
+        userId: number,
+        payload: {
+            courseId: number;
+            durationDays?: number | null;
+            expiresAt?: string | null;
+            reason?: string;
+        }
+    ) {
+        const response = await axios.post(`/admin/users/${userId}/course-access/grant`, payload);
+        return response.data as {
+            success: boolean;
+            message?: string;
+            data?: unknown;
+        };
+    },
+
+    async revokeUserCourseAccess(userId: number, enrollmentId: number) {
+        const response = await axios.post(`/admin/users/${userId}/course-access/${enrollmentId}/revoke`);
+        return response.data as {
+            success: boolean;
+            message?: string;
+            data?: unknown;
+        };
     },
 
     // Get online users count

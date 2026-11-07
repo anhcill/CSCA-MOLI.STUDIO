@@ -70,6 +70,7 @@ export interface VideoPaymentOrder {
     qrCode: string | null;
     checkoutUrl: string | null;
     bin: string | null;
+    bankName?: string | null;
     accountNumber: string | null;
     accountName: string | null;
     description: string | null;

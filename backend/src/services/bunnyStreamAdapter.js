@@ -72,6 +72,25 @@ function createBunnyStreamAdapter({ libraryId, apiKey, tokenKey, webhookSigningK
     }
     return value;
   }
+  // Deleting is idempotent: a video already missing on Bunny counts as deleted,
+  // so a stuck or manually removed allocation can always be released locally.
+  async function deleteVideo(id) {
+    const guid = videoId(id), library = requireLibrary(), key = requireSecret(apiKey);
+    let response;
+    try {
+      response = await fetchImpl(`${API_ORIGIN}/library/${library}/videos/${guid}`, {
+        method: 'DELETE', headers: { AccessKey: key, Accept: 'application/json' },
+        signal: AbortSignal.timeout(timeoutMs), redirect: 'error',
+      });
+    } catch (_) {
+      throw new CourseApiError(502, 'BUNNY_REQUEST_FAILED', 'Bunny Stream request could not be completed.');
+    }
+    if (response.status === 404) return { deleted: true, missing: true };
+    if (!response.ok) {
+      throw new CourseApiError(502, 'BUNNY_REQUEST_FAILED', 'Bunny Stream returned an unsuccessful response.', { providerStatus: response.status });
+    }
+    return { deleted: true, missing: false };
+  }
   function createTusAuthorization(id, ttlSeconds = 3600) {
     const guid = videoId(id), library = requireLibrary(), key = requireSecret(apiKey), expiration = expires(ttlSeconds);
     return {
@@ -100,7 +119,7 @@ function createBunnyStreamAdapter({ libraryId, apiKey, tokenKey, webhookSigningK
     const expected = crypto.createHmac('sha256', webhookSigningKey).update(rawBody).digest();
     return crypto.timingSafeEqual(expected, Buffer.from(signature, 'hex'));
   }
-  return { createVideo, getVideo, createTusAuthorization, createEmbedUrl, verifyWebhook };
+  return { createVideo, getVideo, deleteVideo, createTusAuthorization, createEmbedUrl, verifyWebhook };
 }
 
 function bunnyConfigFromEnv(env = process.env) {

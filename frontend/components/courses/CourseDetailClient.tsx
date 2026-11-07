@@ -47,7 +47,7 @@ export function CourseDetailClient({ slug }: { slug: string }) {
 
           <section className="rounded-[1.75rem] border border-slate-200/80 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-8">
             <div className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400">Lộ trình từng bước</p><h2 className="mt-1 text-2xl font-black text-slate-950 dark:text-white sm:text-3xl">Nội dung khóa học</h2></div><p className="rounded-full bg-slate-100 px-4 py-2 text-sm font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">{course.totalSections} chương · {course.totalLessons} bài</p></div>
-            <div className="mt-6"><CurriculumAccordion sections={course.curriculum} /></div>
+            <div className="mt-6"><CurriculumAccordion sections={course.curriculum} courseSlug={course.slug} /></div>
           </section>
 
           {course.requirements.length ? <section className="rounded-[1.75rem] border border-amber-200/80 bg-amber-50 p-6 dark:border-amber-900/60 dark:bg-amber-950/25 sm:p-8"><h2 className="text-xl font-black text-amber-950 dark:text-amber-100">Bạn cần chuẩn bị gì?</h2><ul className="mt-4 grid gap-3 sm:grid-cols-2">{course.requirements.map((item) => <li key={item} className="flex gap-2 text-sm font-semibold leading-6 text-amber-900 dark:text-amber-200"><FiCheck className="mt-1 shrink-0 text-amber-600 dark:text-amber-400" /> {item}</li>)}</ul></section> : null}

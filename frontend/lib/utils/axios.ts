@@ -9,12 +9,29 @@ let cachedToken: string | null = null;
 let tokenLastChecked = 0;
 const TOKEN_CACHE_DURATION = 5000; // 5 seconds
 let lastOfflineAuthToastAt = 0;
-const AUTH_REVOKED_CODES = new Set(['SESSION_REVOKED', 'TOKEN_REVOKED', 'ADMIN_MFA_REQUIRED']);
+const AUTH_REVOKED_CODES = new Set(['SESSION_REVOKED', 'TOKEN_REVOKED', 'ADMIN_MFA_REQUIRED', 'INVALID_TOKEN']);
 let refreshInFlight: Promise<{ token: string; refreshToken: string }> | null = null;
 
 export function clearTokenCache() {
   cachedToken = null;
   tokenLastChecked = 0;
+}
+
+async function recoverNewerToken(failedAuthorization: string | undefined) {
+  if (typeof window === 'undefined') return null;
+  const { useAuthStore } = await import('../store/authStore');
+  const current = useAuthStore.getState();
+  try {
+    const persisted = JSON.parse(localStorage.getItem('auth-storage') || 'null')?.state;
+    if (current.rememberMe && persisted?.rememberMe && persisted.user?.id === current.user?.id
+      && persisted.token && persisted.token !== current.token) {
+      await useAuthStore.persist.rehydrate();
+    }
+  } catch {
+    // A storage failure must not invalidate the active tab's session.
+  }
+  const token = sessionStorage.getItem('token');
+  return token && `Bearer ${token}` !== failedAuthorization ? token : null;
 }
 
 export function clearStoredAuth(preservePreviousSession = false) {
@@ -106,6 +123,18 @@ axiosInstance.interceptors.response.use(
     const originalRequest = error.config;
     const responseCode = error.response?.data?.code;
 
+    // Another request or tab may already have replaced this request's token.
+    if (error.response?.status === 401 && originalRequest && !originalRequest._authResynced
+      && originalRequest.headers?.Authorization) {
+      const newerToken = await recoverNewerToken(originalRequest.headers.Authorization);
+      if (newerToken) {
+        originalRequest._authResynced = true;
+        clearTokenCache();
+        originalRequest.headers.Authorization = `Bearer ${newerToken}`;
+        return axiosInstance(originalRequest);
+      }
+    }
+
     // ── Offline guard: never logout when no network ──
     if (!error.response && typeof navigator !== 'undefined' && !navigator.onLine) {
       // Network error while offline → reject silently, keep user logged in
@@ -129,11 +158,14 @@ axiosInstance.interceptors.response.use(
         if (refreshToken) {
           if (!refreshInFlight) {
             refreshInFlight = (async () => {
-              const response = await axios.post(`${API_URL}/auth/refresh`, { refreshToken });
+              const response = await axios.post(`${API_URL}/auth/refresh`, { refreshToken }, { timeout: 30000 });
               const tokens = response.data.data;
               // Update Zustand and its persisted state as well as sessionStorage,
               // so reopening the app cannot restore the old refresh token.
               const { useAuthStore } = await import('../store/authStore');
+              if (sessionStorage.getItem('refreshToken') !== refreshToken) {
+                throw new Error('Session changed while refreshing');
+              }
               useAuthStore.getState().setTokens(tokens.token, tokens.refreshToken);
               cachedToken = tokens.token;
               tokenLastChecked = Date.now();
@@ -145,14 +177,19 @@ axiosInstance.interceptors.response.use(
           originalRequest.headers.Authorization = `Bearer ${token}`;
           return axiosInstance(originalRequest);
         }
+        redirectToLogin();
       } catch (refreshError: any) {
         // If offline during refresh → don't logout, keep session
         if (!refreshError.response && typeof navigator !== 'undefined' && !navigator.onLine) {
           notifyOfflineAuthRequired();
           return Promise.reject(refreshError);
         }
-        // Online but refresh truly failed → logout
-        redirectToLogin();
+        // Only a definitive rejection invalidates credentials. Timeouts,
+        // throttling and server failures can be retried on the next request.
+        if ([401, 403, 404].includes(refreshError.response?.status)
+          && !await recoverNewerToken(originalRequest.headers?.Authorization)) {
+          redirectToLogin();
+        }
         return Promise.reject(refreshError);
       }
     }

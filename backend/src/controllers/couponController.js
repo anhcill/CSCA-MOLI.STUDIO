@@ -119,7 +119,7 @@ const CouponController = {
 
       if (package_id) {
         const pkg = await db.query(
-          `SELECT id, name, price, duration_days, subject_prices, requires_subject_choice FROM vip_packages WHERE id = $1 AND is_active = TRUE`,
+          `SELECT id, name, tier, price, duration_days, subject_prices, requires_subject_choice FROM vip_packages WHERE id = $1 AND is_active = TRUE`,
           [package_id]
         );
         if (!pkg.rows[0]) {
@@ -137,7 +137,12 @@ const CouponController = {
         }
 
         // Check tier applicability
-        const pkgTier = pkg.rows[0].name.toLowerCase().includes('premium') ? 'premium' : 'vip';
+        const rawTier = String(pkg.rows[0].tier || '').trim().toLowerCase();
+        const pkgTier = rawTier === 'premium' || rawTier === 'pre'
+          ? 'premium'
+          : rawTier === 'vip'
+            ? 'vip'
+            : (String(pkg.rows[0].name || '').toLowerCase().includes('premium') ? 'premium' : 'vip');
         if (c.applicable_tiers && c.applicable_tiers.length > 0 && !c.applicable_tiers.includes('all')) {
           if (!c.applicable_tiers.includes(pkgTier)) {
             return res.status(400).json({ success: false, message: 'Mã giảm giá không áp dụng cho cấp bậc này' });
@@ -155,6 +160,9 @@ const CouponController = {
         // Calculate discount
         if (c.discount_type === 'percentage') {
           discountAmount = Math.floor(originalAmount * c.discount_value / 100);
+          if (c.max_discount_amount != null && Number(c.max_discount_amount) > 0) {
+            discountAmount = Math.min(discountAmount, Number(c.max_discount_amount));
+          }
         } else {
           discountAmount = Math.min(c.discount_value, originalAmount);
         }
@@ -221,7 +229,7 @@ const CouponController = {
 
       // Get package
       const pkg = await db.query(
-        `SELECT id, name, price, duration_days, subject_prices, requires_subject_choice FROM vip_packages WHERE id = $1 AND is_active = TRUE`,
+        `SELECT id, name, tier, price, duration_days, subject_prices, requires_subject_choice FROM vip_packages WHERE id = $1 AND is_active = TRUE`,
         [package_id]
       );
       if (!pkg.rows[0]) {
@@ -229,7 +237,12 @@ const CouponController = {
       }
 
       const originalAmount = getCouponBaseAmount(pkg.rows[0], selected_subject_code);
-      const pkgTier = pkg.rows[0].name.toLowerCase().includes('premium') ? 'premium' : 'vip';
+      const rawApplyTier = String(pkg.rows[0].tier || '').trim().toLowerCase();
+      const pkgTier = rawApplyTier === 'premium' || rawApplyTier === 'pre'
+        ? 'premium'
+        : rawApplyTier === 'vip'
+          ? 'vip'
+          : (String(pkg.rows[0].name || '').toLowerCase().includes('premium') ? 'premium' : 'vip');
 
       // Check applicability
       if (c.applicable_packages && c.applicable_packages.length > 0 && !c.applicable_packages.includes('all')) {
@@ -254,7 +267,7 @@ const CouponController = {
         `SELECT COUNT(*) as count FROM coupon_usages WHERE coupon_id = $1 AND user_id = $2`,
         [c.id, userId]
       );
-      if (userUsage.rows[0].count >= c.user_limit) {
+      if (Number(userUsage.rows[0]?.count || 0) >= Number(c.user_limit || 1)) {
         return res.status(400).json({ success: false, message: 'Bạn đã sử dụng mã giảm giá này rồi' });
       }
 
@@ -262,6 +275,9 @@ const CouponController = {
       let discountAmount = 0;
       if (c.discount_type === 'percentage') {
         discountAmount = Math.floor(originalAmount * c.discount_value / 100);
+        if (c.max_discount_amount != null && Number(c.max_discount_amount) > 0) {
+          discountAmount = Math.min(discountAmount, Number(c.max_discount_amount));
+        }
       } else {
         discountAmount = Math.min(c.discount_value, originalAmount);
       }

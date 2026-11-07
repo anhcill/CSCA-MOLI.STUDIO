@@ -430,6 +430,114 @@ function mapTeacher(row) {
   return { id: Number(row.id), name: row.name, email: row.email };
 }
 
+async function deleteSection(courseIdValue, sectionIdValue) {
+  const courseId = positiveId(courseIdValue, "courseId");
+  const sectionId = positiveId(sectionIdValue, "sectionId");
+  try {
+    await repository.transaction(async (client) => {
+      const course = await ensureCourse(courseId, client, true);
+      if (!await repository.findSection(courseId, sectionId, client)) fail(404, "ADMIN_COURSE_SECTION_NOT_FOUND", "Không tìm thấy chương trong khóa học này.");
+      const liveAssets = await repository.countLiveLessonAssets(courseId, { sectionId }, client);
+      if (liveAssets > 0) {
+        fail(409, "ADMIN_COURSE_SECTION_HAS_VIDEOS", `Chương còn ${liveAssets} video đang gắn. Hãy xóa video trong từng bài trước khi xóa chương.`, { liveAssets });
+      }
+      await repository.releaseDeletedLessonAssets(courseId, { sectionId }, client);
+      await repository.deleteSection(courseId, sectionId, client);
+      await repository.recalculateAggregates(courseId, client);
+      await ensurePublishedCourseRemainsReady(course, courseId, client);
+    });
+    return { deleted: true };
+  } catch (error) { return translateDatabaseError(error); }
+}
+
+async function deleteLesson(courseIdValue, lessonIdValue) {
+  const courseId = positiveId(courseIdValue, "courseId");
+  const lessonId = positiveId(lessonIdValue, "lessonId");
+  try {
+    await repository.transaction(async (client) => {
+      const course = await ensureCourse(courseId, client, true);
+      if (!await repository.findLesson(courseId, lessonId, client)) fail(404, "ADMIN_COURSE_LESSON_NOT_FOUND", "Không tìm thấy bài học trong khóa học này.");
+      if (await repository.countLiveLessonAssets(courseId, { lessonId }, client) > 0) {
+        fail(409, "ADMIN_COURSE_LESSON_HAS_VIDEO", "Bài học đang gắn video. Hãy bấm \"Xóa video\" trong bài trước, sau đó xóa bài.");
+      }
+      await repository.releaseDeletedLessonAssets(courseId, { lessonId }, client);
+      await repository.deleteLesson(courseId, lessonId, client);
+      await repository.recalculateAggregates(courseId, client);
+      await ensurePublishedCourseRemainsReady(course, courseId, client);
+    });
+    return { deleted: true };
+  } catch (error) { return translateDatabaseError(error); }
+}
+
+function normalizeReorderInput(body = {}) {
+  const sectionIds = positiveIdList(body.sectionIds, "sectionIds");
+  let sections;
+  if (body.sections !== undefined) {
+    if (!Array.isArray(body.sections)) fail(422, "ADMIN_COURSE_VALIDATION_FAILED", "sections must be an array.");
+    const seenLessons = new Set();
+    sections = body.sections.map((entry) => {
+      const sectionId = positiveId(entry?.sectionId, "sectionId");
+      const lessonIds = positiveIdList(entry?.lessonIds, "lessonIds") || [];
+      lessonIds.forEach((id) => {
+        if (seenLessons.has(id)) fail(422, "ADMIN_COURSE_VALIDATION_FAILED", "A lesson cannot appear in two sections.");
+        seenLessons.add(id);
+      });
+      return { sectionId, lessonIds };
+    });
+  }
+  if (!sectionIds?.length && !sections?.length) fail(422, "ADMIN_COURSE_EMPTY_PATCH", "Nothing to reorder.");
+  return { sectionIds, sections };
+}
+
+async function reorderCurriculum(courseIdValue, body) {
+  const courseId = positiveId(courseIdValue, "courseId");
+  const input = normalizeReorderInput(body || {});
+  try {
+    await repository.transaction(async (client) => {
+      const course = await ensureCourse(courseId, client, true);
+      const curriculum = await repository.listCurriculum(courseId, client);
+      const courseSectionIds = new Set(curriculum.sections.map((row) => Number(row.id)));
+      if (input.sectionIds) {
+        const sameSet = input.sectionIds.length === courseSectionIds.size
+          && input.sectionIds.every((id) => courseSectionIds.has(id));
+        if (!sameSet) fail(422, "ADMIN_COURSE_REORDER_MISMATCH", "sectionIds must list every section of this course exactly once.");
+        await repository.reorderSections(courseId, input.sectionIds, client);
+      }
+      if (input.sections) {
+        const lessonSection = new Map(curriculum.lessons.map((row) => [Number(row.id), Number(row.section_id)]));
+        const listed = new Set(input.sections.flatMap((entry) => entry.lessonIds));
+        for (const entry of input.sections) {
+          if (!courseSectionIds.has(entry.sectionId)) fail(422, "ADMIN_COURSE_SECTION_NOT_FOUND", "Section does not belong to this course.");
+          if (entry.lessonIds.some((id) => !lessonSection.has(id))) fail(422, "ADMIN_COURSE_LESSON_NOT_FOUND", "Lesson does not belong to this course.");
+          // Lessons can move between listed sections, but none may be silently dropped.
+          const dropped = [...lessonSection].some(([id, sectionId]) => sectionId === entry.sectionId && !listed.has(id));
+          if (dropped) fail(422, "ADMIN_COURSE_REORDER_MISMATCH", "lessonIds must include every lesson currently in the section.");
+        }
+        for (const entry of input.sections) {
+          await repository.reorderLessons(courseId, entry.sectionId, entry.lessonIds, client);
+        }
+      }
+      await repository.recalculateAggregates(courseId, client);
+      await ensurePublishedCourseRemainsReady(course, courseId, client);
+    });
+    return getCourse(courseId);
+  } catch (error) { return translateDatabaseError(error); }
+}
+
+async function publishReadyCurriculum(courseIdValue) {
+  const courseId = positiveId(courseIdValue, "courseId");
+  const counts = await repository.transaction(async (client) => {
+    const course = await ensureCourse(courseId, client, true);
+    const result = await repository.publishReadyCurriculum(courseId, {
+      unpublishBrokenVideos: course.status !== "published",
+    }, client);
+    await repository.recalculateAggregates(courseId, client);
+    await ensurePublishedCourseRemainsReady(course, courseId, client);
+    return result;
+  });
+  return { ...counts, course: await getCourse(courseId) };
+}
+
 async function listTeacherOptions() {
   return (await repository.listTeacherOptions()).map(mapTeacher);
 }
@@ -460,5 +568,6 @@ module.exports = {
   createLesson, updateLesson, publishCourse: (id) => transition(id, "published"),
   unpublishCourse: (id) => transition(id, "draft"), archiveCourse: (id) => transition(id, "archived"),
   listTeacherOptions, listCourseTeachers, replaceCourseTeachers,
-  _validation: { normalizeCourseInput, normalizeSectionInput, normalizeLessonInput, requiredTierFor, positiveId, positiveIdList },
+  deleteSection, deleteLesson, reorderCurriculum, publishReadyCurriculum,
+  _validation: { normalizeCourseInput, normalizeSectionInput, normalizeLessonInput, requiredTierFor, positiveId, positiveIdList, normalizeReorderInput },
 };

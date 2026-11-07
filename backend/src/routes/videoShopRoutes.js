@@ -15,6 +15,7 @@ function createVideoShopRoutes({service,coupons,authenticate,authorizePermission
   router.get('/manage/lookup/:kind',handle(req=>service.lookup(req.params.kind,req.query)));
   router.get('/manage/rights',handle(req=>service.rights(req.query)));
   router.post('/manage/grants',handle(req=>service.grant(req.body,req.user.id),201));
+  router.post('/manage/grants/bulk',handle(req=>service.bulkGrant(req.body||{},req.user.id),201));
   router.post('/manage/rights/:id/revoke',handle(req=>service.revoke(req.params.id,req.body,req.user.id)));
   router.get('/manage/orders',handle(req=>service.orders(req.query)));
   router.post('/manage/orders/:code/sync',handle(req=>service.sync(req.params.code,req.user.id)));

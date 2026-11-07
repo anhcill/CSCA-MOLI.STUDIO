@@ -9,8 +9,8 @@ import { hasPermission, canAccessAdminPanel } from '@/lib/utils/permissions';
 import {
   FiActivity, FiUsers, FiFileText, FiBook, FiMessageSquare, FiFlag,
   FiImage, FiTag, FiMap, FiSettings, FiMonitor, FiShield, FiAlertTriangle,
-  FiX, FiChevronLeft, FiChevronRight, FiLogOut, FiGift,
-  FiBarChart2, FiAward, FiVideo, FiMail, FiDatabase, FiTarget, FiEye
+  FiX, FiChevronRight, FiLogOut, FiGift,
+  FiBarChart2, FiAward, FiVideo, FiMail, FiDatabase, FiTarget, FiEye, FiPackage
 } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
 import ThemeToggle from './ThemeToggle';
@@ -89,8 +89,8 @@ const NAV_SECTIONS: AdminNavSection[] = [
         roles: [],
       },
       {
-        label: 'Gói video & combo',
-        icon: FiVideo,
+        label: 'Gói Video & Cấp quyền',
+        icon: FiPackage,
         href: '/admin/video-commerce',
         permission: 'users.manage',
         roles: [],
@@ -147,12 +147,13 @@ const NAV_SECTIONS: AdminNavSection[] = [
     ],
   },
   {
-    label: 'Nội dung',
+    label: 'Học tập & Nội dung',
     items: [
       {
-        label: 'Khóa học',
+        label: 'Khóa học & Video',
         icon: FiVideo,
         href: '/admin/courses',
+        // Course editing is restricted to global admins; teachers use /admin/teaching.
         permission: '*',
         roles: [],
       },

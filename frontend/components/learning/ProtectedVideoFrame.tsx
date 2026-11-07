@@ -17,28 +17,37 @@ export function ProtectedVideoFrame({ session, onPause, children, nativeControls
 
   useEffect(() => {
     const cover = () => {
-      pause.current(); setCovered(true);
+      pause.current();
+      setCovered(true);
       if (document.fullscreenElement && root.current?.contains(document.fullscreenElement)) {
         void document.exitFullscreen().catch(() => undefined);
       }
     };
-    const visibility = () => { if (document.hidden) cover(); };
+    // Pausing quietly on tab switch avoids blocking students who switch tabs to take notes.
+    const visibility = () => {
+      if (document.hidden) pause.current();
+    };
+    const pageHide = () => {
+      pause.current();
+    };
     const key = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setExpanded(false);
       // OS shortcuts may never reach the page; this is best-effort concealment.
-      if (event.key === 'PrintScreen' || (event.metaKey && event.shiftKey && ['3', '4', '5'].includes(event.key))) cover();
+      if (event.key === 'PrintScreen' || (event.metaKey && event.shiftKey && ['3', '4', '5'].includes(event.key))) {
+        cover();
+      }
     };
     const fullscreen = () => setNativeFullscreen(document.fullscreenElement === root.current);
     document.addEventListener('visibilitychange', visibility);
     document.addEventListener('fullscreenchange', fullscreen);
-    window.addEventListener('pagehide', cover);
+    window.addEventListener('pagehide', pageHide);
     window.addEventListener('beforeprint', cover);
     window.addEventListener('keydown', key);
     visibility();
     return () => {
       document.removeEventListener('visibilitychange', visibility);
       document.removeEventListener('fullscreenchange', fullscreen);
-      window.removeEventListener('pagehide', cover);
+      window.removeEventListener('pagehide', pageHide);
       window.removeEventListener('beforeprint', cover);
       window.removeEventListener('keydown', key);
     };

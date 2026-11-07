@@ -8,7 +8,7 @@ import { useAuthStore } from '@/lib/store/authStore';
 import { canAccessSubject, getTierLevel, type TierLevel } from '@/lib/utils/permissions';
 import { queueVipCelebration, VIP_CELEBRATION_HOME_URL } from '@/lib/utils/paymentCelebration';
 import { FaCrown, FaShieldAlt, FaBolt, FaGift, FaLock, FaArrowRight, FaCopy } from 'react-icons/fa';
-import { FiArrowLeft, FiCheck, FiClock, FiLoader, FiRefreshCw } from 'react-icons/fi';
+import { FiArrowLeft, FiCheck, FiClock, FiLoader, FiRefreshCw, FiTag, FiX } from 'react-icons/fi';
 
 const BANK_TRANSFER_PAYMENT_WINDOW_SECONDS = 5 * 60;
 
@@ -316,23 +316,34 @@ function BankTransferScreen({
   orderId,
   bank,
   onPaid,
+  onCancelOrder,
+  cancelling = false,
 }: {
   orderId: string;
-  bank: { bankCode: string; accountNumber: string; accountName: string; amount: number; content: string; qrUrl: string };
+  bank: { bankCode: string; accountNumber: string; accountName: string; amount: number; content: string; qrUrl: string; expiresAt?: string | null };
   onPaid: (data: any) => void;
+  onCancelOrder?: () => void;
+  cancelling?: boolean;
 }) {
+  const computeRemaining = () => {
+    if (bank.expiresAt) {
+      const diff = Math.floor((Date.parse(bank.expiresAt) - Date.now()) / 1000);
+      if (Number.isFinite(diff)) return Math.max(0, diff);
+    }
+    return BANK_TRANSFER_PAYMENT_WINDOW_SECONDS;
+  };
   const [copied, setCopied] = useState<string | null>(null);
   const [polling, setPolling] = useState(true);
   const [dots, setDots] = useState('.');
-  const [timeLeft, setTimeLeft] = useState(BANK_TRANSFER_PAYMENT_WINDOW_SECONDS);
+  const [timeLeft, setTimeLeft] = useState(computeRemaining);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const isExpired = timeLeft <= 0;
   const countdownText = `${Math.floor(timeLeft / 60).toString().padStart(2, '0')}:${(timeLeft % 60).toString().padStart(2, '0')}`;
 
   useEffect(() => {
-    setTimeLeft(BANK_TRANSFER_PAYMENT_WINDOW_SECONDS);
+    setTimeLeft(computeRemaining());
     setPolling(true);
-  }, [orderId]);
+  }, [orderId, bank.expiresAt]);
 
   useEffect(() => {
     if (isExpired) return;
@@ -469,6 +480,19 @@ function BankTransferScreen({
           {isExpired ? 'Mã đã hết hạn, vui lòng quay lại chọn gói để tạo QR mới.' : `Hệ thống đang tự động kiểm tra thanh toán${dots}`}
         </span>
       </div>
+
+      {onCancelOrder && (
+        <div className="flex justify-center pt-1">
+          <button
+            type="button"
+            disabled={cancelling}
+            onClick={onCancelOrder}
+            className="rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-xs font-bold text-gray-600 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700 disabled:opacity-50"
+          >
+            {cancelling ? 'Đang hủy đơn...' : 'Hủy đơn này & chọn lại gói / mã giảm giá'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -494,9 +518,11 @@ function CheckoutContent() {
   const [qrData, setQrData] = useState<any>(null);
   const qrScreenRef = useRef<HTMLDivElement | null>(null);
 
+  const [couponInput, setCouponInput] = useState<string>(urlCoupon || '');
   const [appliedCouponCode, setAppliedCouponCode] = useState<string | null>(urlCoupon || null);
   const [appliedCouponInfo, setAppliedCouponInfo] = useState<{ discount_amount: number; final_amount: number } | null>(null);
   const [couponMismatchError, setCouponMismatchError] = useState('');
+  const [cancellingOrder, setCancellingOrder] = useState(false);
   const [useCoins, setUseCoins] = useState(false);
   const [promotion, setPromotion] = useState<PromotionBanner | null>(null);
   const [authChecked, setAuthChecked] = useState(() => typeof window !== 'undefined');
@@ -716,6 +742,41 @@ function CheckoutContent() {
     }
   };
 
+  const handleApplyCoupon = () => {
+    const trimmed = couponInput.trim().toUpperCase();
+    if (!trimmed) {
+      setAppliedCouponCode(null);
+      setAppliedCouponInfo(null);
+      setCouponMismatchError('');
+      return;
+    }
+    setCouponInput(trimmed);
+    setCouponMismatchError('');
+    setAppliedCouponCode(trimmed);
+  };
+
+  const handleClearCoupon = () => {
+    setCouponInput('');
+    setAppliedCouponCode(null);
+    setAppliedCouponInfo(null);
+    setCouponMismatchError('');
+    setError('');
+  };
+
+  const handleCancelQrOrder = async () => {
+    if (cancellingOrder) return;
+    setCancellingOrder(true);
+    try {
+      if (qrData?.orderId) {
+        await axios.post(`/payments/orders/${encodeURIComponent(qrData.orderId)}/cancel`).catch(() => {});
+      }
+    } finally {
+      setCancellingOrder(false);
+      setQrData(null);
+      setStep('select');
+    }
+  };
+
   const handlePaid = async (data: any) => {
     await refreshAuthUser();
     redirectHomeWithCelebration(data);
@@ -726,10 +787,12 @@ function CheckoutContent() {
   // ── QR SCREEN ──
   if (step === 'qr' && qrData) {
     return (
-      <div ref={qrScreenRef} className="scroll-mt-24">
+      <div ref={qrScreenRef} className="mx-auto max-w-2xl scroll-mt-24 rounded-3xl border border-gray-200 bg-white p-5 shadow-sm sm:p-8">
         <button
-          onClick={() => setStep('select')}
-          className="flex items-center gap-1 text-gray-400 hover:text-gray-700 text-sm mb-6 transition-colors"
+          type="button"
+          onClick={() => void handleCancelQrOrder()}
+          disabled={cancellingOrder}
+          className="mb-6 inline-flex items-center gap-1.5 text-sm font-semibold text-gray-500 transition-colors hover:text-gray-900 disabled:opacity-50"
         >
           <FiArrowLeft size={14} /> Quay lại chọn gói
         </button>
@@ -737,6 +800,8 @@ function CheckoutContent() {
           orderId={qrData.orderId}
           bank={qrData.bank}
           onPaid={handlePaid}
+          onCancelOrder={() => void handleCancelQrOrder()}
+          cancelling={cancellingOrder}
         />
       </div>
     );
@@ -821,6 +886,7 @@ function CheckoutContent() {
               <button
                 type="button"
                 onClick={() => {
+                  setCouponInput(promotion.coupon_code || '');
                   setAppliedCouponCode(promotion.coupon_code);
                   setCouponMismatchError('');
                 }}
@@ -833,9 +899,9 @@ function CheckoutContent() {
         </div>
       )}
 
-      <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5 lg:p-6">
-        <div className="space-y-8">
-          <div className="space-y-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_390px] lg:items-start">
+        <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5 lg:p-6">
+          <div className="space-y-8">
       {/* Step 1: Package */}
       <div>
         <div className="flex items-center gap-2 mb-4">
@@ -1051,14 +1117,55 @@ function CheckoutContent() {
       )}
 
           </div>
+        </div>
 
-          <div className="space-y-4 border-t border-gray-100 pt-6">
+        <aside className="space-y-4 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5 lg:sticky lg:top-24 lg:p-6">
       {/* Order summary */}
       {selectedPkg && (
         <div className="space-y-5">
           <div className="flex items-center gap-2">
             <FaLock size={14} className={selectedUi?.accentIcon || 'text-gray-900'} />
             <h3 className="text-sm font-black uppercase tracking-wide text-gray-900">Xác nhận đơn hàng</h3>
+          </div>
+
+          {/* Manual Coupon Input */}
+          <div className="rounded-xl border border-gray-200 bg-gray-50/70 p-3.5">
+            <label className="mb-2 flex items-center gap-1.5 text-xs font-black uppercase tracking-wide text-gray-600">
+              <FiTag size={13} className={selectedUi?.accentIcon || 'text-indigo-500'} />
+              Mã giảm giá (Voucher)
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={couponInput}
+                maxLength={50}
+                onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleApplyCoupon(); } }}
+                placeholder="Nhập mã ưu đãi..."
+                className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-white px-3 py-2 font-mono text-sm font-bold uppercase text-gray-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+              />
+              <button
+                type="button"
+                onClick={handleApplyCoupon}
+                className="shrink-0 rounded-xl bg-gray-900 px-3.5 py-2 text-xs font-black text-white transition hover:bg-gray-800"
+              >
+                Áp dụng
+              </button>
+            </div>
+            {appliedCouponCode && (
+              <div className="mt-2 flex items-center justify-between gap-2 text-xs">
+                <span className="font-semibold text-gray-600">
+                  Đang chọn mã: <strong className="font-mono text-gray-900">{appliedCouponCode}</strong>
+                </span>
+                <button
+                  type="button"
+                  onClick={handleClearCoupon}
+                  className="inline-flex items-center gap-1 font-bold text-rose-600 hover:underline"
+                >
+                  <FiX size={13} /> Gỡ mã
+                </button>
+              </div>
+            )}
           </div>
 
           <div className={`rounded-xl p-4 ${selectedUi?.summaryInner || 'bg-gray-50 ring-1 ring-gray-100'}`}>
@@ -1148,8 +1255,11 @@ function CheckoutContent() {
       )}
 
       {couponMismatchError && (
-        <div className="flex items-center gap-3 rounded-xl border border-red-100 bg-red-50 px-5 py-4 text-sm text-red-600">
-          ⚠️ {couponMismatchError} — Vui lòng chọn lại gói hoặc gỡ mã giảm giá.
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-xs font-semibold text-red-700">
+          <span>⚠️ {couponMismatchError}</span>
+          <button type="button" onClick={handleClearCoupon} className="rounded-lg bg-white px-2.5 py-1 font-black text-red-700 ring-1 ring-red-200 hover:bg-red-100">
+            Gỡ mã
+          </button>
         </div>
       )}
 
@@ -1168,8 +1278,7 @@ function CheckoutContent() {
           Chọn gói để tiếp tục
         </button>
       )}
-          </div>
-        </div>
+        </aside>
       </div>
     </div>
   );

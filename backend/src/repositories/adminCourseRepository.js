@@ -278,10 +278,122 @@ async function getPublishReadiness(courseId, client) {
   return result.rows[0];
 }
 
+// A video lesson is playable when its attached asset is ready on Bunny or HLS (alias `l`).
+const READY_VIDEO_LESSON_SQL = `EXISTS (
+  SELECT 1 FROM video_assets va
+  WHERE va.id = l.video_asset_id AND va.course_id = l.course_id
+    AND va.lesson_id = l.id AND va.status = 'ready' AND va.deleted_at IS NULL
+    AND ((to_jsonb(va)->>'provider' = 'bunny' AND to_jsonb(va)->>'bunny_video_id' IS NOT NULL
+      AND to_jsonb(va)->>'bunny_library_id' IS NOT NULL AND va.duration_seconds>0) OR (
+    va.hls_master_object_key IS NOT NULL
+    AND BTRIM(va.hls_master_object_key) <> ''
+    AND EXISTS (
+      SELECT 1 FROM video_variants vv
+      WHERE vv.video_asset_id = va.id AND vv.is_ready = TRUE
+        AND BTRIM(vv.playlist_object_key) <> ''
+        AND BTRIM(vv.segment_prefix) <> ''
+    ))))`;
+
+// Live (non-deleted) video assets still bound to the lessons in scope block deletion,
+// because video_assets.lesson_id is ON DELETE RESTRICT and the remote file would leak.
+async function countLiveLessonAssets(courseId, { sectionId = null, lessonId = null }, client) {
+  const result = await executor(client).query(
+    `SELECT COUNT(DISTINCT va.id)::int AS count
+       FROM course_lessons l
+       JOIN video_assets va ON (va.lesson_id = l.id OR va.id = l.video_asset_id)
+      WHERE l.course_id = $1 AND va.deleted_at IS NULL
+        AND ($2::bigint IS NULL OR l.section_id = $2)
+        AND ($3::bigint IS NULL OR l.id = $3)`,
+    [courseId, sectionId, lessonId],
+  );
+  return Number(result.rows[0]?.count || 0);
+}
+
+async function releaseDeletedLessonAssets(courseId, { sectionId = null, lessonId = null }, client) {
+  await executor(client).query(
+    `UPDATE video_assets va SET lesson_id = NULL, updated_at = NOW()
+       FROM course_lessons l
+      WHERE va.lesson_id = l.id AND l.course_id = $1 AND va.deleted_at IS NOT NULL
+        AND ($2::bigint IS NULL OR l.section_id = $2)
+        AND ($3::bigint IS NULL OR l.id = $3)`,
+    [courseId, sectionId, lessonId],
+  );
+}
+
+async function deleteSection(courseId, sectionId, client) {
+  const result = await executor(client).query(
+    `DELETE FROM course_sections WHERE id = $1 AND course_id = $2 RETURNING id`,
+    [sectionId, courseId],
+  );
+  return result.rows[0] || null;
+}
+
+async function deleteLesson(courseId, lessonId, client) {
+  const result = await executor(client).query(
+    `DELETE FROM course_lessons WHERE id = $1 AND course_id = $2 RETURNING id`,
+    [lessonId, courseId],
+  );
+  return result.rows[0] || null;
+}
+
+async function reorderSections(courseId, sectionIds, client) {
+  await executor(client).query(
+    `UPDATE course_sections s SET sort_order = (x.ord - 1)::int, updated_at = NOW()
+       FROM UNNEST($2::bigint[]) WITH ORDINALITY AS x(id, ord)
+      WHERE s.id = x.id AND s.course_id = $1`,
+    [courseId, sectionIds],
+  );
+}
+
+async function reorderLessons(courseId, sectionId, lessonIds, client) {
+  await executor(client).query(
+    `UPDATE course_lessons l SET section_id = $2, sort_order = (x.ord - 1)::int, updated_at = NOW()
+       FROM UNNEST($3::bigint[]) WITH ORDINALITY AS x(id, ord)
+      WHERE l.id = x.id AND l.course_id = $1`,
+    [courseId, sectionId, lessonIds],
+  );
+}
+
+async function publishReadyCurriculum(courseId, { unpublishBrokenVideos = false } = {}, client) {
+  const run = executor(client);
+  const lessons = await run.query(
+    `UPDATE course_lessons l SET is_published = TRUE, updated_at = NOW()
+      WHERE l.course_id = $1 AND l.is_published = FALSE
+        AND (l.lesson_type <> 'video' OR ${READY_VIDEO_LESSON_SQL})
+      RETURNING l.id`,
+    [courseId],
+  );
+  if (unpublishBrokenVideos) {
+    // Only for unpublished courses: visible-but-unplayable video lessons would block publishing.
+    await run.query(
+      `UPDATE course_lessons l SET is_published = FALSE, updated_at = NOW()
+        WHERE l.course_id = $1 AND l.is_published AND l.lesson_type = 'video' AND NOT ${READY_VIDEO_LESSON_SQL}`,
+      [courseId],
+    );
+  }
+  const skipped = await run.query(
+    `SELECT COUNT(*)::int AS count FROM course_lessons l
+      WHERE l.course_id = $1 AND l.lesson_type = 'video' AND NOT ${READY_VIDEO_LESSON_SQL}`,
+    [courseId],
+  );
+  const sections = await run.query(
+    `UPDATE course_sections s SET is_published = TRUE, updated_at = NOW()
+      WHERE s.course_id = $1 AND s.is_published = FALSE
+        AND EXISTS (SELECT 1 FROM course_lessons l WHERE l.section_id = s.id AND l.course_id = s.course_id AND l.is_published)
+      RETURNING s.id`,
+    [courseId],
+  );
+  return {
+    publishedLessons: lessons.rows.length,
+    publishedSections: sections.rows.length,
+    skippedVideoLessons: Number(skipped.rows[0]?.count || 0),
+  };
+}
+
 async function setStatus(courseId, status, client) {
   const result = await executor(client).query(
-    `UPDATE courses SET status = $2,
-       published_at = CASE WHEN $2 = 'published' THEN COALESCE(published_at, NOW()) ELSE published_at END,
+    `UPDATE courses SET status = $2::varchar,
+       published_at = CASE WHEN $2::varchar = 'published' THEN COALESCE(published_at, NOW()) ELSE published_at END,
        content_updated_at = NOW() WHERE id = $1 RETURNING ${COURSE_COLUMNS}`,
     [courseId, status],
   );
@@ -357,4 +469,6 @@ module.exports = {
   createSection, updateSection, findSection, createLesson, updateLesson, findLesson,
   claimVideoAsset, findPreviewAsset, recalculateAggregates, getPublishReadiness, setStatus,
   listTeacherOptions, listCourseTeachers, replaceCourseTeachers,
+  countLiveLessonAssets, releaseDeletedLessonAssets, deleteSection, deleteLesson,
+  reorderSections, reorderLessons, publishReadyCurriculum,
 };

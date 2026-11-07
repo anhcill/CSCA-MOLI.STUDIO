@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/authStore';
 import { updateProfile, updateAvatar, getUserStats, changePassword, UserStats } from '@/lib/api/users';
@@ -18,7 +19,7 @@ import {
   FiAward, FiTarget, FiMessageSquare, FiUpload,
   FiCheckCircle, FiLock, FiCalendar, FiEye, FiEyeOff,
   FiBell, FiShield, FiLogOut, FiAlertTriangle,
-  FiStar, FiZap, FiMonitor, FiRefreshCw, FiDownload, FiSmartphone,
+  FiStar, FiZap, FiMonitor, FiRefreshCw, FiDownload, FiSmartphone, FiPlayCircle, FiExternalLink,
 } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
 
@@ -162,6 +163,7 @@ export default function ProfilePage() {
   const [userLoading, setUserLoading] = useState(true);
   const [purchasedPkgIds, setPurchasedPkgIds] = useState<Set<number>>(new Set());
   const [userPkgMap, setUserPkgMap] = useState<Record<number, any>>({}); // package_id -> package data
+  const [paymentHistory, setPaymentHistory] = useState<any[]>([]);
 
   const [sessions, setSessions] = useState<DeviceSession[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(false);
@@ -237,6 +239,7 @@ export default function ProfilePage() {
     axios.get('/payments/history')
       .then(res => {
         const hist = res.data?.data || [];
+        setPaymentHistory(hist);
         const purchased = new Set<number>();
         const pkgMap: Record<number, any> = {};
         hist.forEach((tx: any) => {
@@ -1056,6 +1059,35 @@ export default function ProfilePage() {
                     </div>
                   </div>
 
+                  {/* Video Courses & Combo Shortcut Card */}
+                  <div className="rounded-3xl border border-teal-200 bg-gradient-to-br from-teal-50/90 to-emerald-50/50 p-5 sm:p-6">
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="space-y-1">
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-teal-100 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-teal-800">
+                          <FiPlayCircle size={12} /> Khóa học Video quay sẵn
+                        </span>
+                        <h4 className="text-base font-black text-gray-900">Phòng học Video & Gói Combo đã sở hữu</h4>
+                        <p className="text-xs font-medium leading-relaxed text-gray-600">
+                          Vào học các khóa video bài giảng đã được mở quyền, theo dõi tiến độ từng bài học và thời hạn gói Video / Combo.
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-2 shrink-0">
+                        <Link
+                          href="/hoc"
+                          className="inline-flex items-center gap-1.5 rounded-xl bg-teal-700 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-teal-800"
+                        >
+                          <FiPlayCircle size={14} /> Vào phòng học
+                        </Link>
+                        <Link
+                          href="/tai-khoan/goi-video"
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-teal-300 bg-white px-4 py-2.5 text-xs font-bold text-teal-800 transition hover:bg-teal-50"
+                        >
+                          Gói Video của tôi <FiExternalLink size={13} />
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+
                   <div>
                     <h3 className="text-sm font-bold text-gray-800 mb-4 flex items-center gap-2 uppercase tracking-wider">
                       <FiZap className="text-indigo-500" size={16} /> Các gói tài khoản
@@ -1135,6 +1167,49 @@ export default function ProfilePage() {
                                     <span>{isVipUser && ui.tier === 'premium' ? 'Nâng cấp Premium' : isVipUser ? 'Gia hạn thêm' : 'Đăng ký sử dụng'}</span>
                                   </button>
                                 )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Payment History */}
+                  <div className="pt-2">
+                    <h3 className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2 uppercase tracking-wider">
+                      <FiBook className="text-teal-600" size={16} /> Lịch sử giao dịch gần đây
+                    </h3>
+                    {paymentHistory.length === 0 ? (
+                      <div className="rounded-2xl border border-gray-100 bg-gray-50/70 p-5 text-center text-xs font-semibold text-gray-400">
+                        Chưa có giao dịch thanh toán nào.
+                      </div>
+                    ) : (
+                      <div className="space-y-2.5 max-h-[320px] overflow-y-auto pr-1">
+                        {paymentHistory.slice(0, 15).map((tx: any) => {
+                          const status = String(tx.status || '');
+                          const isDone = status === 'completed';
+                          const isPending = status === 'pending' || status === 'processing';
+                          return (
+                            <div key={tx.id || tx.transaction_code} className="flex flex-col gap-2 rounded-2xl border border-gray-100 bg-white px-4 py-3.5 text-xs sm:flex-row sm:items-center sm:justify-between">
+                              <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <p className="font-extrabold text-gray-900 text-sm">{tx.package_name || 'Gói nâng cấp'}</p>
+                                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                    isDone ? 'bg-emerald-100 text-emerald-800' : isPending ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-600'
+                                  }`}>
+                                    {isDone ? 'Hoàn tất' : isPending ? 'Chờ thanh toán' : status === 'cancelled' ? 'Đã hủy' : 'Đã đóng'}
+                                  </span>
+                                </div>
+                                <p className="mt-1 font-medium text-gray-400">
+                                  Mã đơn: <span className="font-mono text-gray-600">{tx.transaction_code}</span> · {tx.created_at ? new Date(tx.created_at).toLocaleString('vi-VN') : ''}
+                                </p>
+                              </div>
+                              <div className="text-left sm:text-right shrink-0">
+                                <p className="text-sm font-black text-gray-900">{Number(tx.amount || 0).toLocaleString('vi-VN')} đ</p>
+                                <p className="text-[11px] font-semibold text-gray-400">
+                                  {tx.payment_method === 'coupon_free' ? 'Ưu đãi 0đ' : 'Chuyển khoản QR'}
+                                </p>
                               </div>
                             </div>
                           );
@@ -1363,10 +1438,12 @@ export default function ProfilePage() {
                     <div className="p-4 border border-red-100 rounded-2xl bg-red-50/10 space-y-3 text-left">
                       <p className="text-xs font-semibold text-gray-500">Nếu cảm thấy tài khoản bị xâm nhập trái phép, bạn có thể đăng xuất tức thì trên tất cả thiết bị khác.</p>
                       <button 
-                        onClick={() => { 
-                          if (confirm('Đăng xuất khỏi tất cả thiết bị?')) { 
+                        onClick={async () => { 
+                          if (confirm('Đăng xuất khỏi phiên hiện tại và các thiết bị cho phép?')) { 
+                            await axios.delete('/auth/sessions').catch(() => {});
+                            await axios.post('/auth/logout').catch(() => {});
                             logout?.(); 
-                            window.location.href = '/login'; 
+                            router.replace('/login'); 
                           } 
                         }}
                         className="flex items-center gap-2 px-4 py-2.5 text-xs font-bold border border-red-250 bg-red-50 text-red-750 hover:bg-red-100/60 rounded-xl transition-all"

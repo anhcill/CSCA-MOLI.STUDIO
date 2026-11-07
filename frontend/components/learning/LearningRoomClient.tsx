@@ -6,10 +6,16 @@ import {
   FiBookOpen,
   FiBookmark,
   FiCheck,
+  FiCheckCircle,
+  FiColumns,
   FiDownload,
   FiExternalLink,
   FiFileText,
   FiHelpCircle,
+  FiList,
+  FiLock,
+  FiMaximize2,
+  FiPlay,
   FiSave,
   FiSend,
 } from 'react-icons/fi';
@@ -23,7 +29,7 @@ import { LearningSidebar } from './LearningSidebar';
 import { LessonAssignmentPanel } from './LessonAssignmentPanel';
 import { LessonQuestionPanel } from '@/components/courses/LessonQuestionPanel';
 
-type LessonPanel = 'overview' | 'notes' | 'resources' | 'assignment' | 'qa';
+type LessonPanel = 'overview' | 'curriculum' | 'notes' | 'resources' | 'assignment' | 'qa';
 
 function updateCompletedLesson(room: LearningRoomDto, lessonId: number): LearningRoomDto {
   const curriculum = room.curriculum.map((section) => ({
@@ -51,6 +57,13 @@ function updateCompletedLesson(room: LearningRoomDto, lessonId: number): Learnin
   };
 }
 
+function formatDuration(seconds: number) {
+  const totalSeconds = Math.max(0, Math.round(seconds));
+  const minutes = Math.floor(totalSeconds / 60);
+  const remainder = totalSeconds % 60;
+  return `${String(minutes).padStart(2, '0')}:${String(remainder).padStart(2, '0')}`;
+}
+
 export function LearningRoomClient({ courseSlug, lessonId }: { courseSlug: string; lessonId: number }) {
   const [room, setRoom] = useState<LearningRoomDto | null>(null);
   const [session, setSession] = useState<PlaybackSessionDto | null>(null);
@@ -64,18 +77,43 @@ export function LearningRoomClient({ courseSlug, lessonId }: { courseSlug: strin
   const [completeError, setCompleteError] = useState('');
   const [requestVersion, setRequestVersion] = useState(0);
   const [activePanel, setActivePanel] = useState<LessonPanel>('overview');
+  const [theaterMode, setTheaterMode] = useState(false);
   const [note, setNote] = useState('');
   const [noteSaved, setNoteSaved] = useState(false);
   const courseId = room?.course.id ?? null;
 
+  useEffect(() => {
+    try {
+      setTheaterMode(window.localStorage.getItem('csca-learning-theater') === '1');
+    } catch { /* ignore */ }
+  }, []);
+
+  const toggleTheaterMode = () => {
+    setTheaterMode((current) => {
+      const next = !current;
+      try {
+        window.localStorage.setItem('csca-learning-theater', next ? '1' : '0');
+      } catch { /* ignore */ }
+      if (next && activePanel === 'overview') {
+        // Keep overview or let learner switch to curriculum tab right below video
+      }
+      return next;
+    });
+  };
+
   const refreshCourseProgress = useCallback(async () => {
-    if (!courseId) return;
+    if (!courseId || (room && room.enrollment.id === 0)) return;
     const progress = await learningApi.getCourseProgress(courseId);
     setRoom((current) => current ? {
       ...current,
       enrollment: { ...current.enrollment, progress },
     } : current);
-  }, [courseId]);
+  }, [courseId, room]);
+
+  const handleLessonCompleted = useCallback(() => {
+    setRoom((current) => current ? updateCompletedLesson(current, lessonId) : current);
+    void refreshCourseProgress().catch(() => undefined);
+  }, [lessonId, refreshCourseProgress]);
 
   useEffect(() => {
     let active = true;
@@ -153,7 +191,7 @@ export function LearningRoomClient({ courseSlug, lessonId }: { courseSlug: strin
   };
 
   const markComplete = async () => {
-    if (!room || room.lesson.progressStatus === 'completed') return;
+    if (!room || room.lesson.progressStatus === 'completed' || room.enrollment.id === 0) return;
     setCompleting(true);
     setCompleteError('');
     try {
@@ -174,10 +212,13 @@ export function LearningRoomClient({ courseSlug, lessonId }: { courseSlug: strin
     );
     const currentIndex = flattened.findIndex((item) => item.lesson.id === lessonId);
     const current = currentIndex >= 0 ? flattened[currentIndex] : null;
+    const completedCount = flattened.filter((item) => item.lesson.progressStatus === 'completed').length;
     return {
       currentLabel: current ? `Bài ${current.sectionIndex + 1}.${current.lessonIndex + 1}` : 'Bài học',
       previousTitle: currentIndex > 0 ? flattened[currentIndex - 1].lesson.title : null,
       nextTitle: currentIndex >= 0 && currentIndex < flattened.length - 1 ? flattened[currentIndex + 1].lesson.title : null,
+      totalCount: flattened.length,
+      completedCount,
     };
   }, [lessonId, room]);
 
@@ -196,35 +237,81 @@ export function LearningRoomClient({ courseSlug, lessonId }: { courseSlug: strin
     );
   }
 
+  const isFreePreviewOnly = room.enrollment.id === 0;
   const hasBody = Boolean(room.lesson.contentHtml?.trim());
   const isCompleted = room.lesson.progressStatus === 'completed';
-  const canManualComplete = room.lesson.lessonType === 'article' || room.lesson.lessonType === 'document';
+  const canManualComplete = !isFreePreviewOnly && (room.lesson.lessonType === 'article' || room.lesson.lessonType === 'document');
   const panelTabs: Array<{ id: LessonPanel; label: string; icon: typeof FiBookOpen }> = [
     { id: 'overview', label: 'Tổng quan', icon: FiBookOpen },
-    { id: 'notes', label: 'Ghi chú của tôi', icon: FiBookmark },
+    { id: 'curriculum', label: `Bài giảng (${lessonContext?.completedCount ?? 0}/${lessonContext?.totalCount ?? 0})`, icon: FiList },
+    { id: 'notes', label: 'Ghi chú', icon: FiBookmark },
     { id: 'resources', label: `Tài liệu (${room.lesson.resources.length})`, icon: FiFileText },
-    ...(room.lesson.assignment ? [{ id: 'assignment' as const, label: 'Nộp bài', icon: FiSend }] : []),
-    { id: 'qa', label: 'Hỏi đáp', icon: FiHelpCircle },
+    ...(!isFreePreviewOnly && room.lesson.assignment ? [{ id: 'assignment' as const, label: 'Nộp bài', icon: FiSend }] : []),
+    ...(!isFreePreviewOnly ? [{ id: 'qa' as const, label: 'Hỏi đáp', icon: FiHelpCircle }] : []),
   ];
 
   return (
     <div className="min-h-screen bg-[#f5efe8] text-[#18243a] transition-colors duration-300 dark:bg-[#050d1d] dark:text-[#f1e5d3]">
       <LearningHeader courseSlug={courseSlug} courseTitle={room.course.title} progressPct={room.enrollment.progress.completionPct} onNotesClick={openNotes} />
 
-      <div className="relative mx-auto grid max-w-[1600px] gap-5 px-4 py-5 sm:px-6 lg:grid-cols-[minmax(0,1fr)_430px] lg:items-start lg:px-8">
+      <div className={`relative mx-auto grid max-w-[1600px] gap-5 px-4 py-5 sm:px-6 lg:items-start lg:px-8 ${theaterMode ? 'lg:grid-cols-1' : 'lg:grid-cols-[minmax(0,1fr)_430px]'}`}>
         <main className="min-w-0 space-y-5">
+          {isFreePreviewOnly ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-300/80 bg-gradient-to-r from-amber-50 to-orange-50 px-5 py-3.5 text-sm text-amber-950 shadow-sm dark:border-amber-700/60 dark:from-amber-950/50 dark:to-orange-950/30 dark:text-amber-100">
+              <div>
+                <p className="font-black">🎁 Bạn đang xem bài học thử miễn phí</p>
+                <p className="mt-0.5 text-xs opacity-85">Đăng ký khóa học để mở khóa toàn bộ video bài giảng, tài liệu, bài tập và hỏi đáp cùng giảng viên.</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Link href={`/khoa-hoc/${courseSlug}`} className="rounded-xl border border-amber-400 bg-white/80 px-3.5 py-2 text-xs font-black text-amber-900 hover:bg-white dark:border-amber-700 dark:bg-amber-900/40 dark:text-amber-100">
+                  Chi tiết khóa học
+                </Link>
+                <Link href="/vip?section=video" className="rounded-xl bg-[#ad2033] px-4 py-2 text-xs font-black text-white shadow-sm hover:bg-[#911a2b]">
+                  Đăng ký mở khóa ngay
+                </Link>
+              </div>
+            </div>
+          ) : null}
+
           <section className="overflow-hidden rounded-2xl border border-[#d6c4b2] bg-[#071329] shadow-[0_22px_55px_-32px_rgba(7,19,41,.75)]">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-5 py-3 text-white">
-              <div className="min-w-0">
-                <p className="text-[10px] font-black uppercase tracking-[.18em] text-[#49b6ac]">{lessonContext?.currentLabel}</p>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-4 py-3 text-white sm:px-5">
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-[10px] font-black uppercase tracking-[.18em] text-[#49b6ac]">{lessonContext?.currentLabel}</p>
+                  {isCompleted ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
+                      <FiCheck className="h-3 w-3" /> Đã hoàn thành
+                    </span>
+                  ) : null}
+                </div>
                 <h1 className="mt-1 truncate text-sm font-black sm:text-base">{room.lesson.title}</h1>
               </div>
-              <span className="rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-bold text-[#efd4b3]">Nhấn ⛶ để xem toàn màn hình</span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={toggleTheaterMode}
+                  className="hidden items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-bold text-white/90 transition hover:bg-white/15 lg:inline-flex"
+                  title={theaterMode ? 'Hiện danh sách bài học bên phải' : 'Mở rộng khung xem video'}
+                >
+                  {theaterMode ? <FiColumns className="h-3.5 w-3.5" /> : <FiMaximize2 className="h-3.5 w-3.5" />}
+                  {theaterMode ? 'Hiện cột lộ trình' : 'Chế độ rộng'}
+                </button>
+                <span className="hidden rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-bold text-[#efd4b3] sm:inline-block">
+                  Nhấn ⛶ để toàn màn hình
+                </span>
+              </div>
             </div>
 
-            <div className="aspect-video w-full min-h-0 bg-black">
+            <div className={`aspect-video w-full min-h-0 bg-black ${theaterMode ? 'lg:max-h-[76vh]' : ''}`}>
               {room.lesson.lessonType === 'video' ? (
-                <HlsPlayerShell lessonId={lessonId} session={session} loading={playbackLoading} error={playbackError} onProgressSaved={refreshCourseProgress} />
+                <HlsPlayerShell
+                  lessonId={lessonId}
+                  session={session}
+                  loading={playbackLoading}
+                  error={playbackError}
+                  onProgressSaved={refreshCourseProgress}
+                  onLessonCompleted={handleLessonCompleted}
+                />
               ) : (
                 <div className="grid h-full place-items-center p-8 text-center text-slate-300">
                   <FiFileText className="mx-auto h-10 w-10" />
@@ -269,16 +356,67 @@ export function LearningRoomClient({ courseSlug, lessonId }: { courseSlug: strin
 
             {completeError ? <p role="alert" className="m-5 rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-700 dark:bg-red-950/40 dark:text-red-300">{completeError}</p> : null}
 
-            <div className="min-h-44 p-6 text-sm leading-7 text-[#5d5854] dark:text-slate-300 sm:p-8">
+            <div className="min-h-44 p-5 text-sm leading-7 text-[#5d5854] dark:text-slate-300 sm:p-8">
               {activePanel === 'overview' ? (
                 <>
                   {room.lesson.summary ? <p className="mb-5 text-base font-semibold text-[#3e4655] dark:text-slate-200">{room.lesson.summary}</p> : null}
                   {hasBody ? (
                     <div className="prose prose-slate max-w-none dark:prose-invert" dangerouslySetInnerHTML={{ __html: room.lesson.contentHtml! }} />
                   ) : (
-                    <p>Nội dung chi tiết của bài học đang được cập nhật. Bạn có thể xem video và chuyển sang bài tiếp theo.</p>
+                    <p>Nội dung chi tiết của bài học đang được cập nhật. Bạn có thể xem video, lưu ghi chú cá nhân hoặc chuyển sang bài tiếp theo.</p>
                   )}
                 </>
+              ) : null}
+
+              {activePanel === 'curriculum' ? (
+                <div className="space-y-4">
+                  {room.curriculum.map((section, sectionIndex) => (
+                    <div key={section.id} className="overflow-hidden rounded-xl border border-[#ddcbbb] bg-[#fffdf9] dark:border-[#334159] dark:bg-[#0c192d]">
+                      <div className="flex items-center justify-between bg-[#fcf7f1] px-4 py-3 dark:bg-[#101e33]">
+                        <h3 className="font-black text-[#18243b] dark:text-[#f1e5d3]">{sectionIndex + 1}. {section.title}</h3>
+                        <span className="text-xs font-bold text-[#8b8179] dark:text-slate-400">
+                          {section.lessons.filter((l) => l.progressStatus === 'completed').length}/{section.lessons.length} bài
+                        </span>
+                      </div>
+                      <div className="divide-y divide-[#eee6df] dark:divide-[#26354b]">
+                        {section.lessons.map((item, lessonIndex) => {
+                          const active = item.id === lessonId;
+                          const completed = item.progressStatus === 'completed';
+                          const row = (
+                            <>
+                              <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-full text-xs ${active ? 'bg-white/20 text-white' : completed ? 'bg-[#2f9692] text-white' : 'text-[#9b9188] dark:text-slate-500'}`}>
+                                {item.isLocked ? <FiLock /> : completed ? <FiCheckCircle /> : item.lessonType === 'video' ? <FiPlay /> : <FiFileText />}
+                              </span>
+                              <span className="min-w-0 flex-1">
+                                <span className="mr-1.5 font-black">{sectionIndex + 1}.{lessonIndex + 1}</span>
+                                {item.title}
+                                {item.isFreePreview && isFreePreviewOnly ? (
+                                  <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">Học thử</span>
+                                ) : null}
+                              </span>
+                              {item.durationSeconds > 0 ? (
+                                <span className={`shrink-0 text-xs tabular-nums ${active ? 'text-white/80' : 'text-[#8f867e] dark:text-slate-500'}`}>
+                                  {formatDuration(item.durationSeconds)}
+                                </span>
+                              ) : null}
+                            </>
+                          );
+                          return item.isLocked ? (
+                            <div key={item.id} className="flex items-center gap-3 px-4 py-3 text-sm text-[#aaa098] dark:text-slate-600">{row}</div>
+                          ) : (
+                            <Link
+                              key={item.id}
+                              href={`/hoc/${courseSlug}/bai-hoc/${item.id}`}
+                              className={`flex items-center gap-3 px-4 py-3 text-sm transition ${active ? 'bg-[#ad2033] font-bold text-white' : 'font-semibold text-[#5e5b5a] hover:bg-[#f7efe7] hover:text-[#902033] dark:text-slate-300 dark:hover:bg-[#13223a]'}`}
+                            >
+                              {row}
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               ) : null}
 
               {activePanel === 'notes' ? (
@@ -322,12 +460,14 @@ export function LearningRoomClient({ courseSlug, lessonId }: { courseSlug: strin
           </article>
         </main>
 
-        <LearningSidebar
-          courseSlug={courseSlug}
-          sections={room.curriculum}
-          activeLessonId={lessonId}
-          progressPct={room.enrollment.progress.completionPct}
-        />
+        {!theaterMode ? (
+          <LearningSidebar
+            courseSlug={courseSlug}
+            sections={room.curriculum}
+            activeLessonId={lessonId}
+            progressPct={room.enrollment.progress.completionPct}
+          />
+        ) : null}
       </div>
     </div>
   );

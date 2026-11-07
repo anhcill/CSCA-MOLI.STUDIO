@@ -117,6 +117,40 @@ function createBunnyMediaService({ database = db, adapter, config = bunnyConfigF
       deliveryType: 'bunny', embedUrl: signed.url, manifestUrl: '', expiresAt: signed.expiresAt,
       variants: [], resumePositionSeconds: 0 };
   }
-  return { create, status, authorization, sync, recover, preview };
+  // Counts published lessons that would remain if `lessonId` stopped being published.
+  async function remainingPublishedLessons(client, courseId, lessonId) {
+    const { rows } = await client.query(`SELECT COUNT(*)::int AS count FROM course_lessons l
+      JOIN course_sections s ON s.id=l.section_id AND s.course_id=l.course_id
+      WHERE l.course_id=$1 AND l.id<>$2 AND l.is_published AND s.is_published`, [courseId, lessonId]);
+    return Number(rows[0]?.count || 0);
+  }
+  async function remove(id, actor) {
+    const initial = await assetForActor(id, actor); requireBunny(initial);
+    // Pre-check before touching the provider so a refused removal never deletes the remote video.
+    const course = (await database.query('SELECT status FROM courses WHERE id=$1', [initial.course_id])).rows[0];
+    const lesson = initial.lesson_id
+      ? (await database.query('SELECT id,is_published,video_asset_id FROM course_lessons WHERE id=$1', [initial.lesson_id])).rows[0]
+      : null;
+    const attached = lesson && String(lesson.video_asset_id) === String(initial.id);
+    if (course?.status === 'published' && attached && lesson.is_published
+      && await remainingPublishedLessons(database, initial.course_id, lesson.id) < 1) {
+      throw new CourseApiError(409, 'COURSE_UNPUBLISH_REQUIRED',
+        'Đây là bài duy nhất đang hiển thị của khóa đã xuất bản. Hãy gỡ xuất bản khóa học trước khi xóa video.');
+    }
+    // A missing remote video is treated as deleted, which also releases BUNNY_CREATE_UNCERTAIN allocations.
+    if (initial.bunny_video_id) await bunny.deleteVideo(initial.bunny_video_id);
+    return transaction(async client => {
+      await client.query('SELECT id FROM courses WHERE id=$1 FOR UPDATE', [initial.course_id]);
+      const row = await assetForActor(id, actor, client, true);
+      const detached = await client.query(`UPDATE course_lessons SET video_asset_id=NULL,estimated_duration_seconds=0,
+        is_published=CASE WHEN lesson_type='video' THEN FALSE ELSE is_published END
+        WHERE video_asset_id=$1 AND course_id=$2 RETURNING id`, [row.id, row.course_id]);
+      await client.query("UPDATE video_assets SET status='deleted',deleted_at=COALESCE(deleted_at,NOW()),updated_at=NOW() WHERE id=$1", [row.id]);
+      await client.query(`UPDATE courses SET total_duration_seconds=(SELECT COALESCE(SUM(estimated_duration_seconds),0)
+        FROM course_lessons WHERE course_id=$1),content_updated_at=NOW() WHERE id=$1`, [row.course_id]);
+      return { deleted: true, videoAssetId: Number(row.id), detachedLessonIds: detached.rows.map(r => Number(r.id)) };
+    });
+  }
+  return { create, status, authorization, sync, recover, preview, remove };
 }
 module.exports = { createBunnyMediaService, providerState };

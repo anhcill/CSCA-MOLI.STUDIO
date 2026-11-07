@@ -58,7 +58,7 @@ async function withSessions(initial, run, { failInsert = false } = {}) {
       return { rows: sessions.filter(row => active(row, params[0], params[1]) && row.jti === params[2]) };
     }
     if (sql.startsWith('DELETE FROM user_sessions')) {
-      assert.match(sql, /AND jti = \$3/);
+      assert.match(sql, /AND \(jti = \$3\)/);
       const removed = sessions.filter(row => active(row, params[0], params[1]) && row.jti === params[2]);
       sessions = sessions.filter(row => !removed.includes(row));
       return { rows: removed };

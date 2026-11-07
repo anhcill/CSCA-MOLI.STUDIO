@@ -1172,6 +1172,11 @@ const refreshToken = async (req, res) => {
 
     const newToken = generateToken(buildTokenPayloadWithMfa(user, sessionJti));
     const newRefreshToken = generateRefreshToken(buildRefreshPayloadWithMfa(user, sessionJti));
+    const expiresAt = new Date(jwt.decode(newRefreshToken).exp * 1000);
+    if (!await DeviceSessionService.renewSession(sessionJti, user.id, expiresAt)) {
+      return res.status(401).json({ success: false, code: "SESSION_REVOKED",
+        message: "Phiên đăng nhập đã hết hiệu lực, vui lòng đăng nhập lại" });
+    }
 
     return res.json({
       success: true,

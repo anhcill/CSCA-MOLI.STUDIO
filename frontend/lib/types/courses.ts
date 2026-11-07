@@ -90,6 +90,7 @@ export interface CourseCatalogQuery {
   pageSize?: number;
   subjectCode?: CscaSubjectCode;
   accessType?: CourseAccessType;
+  status?: CourseStatus;
   level?: CourseLevel;
   sort?: 'newest' | 'popular' | 'rating';
   search?: string;
@@ -129,6 +130,7 @@ export interface CurriculumLessonDto {
   isPublished?: boolean;
   videoAssetId?: number | null;
   contentHtml?: string | null;
+  estimatedDurationSeconds?: number;
 }
 
 export interface CurriculumSectionDto {
@@ -386,7 +388,6 @@ export interface VipPackageDto {
   is_active: boolean;
 }
 
-
 export interface VideoUploadSessionDto {
   sessionId: string;
   videoAssetId: number;
@@ -428,3 +429,99 @@ export interface CreateVideoUploadInput {
   sizeBytes: number;
   checksumSha256: string;
 }
+
+export interface CurriculumReorderInput {
+  sectionIds?: number[];
+  sections?: Array<{
+    sectionId: number;
+    lessonIds: number[];
+  }>;
+}
+
+export interface PublishReadyResultDto {
+  publishedSections: number;
+  publishedLessons: number;
+  skippedVideoLessons: number;
+  course: CourseAdminDto;
+}
+
+export interface AdminCourseEnrollmentItemDto {
+  id: number;
+  userId: number;
+  fullName: string | null;
+  email: string;
+  username: string | null;
+  source: string;
+  status: EnrollmentStatus | string;
+  progressPercent: number;
+  completedLessonsCount: number;
+  enrolledAt: string;
+  expiresAt: string | null;
+  lastAccessedAt: string | null;
+}
+
+export interface AdminCourseEnrollmentsResponseDto {
+  items: AdminCourseEnrollmentItemDto[];
+  pagination: ApiPaginationDto;
+}
+
+export interface AdminCourseEnrollmentQuery {
+  search?: string;
+  status?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface GrantCourseEnrollmentInput {
+  userIds?: number[];
+  emails?: string[];
+  durationDays?: number | null;
+  expiresAt?: string | null;
+  reason?: string;
+}
+
+export interface GrantCourseEnrollmentResultDto {
+  grantedCount: number;
+  grantedUsers: Array<{
+    id: number;
+    email: string;
+    fullName: string | null;
+    expiresAt: string | null;
+  }>;
+  notFoundEmails: string[];
+}
+
+export interface RevokeCourseEnrollmentResultDto {
+  id: number;
+  status: 'revoked';
+}
+
+export const CSCA_SUBJECT_LABELS: Record<CscaSubjectCode, string> = {
+  MATH: 'Toán',
+  PHYSICS: 'Vật lý',
+  CHEMISTRY: 'Hóa học',
+  CHINESE_SCI: 'Tiếng Trung Tự nhiên',
+  CHINESE_SOC: 'Tiếng Trung Xã hội',
+};
+
+export const COURSE_LEVEL_LABELS: Record<CourseLevel, string> = {
+  basic: 'Cơ bản',
+  intermediate: 'Trung cấp',
+  advanced: 'Nâng cao',
+};
+
+export const COURSE_ACCESS_LABELS: Record<CourseAccessType, string> = {
+  free: 'Miễn phí',
+  contact: 'Cấp quyền / Liên hệ',
+  package: 'Theo gói VIP',
+  vip: 'Theo gói VIP',
+  premium: 'Cao cấp',
+  private: 'Riêng tư',
+};
+
+export const COURSE_STATUS_LABELS: Record<CourseStatus, string> = {
+  published: 'Đã xuất bản',
+  draft: 'Bản nháp',
+  review: 'Chờ duyệt',
+  archived: 'Lưu trữ',
+};

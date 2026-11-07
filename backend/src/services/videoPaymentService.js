@@ -4,6 +4,7 @@ const { positiveId, productType } = require('../utils/videoCommerceContract');
 const { resolveSelectedSubjects, normalizeTier } = require('../utils/vipEntitlements');
 const { lockCoupon, couponDiscount, consumeCoupon } = require('./paymentCouponReservation');
 const { preserveLegacyVip, recalculateVideoVip } = require('./videoVipSummary');
+const { bankNameFromBin } = require('../utils/vietqrBanks');
 
 const hash = value => crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const fail = (code, message, status = 409) => { throw new CourseApiError(status, code, message); };
@@ -143,7 +144,10 @@ function createVideoPaymentService({ db, gateway, recalculateVip, sendEmail, now
     return { orderId: row.transaction_code, type: row.product_type, productId: Number(row.product_id),
       status: row.fulfilled_at ? 'completed' : row.paid_at ? 'awaiting_fulfillment' : row.received_amount > 0 ? 'payment_review' : row.status,
       amount: Number(row.amount), snapshot: row.snapshot, expiresAt: row.expires_at,
-      payment: row.fulfilled_at || ['cancelled','expired'].includes(row.status) ? null : row.provider_payment,
+      payment: row.fulfilled_at || ['cancelled','expired'].includes(row.status) ? null : (row.provider_payment ? {
+        ...row.provider_payment,
+        bankName: row.provider_payment.bankName || (row.provider_payment.bin ? bankNameFromBin(row.provider_payment.bin) : null),
+      } : null),
       rights: row.result || null, fulfillmentError: row.fulfillment_error || null };
   }
   async function createOrder(userIdValue, input) {
@@ -212,10 +216,13 @@ function createVideoPaymentService({ db, gateway, recalculateVip, sendEmail, now
     if (['CANCELLED','EXPIRED'].includes(payment.status)) {
       await closeUnpaid(row,payment.status.toLowerCase()); return orderById(db,row.id);
     }
+    const prev = row.provider_payment || {};
+    const resolvedBin = payment.bin || prev.bin || null;
     const safe = { orderCode: Number(payment.orderCode), status: payment.status, amount: Number(payment.amount),
-      qrCode: payment.qrCode || null, checkoutUrl: payment.checkoutUrl || null,
-      bin: payment.bin || null, accountNumber: payment.accountNumber || null, accountName: payment.accountName || null,
-      description: payment.description || null };
+      qrCode: payment.qrCode || prev.qrCode || null, checkoutUrl: payment.checkoutUrl || prev.checkoutUrl || null,
+      bin: resolvedBin, bankName: resolvedBin ? bankNameFromBin(resolvedBin) : (prev.bankName || null),
+      accountNumber: payment.accountNumber || prev.accountNumber || null, accountName: payment.accountName || prev.accountName || null,
+      description: payment.description || prev.description || `CSCA${row.id}` };
     await db.query('UPDATE video_commerce_orders SET provider_payment=$2::jsonb WHERE transaction_id=$1 AND paid_at IS NULL', [row.id,JSON.stringify(safe)]);
     return orderById(db, row.id);
   }

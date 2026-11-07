@@ -19,6 +19,7 @@ const PROGRESS_INTERVAL_MS = 15_000;
 const MAX_WATCHED_DELTA_PER_UPDATE = 60;
 const SESSION_REFRESH_MARGIN_MS = 60_000;
 const COMPLETION_THRESHOLD = 0.85;
+const CONTROLS_IDLE_MS = 3_000;
 
 type PlayerProps = {
   lessonId: number;
@@ -26,6 +27,7 @@ type PlayerProps = {
   loading?: boolean;
   error?: string;
   onProgressSaved?: () => Promise<void> | void;
+  onLessonCompleted?: () => void;
 };
 
 type QualityOption = { levelIndex: number; height: number; label: string };
@@ -56,9 +58,24 @@ function formatPlaybackTime(value: number): string {
     : `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
-export function HlsPlayerShell({ lessonId, session, loading = false, error = '', onProgressSaved }: PlayerProps) {
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target.isContentEditable) return true;
+  const tag = target.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'BUTTON';
+}
+
+export function HlsPlayerShell({
+  lessonId,
+  session,
+  loading = false,
+  error = '',
+  onProgressSaved,
+  onLessonCompleted,
+}: PlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
+  const controlsTimerRef = useRef<number | null>(null);
   const refreshPromiseRef = useRef<Promise<PlaybackSessionDto> | null>(null);
   const refreshLessonIdRef = useRef<number | null>(null);
   const currentLessonIdRef = useRef(lessonId);
@@ -73,6 +90,8 @@ export function HlsPlayerShell({ lessonId, session, loading = false, error = '',
   const initializedLessonRef = useRef<number | null>(null);
   const mediaRecoveryAttemptsRef = useRef(0);
   const restorePlayingRef = useRef(false);
+  const completedCallbackRef = useRef(onLessonCompleted);
+  completedCallbackRef.current = onLessonCompleted;
 
   const [activeSession, setActiveSession] = useState(session);
   const [playerError, setPlayerError] = useState(error);
@@ -86,6 +105,7 @@ export function HlsPlayerShell({ lessonId, session, loading = false, error = '',
   const [volume, setVolume] = useState(1);
   const [muted, setMuted] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
+  const [controlsVisible, setControlsVisible] = useState(true);
   currentLessonIdRef.current = lessonId;
 
   useEffect(() => {
@@ -101,6 +121,7 @@ export function HlsPlayerShell({ lessonId, session, loading = false, error = '',
     lastTimeUpdateRef.current = null;
     progressDirtyRef.current = false;
     completionRequestedRef.current = false;
+    setControlsVisible(true);
   }, [lessonId]);
 
   useEffect(() => {
@@ -113,6 +134,29 @@ export function HlsPlayerShell({ lessonId, session, loading = false, error = '',
     progressDirtyRef.current = false;
     completionRequestedRef.current = false;
   }, [activeSession, lessonId]);
+
+  const revealControls = useCallback(() => {
+    setControlsVisible(true);
+    if (controlsTimerRef.current) window.clearTimeout(controlsTimerRef.current);
+    const video = videoRef.current;
+    if (video && !video.paused && !video.ended) {
+      controlsTimerRef.current = window.setTimeout(() => {
+        setControlsVisible(false);
+      }, CONTROLS_IDLE_MS);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isPlaying) {
+      if (controlsTimerRef.current) window.clearTimeout(controlsTimerRef.current);
+      setControlsVisible(true);
+      return;
+    }
+    controlsTimerRef.current = window.setTimeout(() => setControlsVisible(false), CONTROLS_IDLE_MS);
+    return () => {
+      if (controlsTimerRef.current) window.clearTimeout(controlsTimerRef.current);
+    };
+  }, [isPlaying]);
 
   const refreshSession = useCallback(() => {
     if (refreshPromiseRef.current && refreshLessonIdRef.current === lessonId) {
@@ -157,11 +201,15 @@ export function HlsPlayerShell({ lessonId, session, loading = false, error = '',
     if (!delay) return;
     const timer = window.setTimeout(() => void refreshSession().catch(() => undefined), delay);
     return () => window.clearTimeout(timer);
-  }, [activeSession, lessonId, refreshSession]);
+  }, [activeSession?.deliveryType, activeSession?.expiresAt, activeSession?.lessonId, lessonId, refreshSession]);
+
+  const manifestUrl = activeSession?.lessonId === lessonId && activeSession.deliveryType !== 'bunny'
+    ? activeSession.manifestUrl
+    : '';
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || activeSession?.lessonId !== lessonId) return;
+    if (!video || !manifestUrl) return;
 
     setPlayerError('');
     setQualities([]);
@@ -187,7 +235,7 @@ export function HlsPlayerShell({ lessonId, session, loading = false, error = '',
       });
       hlsRef.current = hls;
       hls.attachMedia(video);
-      hls.on(Events.MEDIA_ATTACHED, () => hls.loadSource(activeSession.manifestUrl));
+      hls.on(Events.MEDIA_ATTACHED, () => hls.loadSource(manifestUrl));
       hls.on(Events.MANIFEST_PARSED, () => setQualities(qualityOptions(hls.levels)));
       hls.on(Events.LEVEL_SWITCHED, (_event, data) => {
         if (hls.autoLevelEnabled) setSelectedLevel(-1);
@@ -211,7 +259,7 @@ export function HlsPlayerShell({ lessonId, session, loading = false, error = '',
       });
     } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
       setNativeHls(true);
-      video.src = activeSession.manifestUrl;
+      video.src = manifestUrl;
       video.load();
     } else {
       setPlayerError('Trình duyệt này không hỗ trợ phát video HLS.');
@@ -237,7 +285,7 @@ export function HlsPlayerShell({ lessonId, session, loading = false, error = '',
       video.removeAttribute('src');
       video.load();
     };
-  }, [activeSession, lessonId, refreshSession]);
+  }, [manifestUrl, refreshSession]);
 
   const flushProgress = useCallback((keepalive = false) => {
     if (!progressDirtyRef.current) return progressRequestRef.current ?? Promise.resolve();
@@ -255,18 +303,28 @@ export function HlsPlayerShell({ lessonId, session, loading = false, error = '',
       { positionSeconds, watchedDeltaSeconds },
       { keepalive },
     ).then(async (progress) => {
-      void Promise.resolve(onProgressSaved?.()).catch(() => undefined);
       if (currentLessonIdRef.current === requestLessonId) {
         watchedDeltaSecondsRef.current = Math.max(0, watchedDeltaSecondsRef.current - watchedDeltaSeconds);
         if (watchedDeltaSecondsRef.current >= 1) progressDirtyRef.current = true;
       }
-      const reachedThreshold = progress.completionPct >= COMPLETION_THRESHOLD * 100;
-      if (currentLessonIdRef.current === requestLessonId && reachedThreshold && !completionRequestedRef.current) {
-        completionRequestedRef.current = true;
-        await learningApi.completeLesson(lessonId).catch(() => {
-          completionRequestedRef.current = false;
-        });
+      if (progress.status === 'completed') {
+        if (!completionRequestedRef.current) {
+          completionRequestedRef.current = true;
+          completedCallbackRef.current?.();
+        }
+      } else {
+        const reachedThreshold = progress.completionPct >= COMPLETION_THRESHOLD * 100;
+        if (currentLessonIdRef.current === requestLessonId && reachedThreshold && !completionRequestedRef.current) {
+          completionRequestedRef.current = true;
+          await learningApi.completeLesson(lessonId).catch(() => {
+            completionRequestedRef.current = false;
+          });
+          if (completionRequestedRef.current) {
+            completedCallbackRef.current?.();
+          }
+        }
       }
+      void Promise.resolve(onProgressSaved?.()).catch(() => undefined);
     }).catch(() => {
       progressDirtyRef.current = true;
     }).finally(() => {
@@ -311,7 +369,7 @@ export function HlsPlayerShell({ lessonId, session, loading = false, error = '',
       window.removeEventListener('pagehide', onPageHide);
       void flushProgress(true);
     };
-  }, [flushProgress, activeSession?.sessionId]);
+  }, [flushProgress, manifestUrl]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -330,7 +388,7 @@ export function HlsPlayerShell({ lessonId, session, loading = false, error = '',
     return () => {
       events.forEach((eventName) => video.removeEventListener(eventName, syncPlayback));
     };
-  }, [activeSession, lessonId]);
+  }, [manifestUrl, lessonId]);
 
   const availableQualityLabels = useMemo(
     () => new Set<string>(activeSession?.variants.filter((item) => item.isReady).map((item) => item.resolution) ?? []),
@@ -347,7 +405,7 @@ export function HlsPlayerShell({ lessonId, session, loading = false, error = '',
     setSelectedLevel(levelIndex);
   };
 
-  const togglePlayback = () => {
+  const togglePlayback = useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
     if (video.paused || video.ended) {
@@ -355,30 +413,34 @@ export function HlsPlayerShell({ lessonId, session, loading = false, error = '',
     } else {
       video.pause();
     }
-  };
+  }, []);
 
-  const seekBy = (seconds: number) => {
+  const seekBy = useCallback((seconds: number) => {
     const video = videoRef.current;
     if (!video || !Number.isFinite(video.duration)) return;
     video.currentTime = Math.min(video.duration, Math.max(0, video.currentTime + seconds));
-  };
+    revealControls();
+  }, [revealControls]);
 
   const seekTo = (seconds: number) => {
     const video = videoRef.current;
     if (!video || !Number.isFinite(video.duration)) return;
     video.currentTime = Math.min(video.duration, Math.max(0, seconds));
+    revealControls();
   };
 
-  const toggleMute = () => {
+  const toggleMute = useCallback(() => {
     const video = videoRef.current;
     if (video) video.muted = !video.muted;
-  };
+    revealControls();
+  }, [revealControls]);
 
   const changeVolume = (nextVolume: number) => {
     const video = videoRef.current;
     if (!video) return;
     video.volume = nextVolume;
     video.muted = nextVolume === 0;
+    revealControls();
   };
 
   const changePlaybackRate = (nextRate: number) => {
@@ -386,7 +448,30 @@ export function HlsPlayerShell({ lessonId, session, loading = false, error = '',
     if (!video) return;
     video.defaultPlaybackRate = nextRate;
     video.playbackRate = nextRate;
+    revealControls();
   };
+
+  useEffect(() => {
+    if (!manifestUrl) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.altKey || event.ctrlKey || event.metaKey || isEditableTarget(event.target)) return;
+      if (event.key === ' ' || event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        togglePlayback();
+      } else if (event.key === 'ArrowLeft' || event.key.toLowerCase() === 'j') {
+        event.preventDefault();
+        seekBy(-10);
+      } else if (event.key === 'ArrowRight' || event.key.toLowerCase() === 'l') {
+        event.preventDefault();
+        seekBy(10);
+      } else if (event.key.toLowerCase() === 'm') {
+        event.preventDefault();
+        toggleMute();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [manifestUrl, seekBy, toggleMute, togglePlayback]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -443,11 +528,19 @@ export function HlsPlayerShell({ lessonId, session, loading = false, error = '',
       safeAction('seekto', null);
       mediaSession.metadata = null;
     };
-  }, [activeSession, lessonId]);
+  }, [manifestUrl, lessonId, seekBy]);
 
   const hasCurrentSession = activeSession?.lessonId === lessonId;
   if (hasCurrentSession && activeSession.deliveryType === 'bunny') {
-    return <BunnyPlayer key={lessonId} lessonId={lessonId} session={activeSession} onProgressSaved={onProgressSaved} />;
+    return (
+      <BunnyPlayer
+        key={lessonId}
+        lessonId={lessonId}
+        session={activeSession}
+        onProgressSaved={onProgressSaved}
+        onLessonCompleted={onLessonCompleted}
+      />
+    );
   }
 
   if (loading && !hasCurrentSession) {
@@ -458,82 +551,103 @@ export function HlsPlayerShell({ lessonId, session, loading = false, error = '',
     return <div role="alert" className="flex h-full w-full flex-col items-center justify-center gap-4 bg-slate-950 p-8 text-center text-amber-100"><p>{playerError || 'Video chưa sẵn sàng.'}</p><button type="button" onClick={() => void refreshSession().catch(() => undefined)} disabled={refreshing} className="rounded-lg bg-white px-4 py-2 font-bold text-slate-900 disabled:opacity-60">{refreshing ? 'Đang thử lại...' : 'Thử lại'}</button></div>;
   }
 
-  return <ProtectedVideoFrame session={activeSession} onPause={() => { restorePlayingRef.current = false; videoRef.current?.pause(); lastTimeUpdateRef.current = null; void flushProgress(true); }}>
-    <video
-      ref={videoRef}
-      playsInline
-      disablePictureInPicture
-      disableRemotePlayback
-      controlsList="nodownload noremoteplayback nofullscreen"
-      x-webkit-airplay="deny"
-      preload="metadata"
-      className="h-full w-full cursor-pointer object-contain"
-      aria-label="Video bài học"
-      onClick={togglePlayback}
-    />
-    <div className="absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black via-black/90 to-transparent px-2.5 pb-2.5 pt-9 text-white sm:px-4 sm:pb-3 sm:pt-10">
-      <label htmlFor={`video-progress-${lessonId}`} className="sr-only">Vị trí phát video</label>
-      <input
-        id={`video-progress-${lessonId}`}
-        type="range"
-        min={0}
-        max={duration || 0}
-        step={0.1}
-        value={Math.min(currentTime, duration || 0)}
-        onChange={(event) => seekTo(Number(event.target.value))}
-        className="mb-2 h-1.5 w-full cursor-pointer accent-[#34a9a4]"
-      />
-      <div className="flex flex-wrap items-center gap-1 sm:gap-1.5">
-        <button type="button" onClick={togglePlayback} aria-label={isPlaying ? 'Tạm dừng' : 'Phát video'} title={isPlaying ? 'Tạm dừng' : 'Phát video'} className="rounded-lg p-2 hover:bg-white/15">
-          {isPlaying ? <FiPause className="h-5 w-5" /> : <FiPlay className="h-5 w-5" />}
-        </button>
-        <button type="button" onClick={() => seekBy(-10)} aria-label="Tua lùi 10 giây" title="Tua lùi 10 giây" className="relative rounded-lg p-2 hover:bg-white/15">
-          <FiRotateCcw className="h-5 w-5" /><span className="absolute inset-0 flex items-center justify-center pt-0.5 text-[8px] font-black">10</span>
-        </button>
-        <button type="button" onClick={() => seekBy(10)} aria-label="Tua tới 10 giây" title="Tua tới 10 giây" className="relative rounded-lg p-2 hover:bg-white/15">
-          <FiRotateCw className="h-5 w-5" /><span className="absolute inset-0 flex items-center justify-center pt-0.5 text-[8px] font-black">10</span>
-        </button>
-        <button type="button" onClick={toggleMute} aria-label={muted ? 'Bật âm thanh' : 'Tắt âm thanh'} title={muted ? 'Bật âm thanh' : 'Tắt âm thanh'} className="rounded-lg p-2 hover:bg-white/15">
-          {muted || volume === 0 ? <FiVolumeX className="h-5 w-5" /> : <FiVolume2 className="h-5 w-5" />}
-        </button>
-        <label htmlFor={`video-volume-${lessonId}`} className="sr-only">Âm lượng</label>
-        <input
-          id={`video-volume-${lessonId}`}
-          type="range"
-          min={0}
-          max={1}
-          step={0.05}
-          value={muted ? 0 : volume}
-          onChange={(event) => changeVolume(Number(event.target.value))}
-          className="hidden h-1 w-20 cursor-pointer accent-white sm:block"
+  return (
+    <ProtectedVideoFrame
+      session={activeSession}
+      onPause={() => {
+        restorePlayingRef.current = false;
+        videoRef.current?.pause();
+        lastTimeUpdateRef.current = null;
+        void flushProgress(true);
+      }}
+    >
+      <div
+        className="relative h-full w-full"
+        onMouseMove={revealControls}
+        onTouchStart={revealControls}
+        onFocusCapture={revealControls}
+      >
+        <video
+          ref={videoRef}
+          playsInline
+          disablePictureInPicture
+          disableRemotePlayback
+          controlsList="nodownload noremoteplayback nofullscreen"
+          x-webkit-airplay="deny"
+          preload="metadata"
+          className="h-full w-full cursor-pointer object-contain"
+          aria-label="Video bài học"
+          onClick={togglePlayback}
         />
-        <span className="hidden min-w-24 whitespace-nowrap text-xs font-semibold tabular-nums text-white/90 sm:inline">
-          {formatPlaybackTime(currentTime)} / {formatPlaybackTime(duration)}
-        </span>
-        <div className="hidden min-w-0 flex-1 sm:block" />
-        <label htmlFor={`video-quality-${lessonId}`} className="sr-only">Chất lượng video</label>
-        <select id={`video-quality-${lessonId}`} value={selectedLevel} onChange={(event) => changeQuality(Number(event.target.value))} disabled={nativeHls || qualities.length === 0} title={nativeHls ? 'Safari tự động chọn chất lượng phù hợp' : 'Chọn chất lượng video'} className="max-w-24 rounded-lg border border-white/30 bg-black/70 px-2 py-1.5 text-xs font-bold text-white disabled:opacity-70">
-          <option value={-1}>Tự động</option>
-          {qualities.filter((quality) => availableQualityLabels.size === 0 || availableQualityLabels.has(quality.label)).map((quality) => <option key={quality.levelIndex} value={quality.levelIndex}>{quality.label}</option>)}
-        </select>
-        <label htmlFor={`video-speed-${lessonId}`} className="sr-only">Tốc độ phát</label>
-        <select
-          id={`video-speed-${lessonId}`}
-          value={playbackRate}
-          onChange={(event) => changePlaybackRate(Number(event.target.value))}
-          title="Tốc độ phát"
-          className="rounded-lg border border-white/30 bg-black/70 px-2 py-1.5 text-xs font-bold text-white"
+        <div
+          className={`absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black via-black/90 to-transparent px-2.5 pb-2.5 pt-9 text-white transition-opacity duration-200 sm:px-4 sm:pb-3 sm:pt-10 ${
+            controlsVisible || !isPlaying ? 'opacity-100' : 'pointer-events-none opacity-0'
+          }`}
         >
-          {[0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map((rate) => <option key={rate} value={rate}>{rate}×</option>)}
-        </select>
+          <label htmlFor={`video-progress-${lessonId}`} className="sr-only">Vị trí phát video</label>
+          <input
+            id={`video-progress-${lessonId}`}
+            type="range"
+            min={0}
+            max={duration || 0}
+            step={0.1}
+            value={Math.min(currentTime, duration || 0)}
+            onChange={(event) => seekTo(Number(event.target.value))}
+            className="mb-2 h-1.5 w-full cursor-pointer accent-[#34a9a4]"
+          />
+          <div className="flex flex-wrap items-center gap-1 sm:gap-1.5">
+            <button type="button" onClick={togglePlayback} aria-label={isPlaying ? 'Tạm dừng' : 'Phát video'} title={isPlaying ? 'Tạm dừng (K)' : 'Phát video (K)'} className="rounded-lg p-2 hover:bg-white/15">
+              {isPlaying ? <FiPause className="h-5 w-5" /> : <FiPlay className="h-5 w-5" />}
+            </button>
+            <button type="button" onClick={() => seekBy(-10)} aria-label="Tua lùi 10 giây" title="Tua lùi 10 giây (←)" className="relative rounded-lg p-2 hover:bg-white/15">
+              <FiRotateCcw className="h-5 w-5" /><span className="absolute inset-0 flex items-center justify-center pt-0.5 text-[8px] font-black">10</span>
+            </button>
+            <button type="button" onClick={() => seekBy(10)} aria-label="Tua tới 10 giây" title="Tua tới 10 giây (→)" className="relative rounded-lg p-2 hover:bg-white/15">
+              <FiRotateCw className="h-5 w-5" /><span className="absolute inset-0 flex items-center justify-center pt-0.5 text-[8px] font-black">10</span>
+            </button>
+            <button type="button" onClick={toggleMute} aria-label={muted ? 'Bật âm thanh' : 'Tắt âm thanh'} title={muted ? 'Bật âm thanh (M)' : 'Tắt âm thanh (M)'} className="rounded-lg p-2 hover:bg-white/15">
+              {muted || volume === 0 ? <FiVolumeX className="h-5 w-5" /> : <FiVolume2 className="h-5 w-5" />}
+            </button>
+            <label htmlFor={`video-volume-${lessonId}`} className="sr-only">Âm lượng</label>
+            <input
+              id={`video-volume-${lessonId}`}
+              type="range"
+              min={0}
+              max={1}
+              step={0.05}
+              value={muted ? 0 : volume}
+              onChange={(event) => changeVolume(Number(event.target.value))}
+              className="hidden h-1 w-20 cursor-pointer accent-white sm:block"
+            />
+            <span className="whitespace-nowrap px-1 text-[11px] font-semibold tabular-nums text-white/90 sm:min-w-24 sm:text-xs">
+              {formatPlaybackTime(currentTime)} / {formatPlaybackTime(duration)}
+            </span>
+            <div className="min-w-0 flex-1" />
+            <label htmlFor={`video-quality-${lessonId}`} className="sr-only">Chất lượng video</label>
+            <select id={`video-quality-${lessonId}`} value={selectedLevel} onChange={(event) => changeQuality(Number(event.target.value))} disabled={nativeHls || qualities.length === 0} title={nativeHls ? 'Safari tự động chọn chất lượng phù hợp' : 'Chọn chất lượng video'} className="max-w-24 rounded-lg border border-white/30 bg-black/70 px-2 py-1.5 text-xs font-bold text-white disabled:opacity-70">
+              <option value={-1}>Tự động</option>
+              {qualities.filter((quality) => availableQualityLabels.size === 0 || availableQualityLabels.has(quality.label)).map((quality) => <option key={quality.levelIndex} value={quality.levelIndex}>{quality.label}</option>)}
+            </select>
+            <label htmlFor={`video-speed-${lessonId}`} className="sr-only">Tốc độ phát</label>
+            <select
+              id={`video-speed-${lessonId}`}
+              value={playbackRate}
+              onChange={(event) => changePlaybackRate(Number(event.target.value))}
+              title="Tốc độ phát"
+              className="rounded-lg border border-white/30 bg-black/70 px-2 py-1.5 text-xs font-bold text-white"
+            >
+              {[0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map((rate) => <option key={rate} value={rate}>{rate}×</option>)}
+            </select>
+          </div>
+        </div>
+        {!isPlaying && currentTime === 0 && !playerError ? (
+          <button type="button" onClick={togglePlayback} aria-label="Phát video" className="absolute left-1/2 top-1/2 z-[5] -translate-x-1/2 -translate-y-1/2 rounded-full bg-black/65 p-5 text-white shadow-xl transition hover:scale-105 hover:bg-[#a82034]">
+            <FiPlay className="h-8 w-8 translate-x-0.5" />
+          </button>
+        ) : null}
+        {refreshing ? <div aria-live="polite" className="pointer-events-none absolute left-3 top-8 z-20 rounded bg-black/75 px-3 py-1.5 text-xs text-white">Đang làm mới phiên phát...</div> : null}
+        {playerError ? <div role="alert" className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 bg-black/80 p-8 text-center text-amber-100"><p>{playerError}</p><button type="button" onClick={() => void refreshSession().catch(() => undefined)} disabled={refreshing} className="rounded-lg bg-white px-4 py-2 font-bold text-slate-900 disabled:opacity-60">Thử lại</button></div> : null}
       </div>
-    </div>
-    {!isPlaying && currentTime === 0 && !playerError ? (
-      <button type="button" onClick={togglePlayback} aria-label="Phát video" className="absolute left-1/2 top-1/2 z-[5] -translate-x-1/2 -translate-y-1/2 rounded-full bg-black/65 p-5 text-white shadow-xl transition hover:scale-105 hover:bg-[#a82034]">
-        <FiPlay className="h-8 w-8 translate-x-0.5" />
-      </button>
-    ) : null}
-    {refreshing ? <div aria-live="polite" className="absolute left-3 top-3 rounded bg-black/70 px-3 py-2 text-sm text-white">Đang làm mới phiên phát...</div> : null}
-    {playerError ? <div role="alert" className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black/80 p-8 text-center text-amber-100"><p>{playerError}</p><button type="button" onClick={() => void refreshSession().catch(() => undefined)} disabled={refreshing} className="rounded-lg bg-white px-4 py-2 font-bold text-slate-900 disabled:opacity-60">Thử lại</button></div> : null}
-  </ProtectedVideoFrame>;
+    </ProtectedVideoFrame>
+  );
 }

@@ -102,10 +102,20 @@ function createVideoAdminService({db,repository,payments,recalculateVip,sendRigh
     });
   }
   async function lookup(kind,query={}) {
-    const p=pageQuery(query),search=String(query.search||'').slice(0,100);
-    const sql={courses:'SELECT id,title AS name,subject_code,status FROM courses WHERE title ILIKE $1 ORDER BY id',
+    const p=pageQuery(query),search=String(query.search||'').trim().slice(0,100);
+    if(kind==='users') {
+      const exactId=/^\d+$/.test(search)?Number(search):null;
+      const safeId=exactId && Number.isSafeInteger(exactId) && exactId<=2147483647?exactId:null;
+      return paged((await db.query(
+        `SELECT id,email,full_name AS name,username FROM users
+         WHERE email ILIKE $1 OR COALESCE(full_name,'') ILIKE $1 OR COALESCE(username,'') ILIKE $1
+            OR ($2::int IS NOT NULL AND id=$2)
+         ORDER BY id LIMIT $3 OFFSET $4`,
+        [`%${search}%`,safeId,p.limit+1,p.offset],
+      )).rows,p);
+    }
+    const sql={courses:'SELECT id,title AS name,subject_code,status FROM courses WHERE title ILIKE $1 OR slug ILIKE $1 ORDER BY id',
       vip:'SELECT id,name,is_active,allowed_subjects FROM vip_packages WHERE name ILIKE $1 ORDER BY id',
-      users:'SELECT id,email,full_name AS name FROM users WHERE email ILIKE $1 OR full_name ILIKE $1 ORDER BY id',
       coupons:'SELECT id,code AS name FROM coupons WHERE code ILIKE $1 ORDER BY id'}[kind];
     if(!sql)fail('INVALID_LOOKUP','Unsupported lookup.');
     return paged((await db.query(`${sql} LIMIT $2 OFFSET $3`,[`%${search}%`,p.limit+1,p.offset])).rows,p);
@@ -183,6 +193,33 @@ function createVideoAdminService({db,repository,payments,recalculateVip,sendRigh
     await deliverRightsEmail(`grant:${result.id}`).catch(()=>{});
     return result;
   }
+  async function bulkGrant(input={},actor) {
+    const type=productType(input.type),id=positiveId(input.productId),why=reason(input.reason);
+    if(typeof input.requestKey!=='string'||!/^[\w-]{8,120}$/.test(input.requestKey))fail('REQUEST_KEY_REQUIRED','A stable request key is required.');
+    const userIds=Array.isArray(input.userIds)?[...new Set(input.userIds.map(v=>positiveId(v)))]:[];
+    const emails=Array.isArray(input.emails)?[...new Set(input.emails.map(e=>String(e||'').trim().toLowerCase()).filter(e=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)))]:[];
+    if(!userIds.length && !emails.length)fail('TARGET_REQUIRED','Provide at least one user ID or email.');
+    if(userIds.length+emails.length>200)fail('TOO_MANY_TARGETS','Bulk grant supports up to 200 users per batch.');
+    const matched=(await db.query(
+      `SELECT id,email FROM users WHERE id=ANY($1::int[]) OR LOWER(email)=ANY($2::text[]) ORDER BY id`,
+      [userIds,emails],
+    )).rows;
+    const foundEmails=new Set(matched.map(u=>String(u.email||'').toLowerCase()));
+    const notFoundEmails=emails.filter(e=>!foundEmails.has(e));
+    const keyPrefix=crypto.createHash('sha256').update(input.requestKey).digest('hex').slice(0,20);
+    const granted=[],failed=[];
+    for(const u of matched) {
+      try {
+        const res=await grant({type,productId:id,userId:Number(u.id),selectedSubjectCode:input.selectedSubjectCode||null,
+          videoExpiresAt:input.videoExpiresAt??null,vipExpiresAt:input.vipExpiresAt||null,reason:why,
+          requestKey:`bg_${keyPrefix}_${u.id}`},actor);
+        granted.push({userId:Number(u.id),email:u.email,entitlementId:Number(res.id)});
+      } catch(err) {
+        failed.push({email:u.email||`#${u.id}`,message:err?.message||'Grant failed'});
+      }
+    }
+    return {grantedCount:granted.length,granted,notFoundEmails,failed};
+  }
   async function revoke(idValue,input,actor) {
     const id=positiveId(idValue),why=reason(input.reason);
     const result=await tx(async client=>{
@@ -232,6 +269,6 @@ function createVideoAdminService({db,repository,payments,recalculateVip,sendRigh
       FROM video_commerce_orders o JOIN transactions t ON t.id=o.transaction_id GROUP BY o.product_type`)).rows;
   }
   async function events(query={}) {const p=pageQuery(query);return paged((await db.query(`SELECT e.*,u.email AS actor FROM video_admin_events e JOIN users u ON u.id=e.actor_id ORDER BY e.id DESC LIMIT $1 OFFSET $2`,[p.limit+1,p.offset])).rows,p);}
-  return {catalog,product,saveProduct,lookup,rights,grant,revoke,orders,sync,stats,events,audit,tx,retryRightsEmails};
+  return {catalog,product,saveProduct,lookup,rights,grant,bulkGrant,revoke,orders,sync,stats,events,audit,tx,retryRightsEmails};
 }
 module.exports={createVideoAdminService,pageQuery,paged};

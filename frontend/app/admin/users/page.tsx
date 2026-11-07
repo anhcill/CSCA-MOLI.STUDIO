@@ -2,18 +2,22 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import AdminLayout from '@/components/layout/AdminLayout';
 import { useAuthStore } from '@/lib/store/authStore';
-import { adminApi, AdminRoleOption } from '@/lib/api/admin';
+import {
+  adminApi,
+  type AdminRoleOption,
+  type AdminUserDevicesData,
+  type AdminUserCourseAccessData,
+} from '@/lib/api/admin';
 import { hasPermission } from '@/lib/utils/permissions';
 import axios from '@/lib/utils/axios';
 import {
-  FiUsers, FiTrash2, FiChevronLeft, FiChevronRight,
-  FiSearch, FiEdit2, FiX, FiCheck, FiStar, FiShield,
-  FiEye, FiLock, FiUnlock, FiActivity
+  FiTrash2, FiChevronLeft, FiChevronRight,
+  FiSearch, FiEdit2, FiX, FiBookOpen,
+  FiLock, FiUnlock, FiActivity, FiMonitor, FiAlertTriangle, FiPlus, FiExternalLink,
 } from 'react-icons/fi';
-import { FiMonitor } from 'react-icons/fi';
-import type { AdminRememberedDevice } from '@/lib/api/admin';
 
 interface User {
   id: number;
@@ -43,23 +47,387 @@ interface UserActivity {
 }
 interface ActivityPagination { currentPage: number; totalPages: number; totalActivities: number; limit: number; }
 
-function DeviceModal({ user, devices, paid, onClose, onRevoke, onReset }: { user: User; devices: AdminRememberedDevice[]; paid: boolean; onClose: () => void; onRevoke: (id: number) => void; onReset: () => void }) {
-  const active = devices.filter(device => !device.revoked_at);
-  return <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-    <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl">
-      <div className="flex items-center justify-between border-b px-6 py-4">
-        <div><h2 className="font-bold text-gray-900">Thiết bị của {user.full_name}</h2><p className="text-xs text-gray-500">{paid ? 'Chính sách mua: tối đa 2 thiết bị' : 'Luồng thiết bị hiện tại'}</p></div>
-        <button onClick={onClose} className="rounded-xl p-2 text-gray-500 hover:bg-gray-100"><FiX size={18} /></button>
-      </div>
-      <div className="space-y-3 p-6">
-        {active.length === 0 ? <p className="text-sm text-gray-500">Chưa có thiết bị ghi nhớ.</p> : active.map(device => <div key={device.id} className="flex items-center justify-between rounded-xl border border-gray-200 p-3">
-          <div className="min-w-0"><p className="font-semibold text-gray-800">{device.device_type === 'mobile' ? 'Điện thoại' : 'Máy tính'}</p><p className="truncate text-xs text-gray-500">{device.browser || device.device_info || 'Thiết bị'} · IP {device.ip_address || '—'}</p><p className="text-xs text-gray-400">Hoạt động: {device.last_seen_at ? new Date(device.last_seen_at).toLocaleString('vi-VN') : '—'}</p></div>
-          <button onClick={() => onRevoke(device.id)} className="ml-3 shrink-0 rounded-lg bg-red-50 px-3 py-2 text-xs font-bold text-red-700 hover:bg-red-100">Xóa thiết bị</button>
-        </div>)}
-        <div className="flex justify-end gap-2 border-t pt-4"><button onClick={onReset} className="rounded-xl bg-amber-600 px-4 py-2 text-sm font-bold text-white hover:bg-amber-700">Xóa tất cả + mở khóa</button><button onClick={onClose} className="rounded-xl border px-4 py-2 text-sm">Đóng</button></div>
+const SUBJECT_NAMES: Record<string, string> = {
+  MATH: 'Toán',
+  PHYSICS: 'Vật lý',
+  CHEMISTRY: 'Hóa học',
+  CHINESE_SCI: 'Tiếng Trung TN',
+  CHINESE_SOC: 'Tiếng Trung XH',
+};
+
+function DeviceModal({
+  user,
+  data,
+  onClose,
+  onRevoke,
+  onReset,
+}: {
+  user: User;
+  data: AdminUserDevicesData;
+  onClose: () => void;
+  onRevoke: (id: number) => void;
+  onReset: () => void;
+}) {
+  const activeRemembered = (data.rememberedDevices || []).filter((device) => !device.revoked_at);
+  const activeSessions = data.activeSessions || [];
+  const isLocked = Boolean(data.user?.device_limit_locked_at || data.user?.is_banned);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+      <div className="flex max-h-[88vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b px-6 py-4">
+          <div>
+            <h2 className="font-bold text-gray-900">Thiết bị & Phiên đăng nhập — {user.full_name}</h2>
+            <p className="text-xs text-gray-500">
+              {data.policy.paid
+                ? `Tài khoản có gói trả phí · Giới hạn tối đa ${data.policy.maxDevices ?? 2} thiết bị ghi nhớ`
+                : 'Tài khoản miễn phí · Theo dõi phiên đăng nhập hiện tại'}
+            </p>
+          </div>
+          <button onClick={onClose} className="rounded-xl p-2 text-gray-500 hover:bg-gray-100">
+            <FiX size={18} />
+          </button>
+        </div>
+
+        <div className="flex-1 space-y-5 overflow-y-auto p-6">
+          {(isLocked || (data.user?.device_limit_attempts ?? 0) > 0) && (
+            <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900">
+              <FiAlertTriangle className="mt-0.5 shrink-0 text-amber-600" size={16} />
+              <div>
+                <p className="font-bold">
+                  {isLocked ? 'Tài khoản đang bị tạm khóa do vượt giới hạn thiết bị!' : 'Cảnh báo vượt thiết bị'}
+                </p>
+                <p className="mt-0.5">
+                  Số lần đăng nhập vượt thiết bị: <strong>{data.user?.device_limit_attempts ?? 0}</strong>
+                  {data.user?.device_limit_locked_at &&
+                    ` · Khóa lúc ${new Date(data.user.device_limit_locked_at).toLocaleString('vi-VN')}`}
+                </p>
+                <p className="mt-1">Bấm <strong>Xóa tất cả + mở khóa</strong> bên dưới để cấp lại slot thiết bị mới cho học viên.</p>
+              </div>
+            </div>
+          )}
+
+          <div>
+            <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-gray-500">
+              Thiết bị ghi nhớ ({activeRemembered.length})
+            </h3>
+            {activeRemembered.length === 0 ? (
+              <p className="rounded-xl border border-dashed border-gray-200 p-4 text-sm text-gray-400">
+                Chưa có thiết bị ghi nhớ nào.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {activeRemembered.map((device) => (
+                  <div key={device.id} className="flex items-center justify-between rounded-xl border border-gray-200 p-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-gray-800">
+                        {device.device_type === 'mobile' ? '📱 Điện thoại' : '💻 Máy tính'}
+                      </p>
+                      <p className="truncate text-xs text-gray-500">
+                        {device.browser || device.device_info || 'Trình duyệt'} · IP {device.ip_address || '—'}
+                      </p>
+                      <p className="text-xs text-gray-400">
+                        Hoạt động gần nhất: {device.last_seen_at ? new Date(device.last_seen_at).toLocaleString('vi-VN') : '—'}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => onRevoke(device.id)}
+                      className="ml-3 shrink-0 rounded-lg bg-red-50 px-3 py-2 text-xs font-bold text-red-700 hover:bg-red-100"
+                    >
+                      Xóa thiết bị
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-gray-500">
+              Phiên đang đăng nhập ({activeSessions.length})
+            </h3>
+            {activeSessions.length === 0 ? (
+              <p className="rounded-xl border border-dashed border-gray-200 p-4 text-sm text-gray-400">
+                Không có phiên đăng nhập nào đang hoạt động.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {activeSessions.map((session) => (
+                  <div key={session.id} className="rounded-xl border border-gray-100 bg-gray-50/70 p-3 text-xs text-gray-600">
+                    <p className="font-semibold text-gray-800">
+                      {session.device_type === 'mobile' ? 'Điện thoại' : 'Máy tính'} · {session.device_info || 'Phiên trình duyệt'}
+                    </p>
+                    <p className="mt-0.5 text-gray-400">
+                      IP {session.ip_address || '—'} · Hoạt động: {session.last_active ? new Date(session.last_active).toLocaleString('vi-VN') : '—'}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 border-t bg-gray-50/60 px-6 py-4">
+          <button
+            onClick={onReset}
+            className="rounded-xl bg-amber-600 px-4 py-2 text-sm font-bold text-white hover:bg-amber-700"
+          >
+            Xóa tất cả + mở khóa
+          </button>
+          <button onClick={onClose} className="rounded-xl border bg-white px-4 py-2 text-sm font-medium">
+            Đóng
+          </button>
+        </div>
       </div>
     </div>
-  </div>;
+  );
+}
+
+function CourseAccessModal({
+  user,
+  data,
+  loading,
+  onClose,
+  onRefresh,
+}: {
+  user: User;
+  data: AdminUserCourseAccessData | null;
+  loading: boolean;
+  onClose: () => void;
+  onRefresh: () => Promise<void>;
+}) {
+  const [courseId, setCourseId] = useState<number>(0);
+  const [preset, setPreset] = useState<'30' | '90' | '180' | '365' | 'lifetime' | 'custom'>('90');
+  const [customDate, setCustomDate] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ text: string; error?: boolean } | null>(null);
+
+  useEffect(() => {
+    if (data?.courses?.length && !courseId) {
+      setCourseId(data.courses[0].id);
+    }
+  }, [data, courseId]);
+
+  const handleGrant = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!courseId || busy) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      const payload: { courseId: number; durationDays?: number | null; expiresAt?: string | null } = { courseId };
+      if (preset === 'lifetime') {
+        payload.durationDays = null;
+        payload.expiresAt = null;
+      } else if (preset === 'custom') {
+        if (!customDate) {
+          setMsg({ text: 'Vui lòng chọn ngày hết hạn.', error: true });
+          setBusy(false);
+          return;
+        }
+        payload.expiresAt = new Date(customDate).toISOString();
+      } else {
+        payload.durationDays = Number(preset);
+      }
+      await adminApi.grantUserCourseAccess(user.id, payload);
+      setMsg({ text: 'Đã cấp quyền khóa học thành công!' });
+      await onRefresh();
+    } catch (err: any) {
+      setMsg({ text: err?.response?.data?.message || 'Không thể cấp quyền khóa học.', error: true });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleRevoke = async (enrollmentId: number, title: string) => {
+    if (busy || !confirm(`Thu hồi quyền học khóa "${title}" của ${user.full_name}?`)) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      await adminApi.revokeUserCourseAccess(user.id, enrollmentId);
+      setMsg({ text: 'Đã thu hồi quyền học.' });
+      await onRefresh();
+    } catch (err: any) {
+      setMsg({ text: err?.response?.data?.message || 'Không thể thu hồi quyền học.', error: true });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b px-6 py-4">
+          <div>
+            <h2 className="font-bold text-gray-900">Quyền Khóa học Video — {user.full_name}</h2>
+            <p className="text-xs text-gray-500">{user.email} · Cấp hoặc thu hồi trực tiếp từng khóa học quay sẵn</p>
+          </div>
+          <button onClick={onClose} className="rounded-xl p-2 text-gray-500 hover:bg-gray-100">
+            <FiX size={18} />
+          </button>
+        </div>
+
+        <div className="flex-1 space-y-5 overflow-y-auto p-6">
+          {msg && (
+            <div
+              className={`rounded-xl border px-4 py-3 text-xs font-bold ${
+                msg.error ? 'border-red-200 bg-red-50 text-red-700' : 'border-emerald-200 bg-emerald-50 text-emerald-800'
+              }`}
+            >
+              {msg.text}
+            </div>
+          )}
+
+          {loading || !data ? (
+            <div className="flex justify-center py-10">
+              <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-teal-600" />
+            </div>
+          ) : (
+            <>
+              <form onSubmit={handleGrant} className="space-y-4 rounded-2xl border border-teal-200 bg-teal-50/40 p-4">
+                <p className="text-xs font-black uppercase tracking-wider text-teal-800">
+                  + Mở quyền khóa học mới / Gia hạn thêm
+                </p>
+
+                {data.courses.length === 0 ? (
+                  <p className="text-sm text-gray-500">Chưa có khóa học nào trong hệ thống.</p>
+                ) : (
+                  <>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700">Chọn khóa học</label>
+                      <select
+                        value={courseId}
+                        onChange={(e) => setCourseId(Number(e.target.value))}
+                        className="mt-1.5 w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm font-medium text-gray-900 outline-none focus:border-teal-600"
+                      >
+                        {data.courses.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.title} {c.subjectCode ? `(${SUBJECT_NAMES[c.subjectCode] || c.subjectCode})` : ''} {c.status !== 'published' ? `[${c.status}]` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700">Thời hạn sử dụng</label>
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        {([
+                          ['30', '30 ngày'],
+                          ['90', '90 ngày'],
+                          ['180', '180 ngày'],
+                          ['365', '1 năm'],
+                          ['lifetime', 'Vĩnh viễn'],
+                          ['custom', 'Chọn ngày'],
+                        ] as const).map(([val, label]) => (
+                          <button
+                            key={val}
+                            type="button"
+                            onClick={() => setPreset(val)}
+                            className={`rounded-lg border px-2.5 py-1.5 text-xs font-bold transition ${
+                              preset === val
+                                ? 'border-teal-700 bg-teal-700 text-white'
+                                : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                      {preset === 'custom' && (
+                        <input
+                          type="datetime-local"
+                          required
+                          value={customDate}
+                          onChange={(e) => setCustomDate(e.target.value)}
+                          className="mt-2 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm"
+                        />
+                      )}
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={busy || !courseId}
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-teal-700 px-4 py-2.5 text-xs font-bold text-white hover:bg-teal-800 disabled:opacity-50"
+                    >
+                      <FiPlus size={14} /> {busy ? 'Đang lưu...' : 'Cấp quyền khóa học'}
+                    </button>
+                  </>
+                )}
+              </form>
+
+              <div>
+                <div className="mb-2 flex items-center justify-between">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500">
+                    Các khóa học của học viên ({data.enrollments.length})
+                  </h3>
+                  <Link href="/admin/video-commerce" className="inline-flex items-center gap-1 text-xs font-bold text-teal-700 hover:underline">
+                    Cấp theo Gói Video / Combo <FiExternalLink size={12} />
+                  </Link>
+                </div>
+
+                {data.enrollments.length === 0 ? (
+                  <p className="rounded-xl border border-dashed border-gray-200 p-5 text-center text-sm text-gray-400">
+                    Học viên chưa được cấp khóa học nào.
+                  </p>
+                ) : (
+                  <div className="space-y-2.5">
+                    {data.enrollments.map((item) => {
+                      const isActive = item.status === 'active' || item.status === 'completed';
+                      return (
+                        <div key={item.id} className="flex flex-col justify-between gap-3 rounded-xl border border-gray-200 p-3.5 sm:flex-row sm:items-center">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="truncate text-sm font-bold text-gray-900">{item.title}</p>
+                              <span
+                                className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                  isActive
+                                    ? 'bg-emerald-100 text-emerald-800'
+                                    : item.status === 'revoked'
+                                      ? 'bg-red-100 text-red-700'
+                                      : 'bg-gray-100 text-gray-600'
+                                }`}
+                              >
+                                {item.status === 'active'
+                                  ? 'Đang học'
+                                  : item.status === 'completed'
+                                    ? 'Hoàn thành'
+                                    : item.status === 'revoked'
+                                      ? 'Đã thu hồi'
+                                      : 'Hết hạn'}
+                              </span>
+                            </div>
+                            <p className="mt-1 text-xs text-gray-500">
+                              Nguồn: <strong>{item.source === 'admin' ? 'Admin cấp' : item.source}</strong> · Tiến độ: <strong>{item.progressPercent}%</strong> · Hạn:{' '}
+                              <strong>{item.expiresAt ? new Date(item.expiresAt).toLocaleDateString('vi-VN') : 'Không giới hạn'}</strong>
+                            </p>
+                          </div>
+                          {item.status !== 'revoked' && (
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => void handleRevoke(item.id, item.title)}
+                              className="shrink-0 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-bold text-red-700 hover:bg-red-100 disabled:opacity-50"
+                            >
+                              Thu hồi
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="flex justify-end border-t bg-gray-50/60 px-6 py-3.5">
+          <button onClick={onClose} className="rounded-xl border bg-white px-4 py-2 text-sm font-medium">
+            Đóng
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 const ACTION_LABELS: Record<string, string> = {
@@ -156,16 +524,18 @@ export default function AdminUsersPage() {
   const [pagination, setPagination] = useState<Pagination>({ currentPage: 1, totalPages: 1, totalUsers: 0, limit: 20 });
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [editing, setEditing] = useState<User | null>(null);
   const [editingRoles, setEditingRoles] = useState<User | null>(null);
   const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
   const [savingRoles, setSavingRoles] = useState(false);
   const [activityUser, setActivityUser] = useState<User | null>(null);
   const [activities, setActivities] = useState<UserActivity[]>([]);
-  const [activityPage, setActivityPage] = useState(1);
+  const [, setActivityPage] = useState(1);
   const [activityLoading, setActivityLoading] = useState(false);
   const [deviceUser, setDeviceUser] = useState<User | null>(null);
-  const [deviceData, setDeviceData] = useState<{ devices: AdminRememberedDevice[]; paid: boolean } | null>(null);
+  const [deviceData, setDeviceData] = useState<AdminUserDevicesData | null>(null);
+  const [courseUser, setCourseUser] = useState<User | null>(null);
+  const [courseAccessData, setCourseAccessData] = useState<AdminUserCourseAccessData | null>(null);
+  const [courseAccessLoading, setCourseAccessLoading] = useState(false);
   const [activityPagination, setActivityPagination] = useState<ActivityPagination>({ currentPage: 1, totalPages: 1, totalActivities: 0, limit: 20 });
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -230,7 +600,6 @@ export default function AdminUsersPage() {
     setActivityLoading(true);
     try {
       const res = await axios.get(`/admin/users/${u.id}/activities`, { params: { page: 1, limit: 20 } });
-      // The admin endpoint returns activities at the top level (not under data).
       setActivities(res.data.activities || res.data.data || []);
       setActivityPagination(res.data.pagination || { currentPage: 1, totalPages: 1, totalActivities: 0, limit: 20 });
     } catch { setActivities([]); }
@@ -241,8 +610,34 @@ export default function AdminUsersPage() {
     setDeviceUser(u);
     try {
       const result = await adminApi.getUserDevices(u.id);
-      setDeviceData({ devices: result.data.rememberedDevices || [], paid: result.data.policy.paid });
-    } catch { setDeviceData({ devices: [], paid: false }); }
+      setDeviceData(result.data);
+    } catch {
+      setDeviceData({
+        user: { id: u.id, email: u.email, full_name: u.full_name, role: u.role, device_limit_attempts: 0, device_limit_locked_at: null },
+        policy: { paid: false, maxDevices: null },
+        rememberedDevices: [],
+        activeSessions: [],
+      });
+    }
+  };
+
+  const handleViewCourses = async (u: User) => {
+    setCourseUser(u);
+    setCourseAccessLoading(true);
+    try {
+      const result = await adminApi.getUserCourseAccess(u.id);
+      setCourseAccessData(result.data);
+    } catch {
+      setCourseAccessData({ enrollments: [], courses: [] });
+    } finally {
+      setCourseAccessLoading(false);
+    }
+  };
+
+  const refreshCourseAccess = async () => {
+    if (!courseUser) return;
+    const result = await adminApi.getUserCourseAccess(courseUser.id);
+    setCourseAccessData(result.data);
   };
 
   const handleRevokeDevice = async (deviceId: number) => {
@@ -331,7 +726,7 @@ export default function AdminUsersPage() {
       {/* Users Table */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left min-w-[900px]">
+          <table className="w-full text-left min-w-[960px]">
             <thead>
               <tr className="bg-gray-50/80 border-b border-gray-200 text-xs uppercase tracking-wider text-gray-500 font-semibold">
                 <th className="px-5 py-3.5">Thành viên</th>
@@ -382,7 +777,7 @@ export default function AdminUsersPage() {
                   <td className="px-5 py-4">
                     {(u.is_vip || u.subscription_tier === 'vip' || u.subscription_tier === 'premium') ? (
                       <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-50 text-amber-600 border border-amber-200 rounded-lg text-xs font-bold">
-                        {u.subscription_tier === 'premium' ? 'Pre' : u.subscription_tier === 'vip' ? 'VIP' : 'VIP'}
+                        {u.subscription_tier === 'premium' ? 'Pre' : 'VIP'}
                       </span>
                     ) : (
                       <span className="text-xs text-gray-400">—</span>
@@ -412,8 +807,16 @@ export default function AdminUsersPage() {
                         className="p-2 rounded-lg hover:bg-blue-100 text-gray-500 hover:text-blue-600 transition-colors">
                         <FiActivity size={14} />
                       </button>
+                      <button
+                        onClick={() => void handleViewCourses(u)}
+                        title="Cấp / thu hồi khóa học video"
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-700 hover:text-teal-900 text-xs font-bold transition-colors whitespace-nowrap"
+                      >
+                        <FiBookOpen size={13} />
+                        Khóa học
+                      </button>
                       <button onClick={() => handleViewDevices(u)} title="Quản lý thiết bị" aria-label="Quản lý thiết bị"
-                        className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg hover:bg-cyan-100 text-cyan-700 hover:text-cyan-800 text-xs font-bold transition-colors whitespace-nowrap">
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg hover:bg-cyan-100 text-cyan-700 hover:text-cyan-800 text-xs font-bold transition-colors whitespace-nowrap">
                         <FiMonitor size={14} />
                         Thiết bị
                       </button>
@@ -506,7 +909,26 @@ export default function AdminUsersPage() {
           onLoadMore={handleLoadMoreActivity}
         />
       )}
-      {deviceUser && deviceData && <DeviceModal user={deviceUser} devices={deviceData.devices} paid={deviceData.paid} onClose={() => { setDeviceUser(null); setDeviceData(null); }} onRevoke={handleRevokeDevice} onReset={handleResetDevices} />}
+
+      {deviceUser && deviceData && (
+        <DeviceModal
+          user={deviceUser}
+          data={deviceData}
+          onClose={() => { setDeviceUser(null); setDeviceData(null); }}
+          onRevoke={handleRevokeDevice}
+          onReset={handleResetDevices}
+        />
+      )}
+
+      {courseUser && (
+        <CourseAccessModal
+          user={courseUser}
+          data={courseAccessData}
+          loading={courseAccessLoading}
+          onClose={() => { setCourseUser(null); setCourseAccessData(null); }}
+          onRefresh={refreshCourseAccess}
+        />
+      )}
     </AdminLayout>
   );
 }

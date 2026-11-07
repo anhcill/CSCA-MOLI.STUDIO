@@ -65,6 +65,9 @@ export function CourseAccessCard({ course }: { course: CourseDetailDto }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const names = packageNames(course);
+  const firstFreePreviewLesson = !course.access.canLearn
+    ? course.curriculum.flatMap((s) => s.lessons).find((l) => l.isFreePreview)
+    : undefined;
 
   const openFirstLesson = (lastLessonId?: number | null) => {
     const lessonId = lastLessonId ?? course.curriculum[0]?.lessons[0]?.id;
@@ -134,6 +137,15 @@ export function CourseAccessCard({ course }: { course: CourseDetailDto }) {
           {course.access.canLearn || course.access.canEnroll ? <FiPlayCircle className="text-xl" /> : <FiPackage className="text-xl" />}
           {busy ? 'Đang xử lý...' : actionLabel(course)}
         </button>
+        {firstFreePreviewLesson ? (
+          <button
+            type="button"
+            onClick={() => router.push(`/hoc/${course.slug}/bai-hoc/${firstFreePreviewLesson.id}`)}
+            className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm font-black text-emerald-800 transition hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200"
+          >
+            <FiPlayCircle className="text-lg" /> Xem bài học thử miễn phí
+          </button>
+        ) : null}
         {error ? (
           <p role="alert" className="mt-3 rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-600 dark:bg-red-950/40 dark:text-red-300">
             {error}

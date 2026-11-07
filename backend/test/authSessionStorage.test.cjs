@@ -131,3 +131,87 @@ test('a changed login replaces the cached authorization token immediately', asyn
     assert.equal(seen, 'Bearer second-access');
   });
 });
+
+for (const status of [undefined, 429, 500, 503]) {
+  test(`refresh failure ${status || 'network timeout'} preserves login and allows retry`, async () => {
+    await withBrowser(async ({ auth, http }) => {
+      auth.useAuthStore.getState().setRememberMe(true);
+      auth.useAuthStore.getState().login({ id: 7 }, 'old-access', 'old-refresh');
+      rawAxios.defaults.adapter = async config => {
+        throw new rawAxios.AxiosError('Unavailable', 'ERR_NETWORK', config, null,
+          status ? { status, data: {}, headers: {}, config } : undefined);
+      };
+      http.default.defaults.adapter = async config => {
+        if (config.headers.Authorization === 'Bearer old-access') {
+          throw new rawAxios.AxiosError('Expired', 'ERR_BAD_REQUEST', config, null,
+            { status: 401, data: { code: 'TOKEN_EXPIRED' }, headers: {}, config });
+        }
+        return { data: {}, status: 200, headers: {}, config };
+      };
+      await assert.rejects(http.default.get('/profile'));
+      assert.equal(sessionStorage.getItem('token'), 'old-access');
+      assert.equal(JSON.parse(localStorage.getItem('auth-storage')).state.refreshToken, 'old-refresh');
+      rawAxios.defaults.adapter = async config => ({ data: { data: { token: 'new-access', refreshToken: 'new-refresh' } },
+        status: 200, headers: {}, config });
+      await http.default.get('/profile');
+      assert.equal(sessionStorage.getItem('token'), 'new-access');
+    });
+  });
+}
+
+test('definitively rejected refresh clears credentials', async () => {
+  await withBrowser(async ({ auth, http }) => {
+    auth.useAuthStore.getState().login({ id: 7 }, 'old-access', 'old-refresh');
+    rawAxios.defaults.adapter = async config => {
+      throw new rawAxios.AxiosError('Revoked', 'ERR_BAD_REQUEST', config, null,
+        { status: 401, data: { code: 'SESSION_REVOKED' }, headers: {}, config });
+    };
+    http.default.defaults.adapter = async config => {
+      throw new rawAxios.AxiosError('Expired', 'ERR_BAD_REQUEST', config, null,
+        { status: 401, data: { code: 'TOKEN_EXPIRED' }, headers: {}, config });
+    };
+    await assert.rejects(http.default.get('/profile'));
+    assert.equal(sessionStorage.getItem('token'), null);
+    assert.equal(sessionStorage.getItem('refreshToken'), null);
+  });
+});
+
+test('an old tab adopts the newer remembered login before processing revocation', async () => {
+  await withBrowser(async ({ auth, http }) => {
+    auth.useAuthStore.getState().setRememberMe(true);
+    auth.useAuthStore.getState().login({ id: 7 }, 'old-access', 'old-refresh');
+    http.default.defaults.adapter = async config => {
+      if (config.headers.Authorization === 'Bearer old-access') {
+        const persisted = JSON.parse(localStorage.getItem('auth-storage'));
+        persisted.state.token = 'other-tab-access';
+        persisted.state.refreshToken = 'other-tab-refresh';
+        localStorage.setItem('auth-storage', JSON.stringify(persisted));
+        throw new rawAxios.AxiosError('Revoked', 'ERR_BAD_REQUEST', config, null,
+          { status: 401, data: { code: 'SESSION_REVOKED' }, headers: {}, config });
+      }
+      assert.equal(config.headers.Authorization, 'Bearer other-tab-access');
+      return { data: {}, status: 200, headers: {}, config };
+    };
+    await http.default.get('/profile');
+    assert.equal(auth.useAuthStore.getState().token, 'other-tab-access');
+    assert.equal(sessionStorage.getItem('refreshToken'), 'other-tab-refresh');
+  });
+});
+
+test('a delayed refresh response cannot overwrite a newer login', async () => {
+  await withBrowser(async ({ auth, http }) => {
+    auth.useAuthStore.getState().login({ id: 7 }, 'old-access', 'old-refresh');
+    rawAxios.defaults.adapter = async config => {
+      auth.useAuthStore.getState().login({ id: 8 }, 'new-login', 'new-login-refresh');
+      return { data: { data: { token: 'stale-refresh-access', refreshToken: 'stale-refresh' } },
+        status: 200, headers: {}, config };
+    };
+    http.default.defaults.adapter = async config => {
+      throw new rawAxios.AxiosError('Expired', 'ERR_BAD_REQUEST', config, null,
+        { status: 401, data: { code: 'TOKEN_EXPIRED' }, headers: {}, config });
+    };
+    await assert.rejects(http.default.get('/profile'));
+    assert.equal(auth.useAuthStore.getState().user.id, 8);
+    assert.equal(sessionStorage.getItem('token'), 'new-login');
+  });
+});
