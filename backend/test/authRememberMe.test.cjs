@@ -72,66 +72,70 @@ function persistedAuth() {
   return JSON.parse(raw).state;
 }
 
-test('unchecked Remember me keeps the active login in session storage only', async () => {
+test('login persists in the browser by default', async () => {
   await withBrowser(async ({ useAuthStore }) => {
-    useAuthStore.getState().setRememberMe(false);
-    useAuthStore.getState().login({ id: 7 }, 'session-access', 'session-refresh');
+    useAuthStore.getState().login({ id: 7 }, 'browser-access', 'browser-refresh');
 
-    assert.equal(sessionStorage.getItem('token'), 'session-access');
-    assert.equal(sessionStorage.getItem('refreshToken'), 'session-refresh');
+    assert.equal(sessionStorage.getItem('token'), 'browser-access');
+    assert.equal(sessionStorage.getItem('refreshToken'), 'browser-refresh');
     assert.equal(JSON.parse(sessionStorage.getItem('user')).id, 7);
-    assert.equal(localStorage.getItem('previous-session-token'), null);
-    assert.equal(persistedAuth().token, null);
-    assert.equal(persistedAuth().refreshToken, null);
-    assert.equal(persistedAuth().isAuthenticated, false);
+    assert.equal(persistedAuth().token, 'browser-access');
+    assert.equal(persistedAuth().refreshToken, 'browser-refresh');
+    assert.equal(persistedAuth().isAuthenticated, true);
+    assert.equal(persistedAuth().rememberMe, true);
   });
 });
 
-test('unchecked Remember me survives reloads within the same tab', async () => {
+test('closing a tab and opening a new one restores the browser login', async () => {
   await withBrowser(async ({ useAuthStore }) => {
-    useAuthStore.getState().setRememberMe(false);
-    useAuthStore.getState().login({ id: 7 }, 'session-access', 'session-refresh');
+    useAuthStore.getState().login({ id: 7 }, 'browser-access', 'browser-refresh');
+    const persistedBeforeClose = localStorage.getItem('auth-storage');
+    sessionStorage.removeItem('token');
+    sessionStorage.removeItem('refreshToken');
+    sessionStorage.removeItem('user');
     useAuthStore.setState({
       user: null,
       token: null,
       refreshToken: null,
       isAuthenticated: false,
     });
+    localStorage.setItem('auth-storage', persistedBeforeClose);
 
     await useAuthStore.persist.rehydrate();
 
     assert.equal(useAuthStore.getState().user.id, 7);
-    assert.equal(useAuthStore.getState().token, 'session-access');
-    assert.equal(useAuthStore.getState().refreshToken, 'session-refresh');
+    assert.equal(useAuthStore.getState().token, 'browser-access');
+    assert.equal(useAuthStore.getState().refreshToken, 'browser-refresh');
     assert.equal(useAuthStore.getState().isAuthenticated, true);
-    assert.equal(useAuthStore.getState().rememberMe, false);
+    assert.equal(sessionStorage.getItem('token'), 'browser-access');
+    assert.equal(sessionStorage.getItem('refreshToken'), 'browser-refresh');
   });
 });
 
-test('checked Remember me persists the login for a later browser session', async () => {
+test('legacy callers cannot disable browser persistence', async () => {
   await withBrowser(async ({ useAuthStore }) => {
-    useAuthStore.getState().setRememberMe(true);
-    useAuthStore.getState().login({ id: 7 }, 'remembered-access', 'remembered-refresh');
-
-    const persisted = persistedAuth();
-    assert.equal(persisted.token, 'remembered-access');
-    assert.equal(persisted.refreshToken, 'remembered-refresh');
-    assert.equal(persisted.isAuthenticated, true);
-    assert.equal(persisted.rememberMe, true);
-  });
-});
-
-test('turning Remember me off removes an already persisted login', async () => {
-  await withBrowser(async ({ useAuthStore }) => {
-    useAuthStore.getState().setRememberMe(true);
-    useAuthStore.getState().login({ id: 7 }, 'remembered-access', 'remembered-refresh');
+    useAuthStore.getState().login({ id: 7 }, 'browser-access', 'browser-refresh');
     useAuthStore.getState().setRememberMe(false);
 
     const persisted = persistedAuth();
-    assert.equal(persisted.token, null);
-    assert.equal(persisted.refreshToken, null);
-    assert.equal(persisted.isAuthenticated, false);
-    assert.equal(sessionStorage.getItem('token'), 'remembered-access');
-    assert.equal(localStorage.getItem('previous-session-token'), null);
+    assert.equal(persisted.token, 'browser-access');
+    assert.equal(persisted.refreshToken, 'browser-refresh');
+    assert.equal(persisted.isAuthenticated, true);
+    assert.equal(persisted.rememberMe, true);
+    assert.equal(useAuthStore.getState().rememberMe, true);
+  });
+});
+
+test('explicit logout clears both tab and browser login storage', async () => {
+  await withBrowser(async ({ useAuthStore }) => {
+    useAuthStore.getState().login({ id: 7 }, 'browser-access', 'browser-refresh');
+    useAuthStore.getState().logout();
+
+    assert.equal(persistedAuth().token, null);
+    assert.equal(persistedAuth().refreshToken, null);
+    assert.equal(persistedAuth().isAuthenticated, false);
+    assert.equal(sessionStorage.getItem('token'), null);
+    assert.equal(sessionStorage.getItem('refreshToken'), null);
+    assert.equal(sessionStorage.getItem('user'), null);
   });
 });

@@ -41,8 +41,6 @@ export default function LoginForm() {
     logout: clearAuth,
     setLoading,
     isAuthenticated,
-    rememberMe,
-    setRememberMe,
   } = useAuthStore();
   const { t, format } = useLanguage();
 
@@ -1258,16 +1256,7 @@ export default function LoginForm() {
           />
         )}
 
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <label className="flex items-center">
-            <input
-              type="checkbox"
-              checked={rememberMe}
-              onChange={(event) => setRememberMe(event.target.checked)}
-              className="h-4 w-4 rounded border-[#d8bca0] text-[#c1121f] focus:ring-[#c1121f]"
-            />
-            <span className="ml-2 text-sm font-bold text-[#40352e]">{t('auth.remember')}</span>
-          </label>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
           <Link href="/forgot-password" className="text-sm font-semibold text-[#bd111c] hover:text-[#8d0d14]">{t('auth.forgot')}</Link>
         </div>
 

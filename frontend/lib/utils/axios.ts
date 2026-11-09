@@ -39,7 +39,7 @@ async function recoverNewerToken(config: AuthRequestConfig) {
   const current = useAuthStore.getState();
   try {
     const persisted = JSON.parse(localStorage.getItem('auth-storage') || 'null')?.state;
-    if (current.rememberMe && persisted?.rememberMe && String(persisted.user?.id) === config._authAccountId
+    if (String(persisted?.user?.id) === config._authAccountId
       && persisted.token && persisted.token !== current.token) {
       await useAuthStore.persist.rehydrate();
     }

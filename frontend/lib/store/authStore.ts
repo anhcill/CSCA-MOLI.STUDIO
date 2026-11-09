@@ -2,7 +2,6 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { User } from '../api/auth';
 import axios, { clearStoredAuth, clearTokenCache } from '../utils/axios';
-import { forgetPreviousSession } from '../utils/previousSession';
 
 // Decode JWT payload (base64url)
 function decodeJwtPayload(token: string): Record<string, unknown> | null {
@@ -93,7 +92,7 @@ function readSessionAuth(): Partial<PersistedAuthState> | null {
       token,
       refreshToken,
       isAuthenticated: true,
-      rememberMe: false,
+      rememberMe: true,
     };
   } catch {
     sessionStorage.removeItem('user');
@@ -109,7 +108,7 @@ export const useAuthStore = create<AuthState>()(
       refreshToken: null,
       isAuthenticated: false,
       isLoading: false,
-      rememberMe: false,
+      rememberMe: true,
 
       setUser: (user) => {
         writeSessionUser(user);
@@ -160,7 +159,7 @@ export const useAuthStore = create<AuthState>()(
           refreshToken: null,
           isAuthenticated: false,
           isLoading: false,
-          rememberMe: false,
+          rememberMe: true,
         });
       },
 
@@ -173,9 +172,10 @@ export const useAuthStore = create<AuthState>()(
 
       setLoading: (loading) => set({ isLoading: loading }),
 
-      setRememberMe: (rememberMe) => {
-        if (!rememberMe) forgetPreviousSession();
-        set({ rememberMe });
+      setRememberMe: () => {
+        // Kept for compatibility with older callers. Browser sessions now
+        // survive closing a tab; explicit logout still clears all auth data.
+        set({ rememberMe: true });
       },
 
       syncVipFromToken: () => {
@@ -188,23 +188,15 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'auth-storage',
-      version: 2,
+      version: 3,
       skipHydration: false,
-      partialize: (state) => state.rememberMe
-        ? {
-            user: state.user,
-            token: state.token,
-            refreshToken: state.refreshToken,
-            isAuthenticated: state.isAuthenticated,
-            rememberMe: true,
-          }
-        : {
-            user: null,
-            token: null,
-            refreshToken: null,
-            isAuthenticated: false,
-            rememberMe: false,
-          },
+      partialize: (state) => ({
+        user: state.user,
+        token: state.token,
+        refreshToken: state.refreshToken,
+        isAuthenticated: state.isAuthenticated,
+        rememberMe: true,
+      }),
       migrate: (persistedState) => {
         const legacy = (persistedState || {}) as Partial<PersistedAuthState>;
         return {
@@ -212,27 +204,32 @@ export const useAuthStore = create<AuthState>()(
           token: legacy.token || null,
           refreshToken: legacy.refreshToken || null,
           isAuthenticated: legacy.isAuthenticated === true,
-          // Existing installs already persisted sessions unconditionally.
-          // Preserve those sessions once, then honor the checkbox going forward.
-          rememberMe: legacy.rememberMe ?? Boolean(legacy.token && legacy.refreshToken),
+          rememberMe: true,
         };
       },
       merge: (persistedState, currentState) => {
         const persisted = (persistedState || {}) as Partial<PersistedAuthState>;
-        if (persisted.rememberMe) return { ...currentState, ...persisted };
         const sessionAuth = readSessionAuth();
-        return sessionAuth
-          ? { ...currentState, ...sessionAuth }
-          : { ...currentState, ...persisted };
+        const persistedHasSession = Boolean(persisted.token && persisted.refreshToken && persisted.user);
+        return persistedHasSession
+          ? { ...currentState, ...persisted, rememberMe: true }
+          : sessionAuth
+            ? { ...currentState, ...sessionAuth, rememberMe: true }
+            : { ...currentState, ...persisted, rememberMe: true };
       },
       onRehydrateStorage: () => {
         return (state) => {
           // Sync token to sessionStorage after hydration so axios interceptor picks it up
-          if (state?.rememberMe && state.token && state.refreshToken && typeof window !== 'undefined') {
+          if (state?.token && state.refreshToken && typeof window !== 'undefined') {
             clearTokenCache();
             sessionStorage.setItem('token', state.token);
             sessionStorage.setItem('refreshToken', state.refreshToken);
             writeSessionUser(state.user);
+          }
+          // Persist an already-open legacy tab so its next newly opened tab
+          // can restore the same login without another credential challenge.
+          if (state && typeof window !== 'undefined') {
+            queueMicrotask(() => useAuthStore.setState({ rememberMe: true }));
           }
         };
       },
