@@ -215,3 +215,52 @@ test('a delayed refresh response cannot overwrite a newer login', async () => {
     assert.equal(sessionStorage.getItem('token'), 'new-login');
   });
 });
+
+for (const code of ['TOKEN_EXPIRED', 'SESSION_REVOKED', 'TOKEN_REVOKED']) {
+  test(`${code}: a delayed account A request is never replayed under account B`, async () => {
+    await withBrowser(async ({ auth, http }) => {
+      auth.useAuthStore.getState().login({ id: 7 }, 'account-a-access', 'account-a-refresh');
+      let requests = 0;
+      http.default.defaults.adapter = async config => {
+        requests++;
+        assert.equal(config.headers.Authorization, 'Bearer account-a-access');
+        auth.useAuthStore.getState().login({ id: 8 }, 'account-b-access', 'account-b-refresh');
+        throw new rawAxios.AxiosError('Delayed failure', 'ERR_BAD_REQUEST', config, null,
+          { status: 401, data: { code }, headers: {}, config });
+      };
+      rawAxios.defaults.adapter = async () => assert.fail('must not refresh account B for account A');
+      await assert.rejects(http.default.post('/profile', { full_name: 'Account A edit' }));
+      assert.equal(requests, 1);
+      assert.equal(auth.useAuthStore.getState().user.id, 8);
+      assert.equal(sessionStorage.getItem('token'), 'account-b-access');
+    });
+  });
+}
+
+test('a rejected refresh from account A never clears the newer account B login', async () => {
+  await withBrowser(async ({ auth, http }) => {
+    auth.useAuthStore.getState().login({ id: 7 }, 'account-a-access', 'account-a-refresh');
+    http.default.defaults.adapter = async config => {
+      throw new rawAxios.AxiosError('Expired', 'ERR_BAD_REQUEST', config, null,
+        { status: 401, data: { code: 'TOKEN_EXPIRED' }, headers: {}, config });
+    };
+    rawAxios.defaults.adapter = async config => {
+      auth.useAuthStore.getState().login({ id: 8 }, 'account-b-access', 'account-b-refresh');
+      throw new rawAxios.AxiosError('Revoked', 'ERR_BAD_REQUEST', config, null,
+        { status: 401, data: {}, headers: {}, config });
+    };
+    await assert.rejects(http.default.get('/profile'));
+    assert.equal(sessionStorage.getItem('token'), 'account-b-access');
+    assert.equal(sessionStorage.getItem('refreshToken'), 'account-b-refresh');
+  });
+});
+
+test('a changed account between retry scheduling and dispatch cancels the request', async () => {
+  await withBrowser(async ({ auth, http }) => {
+    auth.useAuthStore.getState().login({ id: 8 }, 'account-b-access', 'account-b-refresh');
+    http.default.defaults.adapter = async () => assert.fail('must not dispatch a request owned by account A');
+    await assert.rejects(http.default.post('/profile', { full_name: 'Account A edit' },
+      { _authAccountId: '7' }), error => rawAxios.isCancel(error));
+    assert.equal(sessionStorage.getItem('token'), 'account-b-access');
+  });
+});

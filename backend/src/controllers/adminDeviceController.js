@@ -53,6 +53,8 @@ async function revokeDevice(req, res) {
   const client = await db.pool.connect();
   try {
     await client.query("BEGIN");
+    await client.query('SELECT pg_advisory_xact_lock($1)', [userId]);
+    await DeviceSessionService.hydrateRememberedDevices(userId, client);
     const result = await client.query(
       `UPDATE user_remembered_devices
        SET revoked_at = NOW(), revoked_by = $3
@@ -95,6 +97,7 @@ async function resetDevicesAndUnlock(req, res) {
   const client = await db.pool.connect();
   try {
     await client.query("BEGIN");
+    await client.query('SELECT pg_advisory_xact_lock($1)', [userId]);
     const sessions = await client.query(
       `DELETE FROM user_sessions WHERE user_id = $1 RETURNING jti, user_id, expires_at`, [userId],
     );

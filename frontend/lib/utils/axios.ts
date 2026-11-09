@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { type InternalAxiosRequestConfig } from 'axios';
 import { forgetPreviousSession, getPreviousSessionToken, rememberPreviousSession } from './previousSession';
 import { getDeviceIdentity } from './deviceIdentity';
 
@@ -12,26 +12,43 @@ let lastOfflineAuthToastAt = 0;
 const AUTH_REVOKED_CODES = new Set(['SESSION_REVOKED', 'TOKEN_REVOKED', 'ADMIN_MFA_REQUIRED', 'INVALID_TOKEN']);
 let refreshInFlight: Promise<{ token: string; refreshToken: string }> | null = null;
 
+type AuthRequestConfig = InternalAxiosRequestConfig & { _authAccountId?: string | null };
+
+function getStoredAccountId(): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const id = JSON.parse(sessionStorage.getItem('user') || 'null')?.id;
+    return id == null ? null : String(id);
+  } catch {
+    return null;
+  }
+}
+
+function belongsToCurrentAccount(config: AuthRequestConfig | undefined) {
+  return Boolean(config?._authAccountId && config._authAccountId === getStoredAccountId());
+}
+
 export function clearTokenCache() {
   cachedToken = null;
   tokenLastChecked = 0;
 }
 
-async function recoverNewerToken(failedAuthorization: string | undefined) {
-  if (typeof window === 'undefined') return null;
+async function recoverNewerToken(config: AuthRequestConfig) {
+  if (!belongsToCurrentAccount(config)) return null;
   const { useAuthStore } = await import('../store/authStore');
   const current = useAuthStore.getState();
   try {
     const persisted = JSON.parse(localStorage.getItem('auth-storage') || 'null')?.state;
-    if (current.rememberMe && persisted?.rememberMe && persisted.user?.id === current.user?.id
+    if (current.rememberMe && persisted?.rememberMe && String(persisted.user?.id) === config._authAccountId
       && persisted.token && persisted.token !== current.token) {
       await useAuthStore.persist.rehydrate();
     }
   } catch {
     // A storage failure must not invalidate the active tab's session.
   }
+  if (!belongsToCurrentAccount(config)) return null;
   const token = sessionStorage.getItem('token');
-  return token && `Bearer ${token}` !== failedAuthorization ? token : null;
+  return token && `Bearer ${token}` !== config.headers?.Authorization ? token : null;
 }
 
 export function clearStoredAuth(preservePreviousSession = false) {
@@ -89,6 +106,11 @@ const axiosInstance = axios.create({
 // Request interceptor - Add token to requests (OPTIMIZED)
 axiosInstance.interceptors.request.use(
   (config) => {
+    const authConfig = config as AuthRequestConfig;
+    if ('_authAccountId' in authConfig && authConfig._authAccountId !== getStoredAccountId()) {
+      throw new axios.CanceledError('Account changed before retry');
+    }
+    authConfig._authAccountId = getStoredAccountId();
     const deviceId = getDeviceIdentity();
     if (deviceId) config.headers['X-Device-Id'] = deviceId;
     if (config.url?.startsWith('/auth/')) {
@@ -123,10 +145,17 @@ axiosInstance.interceptors.response.use(
     const originalRequest = error.config;
     const responseCode = error.response?.data?.code;
 
+    // A delayed response from a logged-out/switched account must neither
+    // replay its action nor clear the new account's credentials.
+    if (error.response?.status === 401 && !belongsToCurrentAccount(originalRequest)) {
+      return Promise.reject(error);
+    }
+
     // Another request or tab may already have replaced this request's token.
     if (error.response?.status === 401 && originalRequest && !originalRequest._authResynced
       && originalRequest.headers?.Authorization) {
-      const newerToken = await recoverNewerToken(originalRequest.headers.Authorization);
+      const newerToken = await recoverNewerToken(originalRequest);
+      if (!belongsToCurrentAccount(originalRequest)) return Promise.reject(error);
       if (newerToken) {
         originalRequest._authResynced = true;
         clearTokenCache();
@@ -163,7 +192,7 @@ axiosInstance.interceptors.response.use(
               // Update Zustand and its persisted state as well as sessionStorage,
               // so reopening the app cannot restore the old refresh token.
               const { useAuthStore } = await import('../store/authStore');
-              if (sessionStorage.getItem('refreshToken') !== refreshToken) {
+              if (!belongsToCurrentAccount(originalRequest) || sessionStorage.getItem('refreshToken') !== refreshToken) {
                 throw new Error('Session changed while refreshing');
               }
               useAuthStore.getState().setTokens(tokens.token, tokens.refreshToken);
@@ -173,6 +202,7 @@ axiosInstance.interceptors.response.use(
             })().finally(() => { refreshInFlight = null; });
           }
           const { token } = await refreshInFlight;
+          if (!belongsToCurrentAccount(originalRequest)) return Promise.reject(error);
 
           originalRequest.headers.Authorization = `Bearer ${token}`;
           return axiosInstance(originalRequest);
@@ -187,7 +217,9 @@ axiosInstance.interceptors.response.use(
         // Only a definitive rejection invalidates credentials. Timeouts,
         // throttling and server failures can be retried on the next request.
         if ([401, 403, 404].includes(refreshError.response?.status)
-          && !await recoverNewerToken(originalRequest.headers?.Authorization)) {
+          && belongsToCurrentAccount(originalRequest)
+          && !await recoverNewerToken(originalRequest)
+          && belongsToCurrentAccount(originalRequest)) {
           redirectToLogin();
         }
         return Promise.reject(refreshError);

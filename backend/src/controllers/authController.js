@@ -557,9 +557,9 @@ const completeDeviceLoginRequest = async (req, request) => {
     throw err;
   }
 
-  const jti = crypto.randomBytes(16).toString("hex");
+  let jti = crypto.randomBytes(16).toString("hex");
   const expiresAt = new Date(Date.now() + (parseInt(process.env.JWT_REFRESH_EXPIRES_MS || "604800000", 10)));
-  await DeviceSessionService.registerSession({
+  const session = await DeviceSessionService.registerSession({
     userId: user.id,
     jti,
     deviceInfo: request.new_device_info || req.get("User-Agent")?.substring(0, 200) || "Unknown",
@@ -569,6 +569,7 @@ const completeDeviceLoginRequest = async (req, request) => {
     expiresAt,
     deviceId: getClientDeviceId(req),
   });
+  jti = session.jti;
 
   await DeviceSessionService.markLoginRequestCompleted(request.challenge_token);
 
@@ -590,10 +591,10 @@ const createAdminMfaRequiredResponse = async (user) => {
 };
 
 const completeLoginForUser = async (req, user, deviceInfo = "Unknown", activityAction = "login", avatarFallback = null) => {
-  const jti = crypto.randomBytes(16).toString("hex");
+  let jti = crypto.randomBytes(16).toString("hex");
   const expiresAt = new Date(Date.now() + (parseInt(process.env.JWT_REFRESH_EXPIRES_MS || "604800000", 10)));
   try {
-    await DeviceSessionService.registerSession({
+    const session = await DeviceSessionService.registerSession({
       userId: user.id,
       jti,
       deviceInfo: req.get("User-Agent")?.substring(0, 200) || deviceInfo,
@@ -603,8 +604,9 @@ const completeLoginForUser = async (req, user, deviceInfo = "Unknown", activityA
       previousSessionToken: req.get("X-Previous-Session"),
       deviceId: getClientDeviceId(req),
     });
+    jti = session.jti;
   } catch (error) {
-    if (isAdminUser(user)) {
+    if (isAdminUser(user) && isDeviceLimitError(error)) {
       console.warn(`[AUTH] Admin user ${user.id} bypassed DeviceLimitError: ${error.message}`);
     } else {
       if (!isDeviceLimitError(error)) throw error;
@@ -1806,9 +1808,9 @@ const verifyOtpController = async (req, res) => {
     }
 
     // Xác thực thành công — tạo token
-    const jti = crypto.randomBytes(16).toString("hex");
+    let jti = crypto.randomBytes(16).toString("hex");
     const expiresAt = new Date(Date.now() + (parseInt(process.env.JWT_REFRESH_EXPIRES_MS || '604800000')));
-    await DeviceSessionService.registerSession({
+    const session = await DeviceSessionService.registerSession({
       userId: user.id,
       jti,
       deviceInfo: req.get('User-Agent')?.substring(0, 200) || 'Unknown',
@@ -1818,6 +1820,7 @@ const verifyOtpController = async (req, res) => {
       previousSessionToken: req.get('X-Previous-Session'),
       deviceId: getClientDeviceId(req),
     });
+    jti = session.jti;
 
     const token = generateToken(buildTokenPayload({ ...user, jti, subscription_tier: user.subscription_tier || 'basic' }));
     const refreshToken = generateRefreshToken(buildRefreshPayloadWithMfa({ ...user, jti }, jti));
@@ -2340,10 +2343,10 @@ const devLogin = async (req, res) => {
       return res.status(404).json({ success: false, message: "Dev user not found" });
     }
 
-    const jti = crypto.randomBytes(16).toString("hex");
+    let jti = crypto.randomBytes(16).toString("hex");
     const expiresAt = new Date(Date.now() + (parseInt(process.env.JWT_REFRESH_EXPIRES_MS || "604800000", 10)));
     try {
-      await DeviceSessionService.registerSession({
+      const session = await DeviceSessionService.registerSession({
         userId: user.id,
         jti,
         deviceInfo: "Local Dev Environment",
@@ -2353,6 +2356,7 @@ const devLogin = async (req, res) => {
         expiresAt,
         deviceId: getClientDeviceId(req),
       });
+      jti = session.jti;
     } catch (e) {
       console.warn("[devLogin] registerSession ignored:", e.message);
     }

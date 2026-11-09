@@ -180,8 +180,23 @@ class DeviceSessionService {
   }
 
   static async hydrateRememberedDevices(userId, client = db) {
+    if (client === db) {
+      const connection = await db.pool.connect();
+      try {
+        await connection.query('BEGIN');
+        await connection.query('SELECT pg_advisory_xact_lock($1)', [Number(userId)]);
+        await this.hydrateRememberedDevices(userId, connection);
+        await connection.query('COMMIT');
+      } catch (error) {
+        await connection.query('ROLLBACK').catch(() => {});
+        throw error;
+      } finally {
+        connection.release();
+      }
+      return;
+    }
     const { rows } = await client.query(
-      `SELECT device_key, device_info, device_type, ip_address, user_agent
+      `SELECT jti, device_key, device_info, device_type, ip_address, user_agent
        FROM user_sessions
        WHERE user_id = $1 AND expires_at > NOW()`, [userId],
     );
@@ -189,6 +204,13 @@ class DeviceSessionService {
       const deviceKey = session.device_key || this.getDeviceKey({
         userAgent: session.user_agent, deviceInfo: session.device_info, ipAddress: session.ip_address,
       });
+      if (!session.device_key) {
+        await client.query(
+          `UPDATE user_sessions SET device_key = $3
+           WHERE user_id = $1 AND jti = $2 AND device_key IS NULL`,
+          [userId, session.jti, deviceKey],
+        );
+      }
       await client.query(
         `INSERT INTO user_remembered_devices
           (user_id, device_key, device_type, device_info, user_agent, ip_address)
@@ -210,16 +232,6 @@ class DeviceSessionService {
     const { rows } = await db.query(
       `UPDATE users
        SET device_limit_attempts = COALESCE(device_limit_attempts, 0) + 1,
-           device_limit_locked_at = CASE
-             WHEN COALESCE(device_limit_attempts, 0) + 1 >= 4 THEN COALESCE(device_limit_locked_at, NOW())
-             ELSE device_limit_locked_at
-           END,
-           is_active = CASE WHEN COALESCE(device_limit_attempts, 0) + 1 >= 4 THEN FALSE ELSE is_active END,
-           is_banned = CASE WHEN COALESCE(device_limit_attempts, 0) + 1 >= 4 THEN TRUE ELSE COALESCE(is_banned, FALSE) END,
-           banned_at = CASE WHEN COALESCE(device_limit_attempts, 0) + 1 >= 4 THEN COALESCE(banned_at, NOW()) ELSE banned_at END,
-           ban_reason = CASE WHEN COALESCE(device_limit_attempts, 0) + 1 >= 4
-             THEN 'Vượt quá giới hạn 2 thiết bị trả phí (4 lần thử thiết bị mới)'
-             ELSE ban_reason END,
            updated_at = NOW()
        WHERE id = $1
        RETURNING device_limit_attempts, device_limit_locked_at, is_active, is_banned`,
@@ -412,7 +424,12 @@ class DeviceSessionService {
           await client.query(
             `INSERT INTO user_remembered_devices
               (user_id, device_key, device_type, device_info, user_agent, ip_address)
-             VALUES ($1, $2, $3, $4, $5, $6)`,
+             VALUES ($1, $2, $3, $4, $5, $6)
+             ON CONFLICT (user_id, device_key) DO UPDATE
+             SET revoked_at = NULL, revoked_by = NULL,
+                 device_type = EXCLUDED.device_type, device_info = EXCLUDED.device_info,
+                 user_agent = EXCLUDED.user_agent, ip_address = EXCLUDED.ip_address,
+                 last_seen_at = NOW(), last_login_at = NOW()`,
             [userId, deviceKey, resolvedDeviceType, deviceInfo, userAgent, ipAddress],
           );
         } else {
@@ -425,18 +442,39 @@ class DeviceSessionService {
             [userId, deviceKey, resolvedDeviceType, deviceInfo, userAgent, ipAddress],
           );
         }
-        await client.query(
-          `DELETE FROM user_sessions
+        const matching = await client.query(
+          `SELECT jti, user_id, expires_at FROM user_sessions
            WHERE user_id = $1 AND device_key = $2 AND expires_at > NOW()
-           RETURNING jti, user_id, expires_at`, [userId, deviceKey],
+             AND NOT EXISTS (SELECT 1 FROM token_blacklist WHERE token_jti = user_sessions.jti)
+           ORDER BY last_active DESC FOR UPDATE`, [userId, deviceKey],
         );
+        // A browser's open tabs share one server session, including when the
+        // user does not persist credentials with Remember me.
+        jti = matching.rows[0]?.jti || jti;
+        for (const session of matching.rows) {
+          if (session.jti === jti) {
+            expiresAt = new Date(Math.max(+new Date(expiresAt), +new Date(session.expires_at)));
+            continue;
+          }
+          await client.query('DELETE FROM user_sessions WHERE user_id = $1 AND jti = $2', [userId, session.jti]);
+          await client.query(
+            `INSERT INTO token_blacklist (token_jti, user_id, expires_at)
+             VALUES ($1, $2, $3) ON CONFLICT (token_jti) DO NOTHING`,
+            [session.jti, session.user_id, session.expires_at],
+          );
+        }
         await client.query(
           `INSERT INTO user_sessions (user_id, jti, device_key, device_info, device_type, ip_address, user_agent, expires_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+           ON CONFLICT (jti) DO UPDATE
+           SET device_key = EXCLUDED.device_key, device_info = EXCLUDED.device_info,
+               device_type = EXCLUDED.device_type, ip_address = EXCLUDED.ip_address,
+               user_agent = EXCLUDED.user_agent, expires_at = EXCLUDED.expires_at,
+               last_active = NOW()`,
           [userId, jti, deviceKey, deviceInfo, resolvedDeviceType, ipAddress, userAgent, expiresAt],
         );
         await client.query("COMMIT");
-        return { deviceType: resolvedDeviceType, paidPolicy: true, deviceKey };
+        return { jti, deviceType: resolvedDeviceType, paidPolicy: true, deviceKey };
       } catch (error) {
         await client.query("ROLLBACK").catch(() => {});
         throw error;
@@ -464,7 +502,7 @@ class DeviceSessionService {
           [ipAddress, resolvedDeviceType, jti],
         );
         await client.query("COMMIT");
-        return { deviceType: resolvedDeviceType };
+        return { jti, deviceType: resolvedDeviceType };
       }
 
       const { params: matchParams, clause: matchClause } = this.getSessionMatch({
@@ -472,15 +510,22 @@ class DeviceSessionService {
       });
       if (matchClause) {
         const matching = await client.query(
-          `DELETE FROM user_sessions
+          `SELECT jti, user_id, expires_at FROM user_sessions
            WHERE user_id = $1
              AND COALESCE(device_type, 'desktop') = $2
              AND expires_at > NOW()
              AND ${matchClause}
-           RETURNING jti, user_id, expires_at`,
+             AND NOT EXISTS (SELECT 1 FROM token_blacklist WHERE token_jti = user_sessions.jti)
+           ORDER BY last_active DESC FOR UPDATE`,
           matchParams,
         );
+        jti = matching.rows[0]?.jti || jti;
         for (const session of matching.rows) {
+          if (session.jti === jti) {
+            expiresAt = new Date(Math.max(+new Date(expiresAt), +new Date(session.expires_at)));
+            continue;
+          }
+          await client.query('DELETE FROM user_sessions WHERE user_id = $1 AND jti = $2', [userId, session.jti]);
           await client.query(
             `INSERT INTO token_blacklist (token_jti, user_id, expires_at)
              VALUES ($1, $2, COALESCE($3, NOW() + INTERVAL '1 day'))
@@ -496,8 +541,9 @@ class DeviceSessionService {
          WHERE user_id = $1
            AND COALESCE(device_type, 'desktop') = $2
            AND expires_at > NOW()
+           AND jti <> $3
          ORDER BY last_active DESC`,
-        [userId, resolvedDeviceType],
+        [userId, resolvedDeviceType, jti],
       );
       if (active.rows.length >= maxDevices && !isAdmin) {
         throw new DeviceLimitError({
@@ -522,7 +568,7 @@ class DeviceSessionService {
           /^[A-Za-z0-9_-]{16,128}$/.test(String(deviceId || '').trim()) ? deviceKey : null],
       );
       await client.query("COMMIT");
-      return { deviceType: resolvedDeviceType };
+      return { jti, deviceType: resolvedDeviceType };
     } catch (error) {
       await client.query("ROLLBACK").catch(() => {});
       throw error;
