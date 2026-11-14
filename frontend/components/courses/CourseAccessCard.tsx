@@ -14,6 +14,8 @@ import {
 import coursesApi from '@/lib/api/courses';
 import type { CourseDetailDto } from '@/lib/types/courses';
 import { MOLY_ZALO_URL } from '@/lib/constants/moly';
+import { CourseOwnershipBadge } from '@/components/courses/CourseOwnershipBadge';
+import { CourseSsoLaunchButton } from '@/components/courses/CourseSsoLaunchButton';
 
 const levelLabels = {
   basic: 'Cơ bản',
@@ -55,6 +57,12 @@ function accessHeading(course: CourseDetailDto, names: string[]) {
 function actionLabel(course: CourseDetailDto) {
   if (course.access.canLearn) return course.progress ? 'Tiếp tục học' : 'Bắt đầu học';
   if (course.access.canEnroll) return course.accessType === 'free' ? 'Đăng ký miễn phí' : 'Đăng ký học';
+  const ownershipStatus = course.access.ownershipStatus ?? course.ownershipStatus;
+  if (ownershipStatus === 'expired') return 'Mua lại khóa học';
+  if (ownershipStatus === 'verification_required') return 'Cần xác minh tài khoản';
+  if (ownershipStatus === 'not_owned' && course.accessType !== 'free' && course.accessType !== 'contact' && course.accessType !== 'private') {
+    return 'Mua khóa học';
+  }
   if (course.access.reasonCode === 'AUTH_REQUIRED') return 'Đăng nhập để học';
   if (course.accessType === 'contact' || course.accessType === 'private') return 'Liên hệ tư vấn';
   return 'Xem gói mở khóa';
@@ -65,6 +73,10 @@ export function CourseAccessCard({ course }: { course: CourseDetailDto }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const names = packageNames(course);
+  const ownershipStatus = course.access.ownershipStatus ?? course.ownershipStatus ?? null;
+  const ownershipLabel = course.access.ownershipLabel ?? course.ownershipLabel ?? null;
+  const canLaunchCourse = Boolean(course.access.canLaunchCourse ?? course.canLaunchCourse);
+  const ssoTargetPath = course.access.ssoTargetPath ?? course.ssoTargetPath ?? null;
   const firstFreePreviewLesson = !course.access.canLearn
     ? course.curriculum.flatMap((s) => s.lessons).find((l) => l.isFreePreview)
     : undefined;
@@ -108,7 +120,12 @@ export function CourseAccessCard({ course }: { course: CourseDetailDto }) {
   return (
     <aside className="overflow-hidden rounded-[1.75rem] border border-slate-200/80 bg-white shadow-[0_20px_60px_rgba(15,23,42,0.12)] dark:border-slate-800 dark:bg-slate-900 dark:shadow-[0_20px_60px_rgba(0,0,0,0.3)] lg:sticky lg:top-6">
       <div className="bg-gradient-to-br from-indigo-600 to-violet-700 px-6 py-6 text-white">
-        <p className="text-xs font-black uppercase tracking-[0.18em] text-indigo-200">Quyền truy cập khóa học</p>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-indigo-200">Quyền truy cập khóa học</p>
+          {ownershipStatus ? (
+            <CourseOwnershipBadge status={ownershipStatus} label={ownershipLabel} className="bg-white/95" />
+          ) : null}
+        </div>
         <p className="mt-2 text-2xl font-black">{accessHeading(course, names)}</p>
         {course.access.canLearn ? (
           <p className="mt-2 text-sm font-semibold text-indigo-100">Quyền học của bạn đang hoạt động.</p>
@@ -128,15 +145,51 @@ export function CourseAccessCard({ course }: { course: CourseDetailDto }) {
       </div>
 
       <div className="p-6">
-        <button
-          type="button"
-          onClick={handleAction}
-          disabled={busy}
-          className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 py-4 font-black text-white shadow-lg transition hover:-translate-y-0.5 hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-800 dark:hover:bg-indigo-700"
-        >
-          {course.access.canLearn || course.access.canEnroll ? <FiPlayCircle className="text-xl" /> : <FiPackage className="text-xl" />}
-          {busy ? 'Đang xử lý...' : actionLabel(course)}
-        </button>
+        {ownershipStatus === 'pending_sync' ? (
+          <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-800 dark:border-amber-800/70 dark:bg-amber-950/40 dark:text-amber-200">
+            <p>Đang đồng bộ quyền học từ CSCA Course. Hệ thống sẽ cập nhật trong giây lát.</p>
+            <button
+              type="button"
+              onClick={() => router.refresh()}
+              className="mt-2 inline-flex items-center gap-1.5 font-black underline"
+            >
+              Đồng bộ lại quyền
+            </button>
+          </div>
+        ) : null}
+        {ownershipStatus === 'verification_required' ? (
+          <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-800 dark:border-rose-800/70 dark:bg-rose-950/40 dark:text-rose-200">
+            <p>Email tài khoản đang trùng trên hai hệ thống và cần xác minh liên kết an toàn trước khi đồng bộ quyền.</p>
+          </div>
+        ) : null}
+        {ownershipStatus === 'grant_blocked' ? (
+          <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300">
+            <p>Quyền truy cập khóa học hiện đang bị tạm khóa hoặc thu hồi.</p>
+          </div>
+        ) : null}
+        {ownershipStatus === 'expired' ? (
+          <div className="mb-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-300">
+            <p>Quyền truy cập khóa học trước đây của bạn đã hết hạn.</p>
+          </div>
+        ) : null}
+
+        {canLaunchCourse ? (
+          <div className="mb-3">
+            <CourseSsoLaunchButton courseId={course.id} targetPath={ssoTargetPath} label="Vào học" />
+          </div>
+        ) : null}
+
+        {(!canLaunchCourse || course.curriculum.some((section) => section.lessons.length > 0)) ? (
+          <button
+            type="button"
+            onClick={handleAction}
+            disabled={busy || ownershipStatus === 'pending_sync' || ownershipStatus === 'grant_blocked'}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 py-4 font-black text-white shadow-lg transition hover:-translate-y-0.5 hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-800 dark:hover:bg-indigo-700"
+          >
+            {course.access.canLearn || course.access.canEnroll ? <FiPlayCircle className="text-xl" /> : <FiPackage className="text-xl" />}
+            {busy ? 'Đang xử lý...' : actionLabel(course)}
+          </button>
+        ) : null}
         {firstFreePreviewLesson ? (
           <button
             type="button"

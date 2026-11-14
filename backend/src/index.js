@@ -138,7 +138,17 @@ app.use(
 app.use(compression()); // Compress responses
 const jsonBodyLimit = process.env.JSON_BODY_LIMIT || "2mb";
 const urlEncodedBodyLimit = process.env.URLENCODED_BODY_LIMIT || "200kb";
-app.use(express.json({ limit: jsonBodyLimit }));
+app.use(express.json({
+  limit: jsonBodyLimit,
+  verify: (req, _res, buffer) => {
+    req.rawBody = Buffer.from(buffer);
+  },
+}));
+app.use("/sso/callback", (_req, res, next) => {
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader("Cache-Control", "no-store, private");
+  next();
+});
 app.use(express.urlencoded({ extended: true, limit: urlEncodedBodyLimit }));
 app.use(morgan(process.env.NODE_ENV === "production" ? "combined" : "dev"));
 app.use(aiRequestContextMiddleware);
@@ -228,6 +238,9 @@ app.get("/health", async (req, res) => {
 // API ROUTES
 // ====================================
 app.use("/api/auth", require("./routes/auth"));
+const { userRouter: ssoUserRouter, inboundRouter: ssoInboundRouter } = require("./routes/ssoRoutes").createMolySsoRouters();
+app.use("/api/sso", ssoUserRouter);
+app.use("/api/integrations/v1/sso", ssoInboundRouter);
 app.use("/api/integrations/v1", require("./routes/integrationRoutes"));
 app.use("/api/users", require("./routes/users"));
 app.use("/api", require("./routes/exams"));

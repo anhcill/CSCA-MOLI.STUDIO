@@ -1,5 +1,6 @@
 const repository = require("../repositories/courseRepository");
 const videoAccess = require('./videoLearningAccess');
+const courseIntegrationRuntime = require('./courseIntegrationRuntime');
 const { canAccessVipContent } = require("../utils/vipEntitlements");
 const {
   SUBJECT_CODES,
@@ -12,6 +13,34 @@ const {
 const { CourseApiError } = require("../utils/courseResponses");
 
 const ACTIVE_ENROLLMENT_STATUSES = new Set(["active", "completed"]);
+
+function mergeCourseOwnershipView(base, ownershipInfo, localOwned = false) {
+  const status = ownershipInfo && ownershipInfo.status !== "not_owned"
+    ? ownershipInfo.status
+    : (localOwned ? "owned" : "not_owned");
+  const label = ownershipInfo && ownershipInfo.status !== "not_owned"
+    ? ownershipInfo.label
+    : (localOwned ? "Đã sở hữu" : "Mua khóa học");
+  return {
+    ...base,
+    ownershipStatus: status,
+    ownershipLabel: label,
+    owned: Boolean(ownershipInfo?.owned || localOwned),
+    canPurchase: ownershipInfo?.canPurchase ?? !localOwned,
+    blockCode: ownershipInfo?.blockCode || null,
+    canLaunchCourse: Boolean(ownershipInfo?.canLaunchCourse || (localOwned && ownershipInfo?.courseOfferingId)),
+    courseOfferingId: ownershipInfo?.courseOfferingId || null,
+    ssoTargetPath: ownershipInfo?.ssoTargetPath || null,
+  };
+}
+
+async function loadCourseOwnershipMap(userId, courseIds) {
+  try {
+    return await courseIntegrationRuntime.ownership.evaluateCoursesForUser(userId || null, courseIds);
+  } catch {
+    return new Map();
+  }
+}
 
 function positiveInteger(value, name) {
   const parsed = Number(value);
@@ -150,9 +179,10 @@ async function listCatalog(query, user) {
   const page = Math.max(1, Number.parseInt(query.page, 10) || 1);
   const limit = Math.min(50, Math.max(1, Number.parseInt(query.pageSize ?? query.limit, 10) || 12));
   const rows = await repository.listPublished({ userId: user?.id || null, subjectCode, accessType, page, limit });
+  const ownershipByCourseId = await loadCourseOwnershipMap(user?.id || null, rows.map((r) => r.id));
   const total = toFiniteNumber(rows[0]?.total_count);
   return {
-    items: rows.map(mapCatalogItem), page, pageSize: limit,
+    items: rows.map((r) => mergeCourseOwnershipView(mapCatalogItem(r), ownershipByCourseId.get(Number(r.id)), Boolean(r.enrollment_id))), page, pageSize: limit,
     totalItems: total, totalPages: Math.ceil(total / limit),
   };
 }
@@ -171,6 +201,7 @@ async function getCourseLanding(slug, user) {
   ]);
   const videoEntitlement = user ? await videoAccess.find(user.id, row.id) : null;
   const access = accessView(user, row, enrollment, packageEntitlement, videoEntitlement);
+  const ownershipInfo = (await loadCourseOwnershipMap(user?.id || null, [row.id])).get(Number(row.id)) || null;
   const totalLessons = toFiniteNumber(progressRow?.required_lessons);
   const completedLessons = toFiniteNumber(progressRow?.completed_lessons);
   const detailCurriculum = buildCurriculum(sections, lessons).map((section) => {
@@ -208,7 +239,9 @@ async function getCourseLanding(slug, user) {
       canLearn: access.canLearn,
       isEnrolled: access.isEnrolled,
       reasonCode: access.denialCode,
-      ctaLabel: access.canLearn ? "Tiếp tục học" : access.canEnroll ? "Đăng ký học" : "Xem quyền truy cập",
+      ...mergeCourseOwnershipView({
+        ctaLabel: access.canLearn ? "Tiếp tục học" : access.canEnroll ? "Đăng ký học" : "Xem quyền truy cập",
+      }, ownershipInfo, access.canLearn),
     },
     curriculum: detailCurriculum,
   };
@@ -290,4 +323,6 @@ module.exports = {
   hasEntitlement,
   buildCurriculum,
   positiveInteger,
+  mergeCourseOwnershipView,
+  loadCourseOwnershipMap,
 };

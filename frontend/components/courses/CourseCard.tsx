@@ -7,6 +7,8 @@ import {
   FiUsers,
 } from 'react-icons/fi';
 import type { CourseCatalogItemDto, CscaSubjectCode } from '@/lib/types/courses';
+import { CourseOwnershipBadge } from '@/components/courses/CourseOwnershipBadge';
+import { CourseSsoLaunchButton } from '@/components/courses/CourseSsoLaunchButton';
 
 const levelLabels = { basic: 'Cơ bản', intermediate: 'Trung cấp', advanced: 'Nâng cao' };
 const subjectMeta: Record<CscaSubjectCode, { label: string; cover: string }> = {
@@ -47,9 +49,13 @@ function learningHref(course: CourseCatalogItemDto) {
 function StatusBadges({ course }: { course: CourseCatalogItemDto }) {
   return (
     <div className="flex flex-wrap gap-2">
-      <span className={`rounded-full px-3 py-1 text-[11px] font-black text-white shadow ${course.progress ? 'bg-[#ad2335]' : 'bg-[#173654]'}`}>
-        {accessLabel(course)}
-      </span>
+      {course.ownershipStatus ? (
+        <CourseOwnershipBadge status={course.ownershipStatus} label={course.ownershipLabel} className="shadow" />
+      ) : (
+        <span className={`rounded-full px-3 py-1 text-[11px] font-black text-white shadow ${course.progress ? 'bg-[#ad2335]' : 'bg-[#173654]'}`}>
+          {accessLabel(course)}
+        </span>
+      )}
       {course.isNew ? <span className="rounded-full bg-[#3e8c77] px-3 py-1 text-[11px] font-black text-white shadow">MỚI</span> : null}
       {course.isHot ? <span className="rounded-full bg-[#c38224] px-3 py-1 text-[11px] font-black text-white shadow">HOT</span> : null}
     </div>
@@ -114,9 +120,23 @@ export function CourseCard({ course, variant = 'compact' }: { course: CourseCata
 
             <div className="flex flex-col justify-center gap-3 border-t border-[#e4d8ce] p-6 dark:border-[#2d3a50] lg:border-l lg:border-t-0">
               <p className="text-center font-sans text-4xl font-black text-[#b9aa9d] dark:text-[#5b687c]">勤学</p>
-              <Link href={continueHref} className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#af1f33] px-4 py-3 text-sm font-black text-white shadow transition hover:bg-[#92172a]">
-                {course.progress ? 'Tiếp tục học' : 'Bắt đầu học'} <FiArrowRight />
-              </Link>
+              {course.canLaunchCourse ? (
+                <CourseSsoLaunchButton courseId={course.id} targetPath={course.ssoTargetPath} label="Vào học" />
+              ) : (
+                <Link href={continueHref} className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#af1f33] px-4 py-3 text-sm font-black text-white shadow transition hover:bg-[#92172a]">
+                  {course.progress
+                    ? 'Tiếp tục học'
+                    : course.ownershipStatus === 'expired'
+                      ? 'Mua lại khóa học'
+                      : course.ownershipStatus === 'verification_required'
+                        ? 'Cần xác minh tài khoản'
+                        : course.ownershipStatus === 'pending_sync'
+                          ? 'Đang đồng bộ quyền'
+                          : course.ownershipStatus === 'not_owned' && course.accessType !== 'free'
+                            ? 'Mua khóa học'
+                            : 'Bắt đầu học'} <FiArrowRight />
+                </Link>
+              )}
               <Link href={detailHref} className="inline-flex items-center justify-center rounded-lg border border-[#d8c9bd] bg-[#fffdf9] px-4 py-3 text-sm font-black text-[#28334a] transition hover:border-[#aa7652] dark:border-[#3a475c] dark:bg-[#101e33] dark:text-slate-200">
                 Xem chi tiết
               </Link>
@@ -145,8 +165,23 @@ export function CourseCard({ course, variant = 'compact' }: { course: CourseCata
         <p className={`mt-3 line-clamp-2 min-h-10 text-sm leading-5 ${featured ? 'text-slate-300' : 'text-[#6f665f] dark:text-slate-300'}`}>{course.shortDescription}</p>
         <div className={`mt-5 ${featured ? '[&_span]:text-slate-300 [&>div]:border-white/15' : ''}`}><CourseMetrics course={course} /></div>
         <ProgressBar course={course} />
-        <Link href={course.progress ? continueHref : detailHref} className={`mt-5 inline-flex items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-black transition ${featured ? 'bg-[#ad1f33] text-white hover:bg-[#941629]' : 'border border-[#d8c9bd] text-[#243149] hover:border-[#a97752] dark:border-[#3a475c] dark:text-slate-200'}`}>
-          {course.progress ? 'Tiếp tục học' : 'Xem chi tiết'} <FiArrowRight />
+        {course.canLaunchCourse ? (
+          <div className="mt-4">
+            <CourseSsoLaunchButton courseId={course.id} targetPath={course.ssoTargetPath} label="Vào học" />
+          </div>
+        ) : null}
+        <Link href={course.progress ? continueHref : detailHref} className={`${course.canLaunchCourse ? 'mt-2.5' : 'mt-5'} inline-flex items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-black transition ${featured && !course.canLaunchCourse ? 'bg-[#ad1f33] text-white hover:bg-[#941629]' : 'border border-[#d8c9bd] text-[#243149] hover:border-[#a97752] dark:border-[#3a475c] dark:text-slate-200'}`}>
+          {course.progress
+            ? 'Tiếp tục học'
+            : course.ownershipStatus === 'expired'
+              ? 'Mua lại khóa học'
+              : course.ownershipStatus === 'verification_required'
+                ? 'Cần xác minh tài khoản'
+                : course.ownershipStatus === 'pending_sync'
+                  ? 'Đang đồng bộ quyền'
+                  : course.ownershipStatus === 'not_owned' && course.accessType !== 'free'
+                    ? 'Mua khóa học'
+                    : 'Xem chi tiết'} <FiArrowRight />
         </Link>
       </div>
     </article>

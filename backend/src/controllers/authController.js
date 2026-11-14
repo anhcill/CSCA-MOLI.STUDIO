@@ -2399,4 +2399,8 @@ module.exports = {
   adminMfaSetupConfirm,
   adminMfaVerify,
   resendOtp,
+  completeLoginForUser,
+  createDeviceLimitLockedPayload,
+  createDeviceLimitPayload,
+  isDeviceLimitError,
 };

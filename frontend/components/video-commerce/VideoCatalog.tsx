@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { videoShop,type Page,type ShopProduct,type ProductType,type Promotion } from '@/lib/api/videoShop';
 import { ShopShell,Message,Pager,money,subjects,buttonClass,panelClass,errorText,secondaryClass } from './shared';
+import { CourseOwnershipBadge } from '@/components/courses/CourseOwnershipBadge';
+import { CourseSsoLaunchButton } from '@/components/courses/CourseSsoLaunchButton';
 export default function VideoCatalog({ embedded = false, productType = 'video' }: { embedded?: boolean; productType?: ProductType }) {
   const params=useSearchParams(),courseId=Number(params.get('courseId'));
   const [type,setType]=useState<ProductType>(productType),[page,setPage]=useState(1),[data,setData]=useState<Page<ShopProduct>|null>(null);
@@ -17,14 +19,25 @@ export default function VideoCatalog({ embedded = false, productType = 'video' }
     {promotion&&<div className="mb-6 rounded-2xl bg-[#102b34] p-6 text-white"><p className="text-lg font-black">{promotion.title}</p><p className="mt-2 text-sm text-slate-200">{promotion.content}</p>{promotion.coupon_code&&<p className="mt-3">Mã ưu đãi: <strong>{promotion.coupon_code}</strong></p>}</div>}
     {error?<Message error>{error} <button className="underline" onClick={()=>setRetry(r=>r+1)}>Thử lại</button></Message>:!data?<Message>Đang tải gói học…</Message>:!data.items.length?<Message>Chưa có gói mở bán. Bạn có thể tiếp tục khám phá thư viện khóa học.</Message>:<>
       <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">{data.items.map(p=><article key={p.id} className={`${panelClass} flex flex-col`}>
-        <p className="text-xs font-black uppercase tracking-widest text-teal-700 dark:text-teal-300">{type==='video'?'HỌC QUA VIDEO':'VIDEO + LUYỆN TẬP'}</p><h2 className="mt-3 text-xl font-black">{p.name}</h2>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs font-black uppercase tracking-widest text-teal-700 dark:text-teal-300">{type==='video'?'HỌC QUA VIDEO':'VIDEO + LUYỆN TẬP'}</p>
+          {p.ownershipStatus ? <CourseOwnershipBadge status={p.ownershipStatus} label={p.ownershipLabel} /> : null}
+        </div>
+        <h2 className="mt-3 text-xl font-black">{p.name}</h2>
         {courseId>0&&p.courses.some(c=>Number(c.id)===courseId)&&<p className="mt-2 text-sm font-bold text-teal-700">Có khóa bạn đang xem</p>}
         <p className="mt-3 whitespace-pre-line text-sm leading-6 text-slate-600 dark:text-slate-300">{p.description}</p>
         <p className="mt-5 text-3xl font-black">{p.video?.requiresSubjectChoice&&Object.keys(p.subjectPrices).length?'Từ ':''}{money(p.video?.requiresSubjectChoice?Math.min(...p.video.allowedSubjects.map(s=>p.subjectPrices[s]??p.priceVnd??0)):p.priceVnd)}</p>
         {p.originalPriceVnd!=null&&p.originalPriceVnd>(p.priceVnd??0)&&<del className="text-sm text-slate-500">{money(p.originalPriceVnd)}</del>}
         <dl className="my-5 space-y-2 text-sm"><div><dt className="font-bold">Quyền video</dt><dd>{p.video?.durationMode==='lifetime'?'Không giới hạn':`${p.video?.durationDays} ngày`} · {p.video?.requiresSubjectChoice?'Chọn 1 môn':p.video?.allowedSubjects.map(s=>subjects[s]).join(', ')}</dd></div>{p.vip&&<div><dt className="font-bold">{p.vip.name}</dt><dd>{'vipDurationDays' in p?String(p.vipDurationDays):''} ngày quyền gói</dd></div>}</dl>
         <ul className="mb-5 space-y-2 text-sm">{p.courses.map(c=><li key={c.id}><Link href={`/khoa-hoc/${c.slug}`} className="underline decoration-slate-300 underline-offset-4">{c.title}</Link></li>)}{p.features.map(f=><li key={f}>✓ {f}</li>)}</ul>
-        <Link href={`/thanh-toan-khoa-hoc?type=${type}&productId=${p.id}`} className={`${p.canPurchase?buttonClass:secondaryClass} mt-auto`}>{p.canPurchase?'Chọn gói này':'Xem chi tiết gói'}</Link>
+        {p.canLaunchCourse ? <div className="mb-3"><CourseSsoLaunchButton courseId={p.courses[0]?.id} targetPath={p.ssoTargetPath} label="Vào học" /></div> : null}
+        {p.ownershipStatus === 'pending_sync' ? (
+          <button type="button" onClick={()=>setRetry(r=>r+1)} className={`${secondaryClass} mt-auto`}>Đang đồng bộ quyền · Làm mới</button>
+        ) : p.ownershipStatus === 'verification_required' ? (
+          <Link href="/login?redirect=%2Fvip%3Fsection%3Dvideo" className={`${secondaryClass} mt-auto`}>Cần xác minh tài khoản</Link>
+        ) : (
+          <Link href={`/thanh-toan-khoa-hoc?type=${type}&productId=${p.id}`} className={`${p.canPurchase?buttonClass:secondaryClass} mt-auto`}>{p.canPurchase?(p.ownershipStatus==='expired'?'Mua lại khóa học':'Mua khóa học'):'Xem chi tiết gói'}</Link>
+        )}
       </article>)}</div><Pager page={page} hasMore={data.hasMore} onPage={setPage}/></>}
   </>;
   return embedded ? <section className="text-slate-900">{content}</section> : <ShopShell title="Chọn gói cho hành trình của bạn">{content}</ShopShell>;

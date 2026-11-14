@@ -62,6 +62,9 @@ function createVideoAdminService({db,repository,payments,recalculateVip,sendRigh
       value.owned=ownership.owned;
       value.ownershipStatus=ownership.status;
       value.ownershipLabel=ownership.label;
+      value.canLaunchCourse=Boolean(ownership.canLaunchCourse);
+      value.courseOfferingId=ownership.courseOfferingId||null;
+      value.ssoTargetPath=ownership.ssoTargetPath||null;
       value.purchaseBlockReason=ownership.blockCode||(!value.canPurchase&&!salesEnabled()?'VIDEO_SALES_DISABLED':null);
       if(!ownership.canPurchase)value.canPurchase=false;
     }
@@ -149,10 +152,41 @@ function createVideoAdminService({db,repository,payments,recalculateVip,sendRigh
     const p=pageQuery(query),uid=userId?positiveId(userId):query.userId?positiveId(query.userId):null;
     const rows=(await db.query(`${rightsSql} WHERE ($1::int IS NULL OR e.user_id=$1)
       ORDER BY e.id DESC LIMIT $2 OFFSET $3`,[uid,p.limit+1,p.offset])).rows;
-    return paged(rows.map(r=>({id:Number(r.id),userId:r.user_id,email:userId?undefined:r.email,userName:userId?undefined:r.full_name,
-      type:r.combo_package_id?'combo':'video',name:r.purchase_snapshot?.name||r.combo_name||r.video_name,source:r.source,
-      status:r.status,startsAt:r.starts_at,expiresAt:r.expires_at,subjects:r.allowed_subjects,courseIds:r.course_ids.map(Number),
-      vipExpiresAt:r.vip_expires_at,vipActive:r.vip_active,reason:r.reason,transactionId:r.transaction_id})),p);
+    const now=new Date();
+    const mapped=[];
+    for(const r of rows) {
+      const courseIds=(r.course_ids||[]).map(Number);
+      const item={id:Number(r.id),userId:r.user_id,email:userId?undefined:r.email,userName:userId?undefined:r.full_name,
+        type:r.combo_package_id?'combo':'video',name:r.purchase_snapshot?.name||r.combo_name||r.video_name,source:r.source,
+        status:r.status,startsAt:r.starts_at,expiresAt:r.expires_at,subjects:r.allowed_subjects,courseIds,
+        vipExpiresAt:r.vip_expires_at,vipActive:r.vip_active,reason:r.reason,transactionId:r.transaction_id};
+      if(userId!=null && courseOwnership) {
+        if(r.status==='revoked') {
+          item.ownershipStatus='grant_blocked';
+          item.ownershipLabel='Đang tạm khóa quyền';
+          item.canLaunchCourse=false;
+          item.courseOfferingId=null;
+          item.ssoTargetPath=null;
+        } else if(r.expires_at && new Date(r.expires_at)<=now) {
+          item.ownershipStatus='expired';
+          item.ownershipLabel='Quyền đã hết hạn';
+          item.canLaunchCourse=false;
+          item.courseOfferingId=null;
+          item.ssoTargetPath=null;
+        } else {
+          const ownership=await courseOwnership.evaluatePackageOwnership(userId,{
+            courseIds,videoPackageId:Number(r.video_package_id),
+          });
+          item.ownershipStatus=ownership.status;
+          item.ownershipLabel=ownership.label;
+          item.canLaunchCourse=Boolean(ownership.canLaunchCourse);
+          item.courseOfferingId=ownership.courseOfferingId||null;
+          item.ssoTargetPath=ownership.ssoTargetPath||null;
+        }
+      }
+      mapped.push(item);
+    }
+    return paged(mapped,p);
   }
   async function recalc(client,userId) {
     await recalculateVideoVip(client,userId,recalculateVip);

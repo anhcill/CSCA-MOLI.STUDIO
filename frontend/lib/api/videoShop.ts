@@ -18,6 +18,12 @@ export type ShopProduct = Omit<VideoCommerceProductDto, 'canPurchase'> & {
   video: VideoPackageDto | null;
   vip: { id: number; name: string } | null;
   courses: { id: number; title: string; slug: string; subject_code: string }[];
+  owned?: boolean;
+  ownershipStatus?: string | null;
+  ownershipLabel?: string | null;
+  canLaunchCourse?: boolean;
+  courseOfferingId?: string | null;
+  ssoTargetPath?: string | null;
 };
 
 export interface VideoRight {
@@ -37,6 +43,11 @@ export interface VideoRight {
   vipActive: boolean | null;
   reason: string | null;
   transactionId: number | null;
+  ownershipStatus?: string | null;
+  ownershipLabel?: string | null;
+  canLaunchCourse?: boolean;
+  courseOfferingId?: string | null;
+  ssoTargetPath?: string | null;
 }
 
 export interface Lookup {

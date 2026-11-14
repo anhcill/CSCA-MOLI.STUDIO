@@ -94,19 +94,30 @@ async function listMyEnrollments(user) {
   const allowed = await Promise.all(rows.map(async row => courseService.hasEntitlement(user, row, row,
     row.access_type === 'package' ? await courseRepository.findActivePackageEntitlement(user.id, row.course_id) : null,
     await videoAccess.find(user.id, row.course_id))));
-  return rows
-    .filter((_row, index) => allowed[index])
-    .map((row) => {
-      const progress = progressSummary(row);
-      return {
-        enrollment: {
-          ...mapEnrollment(row),
-          courseSlug: row.slug,
-          progress,
-        },
-        course: catalogCourse(row, progress),
-      };
-    });
+  const allowedRows = rows.filter((_row, index) => allowed[index]);
+  const baseItems = allowedRows.map((row) => {
+    const progress = progressSummary(row);
+    return {
+      enrollment: {
+        ...mapEnrollment(row),
+        courseSlug: row.slug,
+        progress,
+      },
+      course: catalogCourse(row, progress),
+    };
+  });
+  const ownershipMap = await courseService.loadCourseOwnershipMap(
+    user.id,
+    baseItems.map((item) => item.course.id),
+  );
+  return baseItems.map((item) => ({
+    ...item,
+    course: courseService.mergeCourseOwnershipView(
+      item.course,
+      ownershipMap.get(Number(item.course.id)),
+      true,
+    ),
+  }));
 }
 
 async function getLearningCourse(courseIdValue, user) {

@@ -11,7 +11,7 @@
     "test:video-commerce": "node --test test/videoCommerceFoundation.test.cjs test/bunnyStreamAdapter.test.cjs",
     "test:video-payments": "node --test test/videoPayments.test.cjs test/videoPayosGateway.test.cjs",
     "test:video-payment-dispatch": "jest --runInBand --watchAll=false src/services/__tests__/videoPaymentDispatch.spec.js",
-    "test:course-integration": "node --test test/courseIntegrationDay1.test.cjs test/courseIntegrationDay3.test.cjs",
+    "test:course-integration": "node --test test/courseIntegrationDay1.test.cjs test/courseIntegrationDay3.test.cjs test/courseIntegrationDay4.test.cjs",
     "db:migrate": "node src/scripts/migrate.js",
     "db:migrate:courses": "node scripts/apply_csca_course_migrations.js",
     "db:migrate:mobile-auth": "node scripts/apply_mobile_auth_migrations.js",

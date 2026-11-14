@@ -62,7 +62,8 @@ function createCourseOwnershipProjectionService({
          to_regclass('external_entitlements') IS NOT NULL AS has_ext_entitlements,
          to_regclass('external_course_mappings') IS NOT NULL AS has_mappings,
          to_regclass('external_identities') IS NOT NULL AS has_identities,
-         to_regclass('integration_outbox') IS NOT NULL AS has_outbox`,
+         to_regclass('integration_outbox') IS NOT NULL AS has_outbox,
+         to_regclass('integration_conflicts') IS NOT NULL AS has_conflicts`,
     );
     return res.rows[0] || {};
   }
@@ -363,22 +364,29 @@ function createCourseOwnershipProjectionService({
 
     const caps = await schemaCaps(runner);
 
-    // 1) Local video entitlements covering these courses.
+    // 1) Local video entitlements covering these courses (active or expired).
     const localCourseSet = new Set();
+    const expiredCourseSet = new Set();
     const hasVideoEntitlements = (await runner.query("SELECT to_regclass('user_video_entitlements') AS rel")).rows[0]?.rel;
     if (hasVideoEntitlements) {
       const localRows = (await runner.query(
-        `SELECT DISTINCT ec.course_id
+        `SELECT DISTINCT ec.course_id, e.status, e.starts_at, e.expires_at
          FROM user_video_entitlements e
          JOIN video_entitlement_courses ec ON ec.entitlement_id = e.id
          WHERE e.user_id = $1
-           AND e.status = 'active'
-           AND e.starts_at <= $3
-           AND (e.expires_at IS NULL OR e.expires_at > $3)
            AND ec.course_id = ANY($2::bigint[])`,
-        [userId, uniqueCourseIds, evalNow.toISOString()],
+        [userId, uniqueCourseIds],
       )).rows;
-      for (const r of localRows) localCourseSet.add(Number(r.course_id));
+      for (const r of localRows) {
+        const cid = Number(r.course_id);
+        const startsOk = !r.starts_at || new Date(r.starts_at).getTime() <= evalNow.getTime();
+        const notExpired = !r.expires_at || new Date(r.expires_at).getTime() > evalNow.getTime();
+        if (r.status === "active" && startsOk && notExpired) {
+          localCourseSet.add(cid);
+        } else if (r.status === "expired" || (r.status === "active" && !notExpired)) {
+          expiredCourseSet.add(cid);
+        }
+      }
     }
 
     // 2) Projected external entitlements (csca-course / internal-management / external mirrors).
@@ -411,8 +419,26 @@ function createCourseOwnershipProjectionService({
           // Codex Day 2 rule #7: retained non-expired active/suspended grant with owned=false
           // indicates blocked/revoked profile access; block duplicate charging!
           blockedCourseSet.add(courseId);
+        } else if (row.status === "expired" || (row.valid_until && !notExpired)) {
+          expiredCourseSet.add(courseId);
         }
       }
+    }
+
+    // 2b) Open identity collision conflicts for this learner (Safe Linking verification required).
+    let openConflictType = null;
+    if (caps.has_conflicts) {
+      const conflictRow = (await runner.query(
+        `SELECT conflict_type
+         FROM integration_conflicts
+         WHERE status IN ('open', 'in_review')
+           AND conflict_type IN ('IDENTITY_EMAIL_COLLISION', 'PRIVILEGED_ROLE_COLLISION')
+           AND (candidate_user_id = $1 OR existing_user_id = $1)
+         ORDER BY id DESC
+         LIMIT 1`,
+        [userId],
+      )).rows[0];
+      openConflictType = conflictRow?.conflict_type || null;
     }
 
     // 3) In-flight sync state from integration_outbox + paid-unfulfilled orders.
@@ -465,7 +491,7 @@ function createCourseOwnershipProjectionService({
     const syncedOwnedCourseIds = ownedCourseIds.filter((cid) => !pendingSyncCourseSet.has(cid));
 
     let status = "not_owned";
-    let label = null;
+    let label = "Mua khóa học";
     let canPurchase = true;
     let blockCode = null;
     let owned = false;
@@ -480,6 +506,11 @@ function createCourseOwnershipProjectionService({
       label = "Đang đồng bộ quyền";
       canPurchase = false;
       blockCode = "PENDING_SYNC";
+    } else if (openConflictType && syncedOwnedCourseIds.length < uniqueCourseIds.length) {
+      status = "verification_required";
+      label = "Cần xác minh tài khoản";
+      canPurchase = false;
+      blockCode = "IDENTITY_VERIFICATION_REQUIRED";
     } else if (syncedOwnedCourseIds.length === uniqueCourseIds.length) {
       owned = true;
       status = "owned";
@@ -491,7 +522,23 @@ function createCourseOwnershipProjectionService({
       label = "Đã sở hữu";
       canPurchase = false;
       blockCode = "ALREADY_OWNED";
+    } else if (expiredCourseSet.size > 0) {
+      status = "expired";
+      label = "Quyền đã hết hạn";
+      canPurchase = true;
+      blockCode = null;
     }
+
+    let courseOfferingId = null;
+    if (caps.has_mappings && uniqueCourseIds.length > 0) {
+      const mappings = await loadMappedOfferings(runner, uniqueCourseIds);
+      courseOfferingId = mappings[0]?.offering_id || null;
+    }
+
+    const canLaunchCourse = Boolean(owned && courseOfferingId);
+    const ssoTargetPath = canLaunchCourse
+      ? `/video-courses/${encodeURIComponent(courseOfferingId).replace(/%3A/gi, ":")}`
+      : null;
 
     return {
       owned,
@@ -499,17 +546,65 @@ function createCourseOwnershipProjectionService({
       label,
       canPurchase,
       blockCode,
+      canLaunchCourse,
+      courseOfferingId,
+      ssoTargetPath,
       localOwnedCourseIds: [...localCourseSet],
       externalOwnedCourseIds: [...externalOwnedSet],
       blockedCourseIds: [...blockedCourseSet],
       pendingSyncCourseIds: [...pendingSyncCourseSet],
+      expiredCourseIds: [...expiredCourseSet],
       externalGrantsCount: externalRows.length,
     };
+  }
+
+  async function evaluateCoursesForUser(userIdValue, courseIds = [], options = {}) {
+    const uniqueCourseIds = [...new Set((courseIds || []).map(Number).filter((id) => Number.isSafeInteger(id) && id > 0))];
+    const byCourseId = new Map();
+    if (!uniqueCourseIds.length) return byCourseId;
+
+    const runner = options.client || db;
+    const caps = await schemaCaps(runner);
+    const mappings = caps.has_mappings ? await loadMappedOfferings(runner, uniqueCourseIds) : [];
+    const offeringByCourseId = new Map();
+    for (const m of mappings) {
+      if (!offeringByCourseId.has(Number(m.local_course_id))) {
+        offeringByCourseId.set(Number(m.local_course_id), m.offering_id);
+      }
+    }
+
+    if (!userIdValue) {
+      for (const cid of uniqueCourseIds) {
+        byCourseId.set(cid, {
+          owned: false,
+          status: "not_owned",
+          label: "Mua khóa học",
+          canPurchase: true,
+          blockCode: null,
+          canLaunchCourse: false,
+          courseOfferingId: offeringByCourseId.get(cid) || null,
+          ssoTargetPath: null,
+        });
+      }
+      return byCourseId;
+    }
+
+    for (const cid of uniqueCourseIds) {
+      const evaluated = await evaluatePackageOwnership(userIdValue, {
+        courseIds: [cid],
+        refreshFromCourse: false,
+        client: runner,
+        currentNow: options.currentNow || null,
+      });
+      byCourseId.set(cid, evaluated);
+    }
+    return byCourseId;
   }
 
   return {
     syncUserOwnershipFromCourse,
     evaluatePackageOwnership,
+    evaluateCoursesForUser,
   };
 }
 

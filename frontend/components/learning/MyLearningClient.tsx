@@ -13,6 +13,8 @@ import {
 } from 'react-icons/fi';
 import learningApi from '@/lib/api/learning';
 import type { MyLearningItemDto } from '@/lib/types/courses';
+import { CourseOwnershipBadge } from '@/components/courses/CourseOwnershipBadge';
+import { CourseSsoLaunchButton } from '@/components/courses/CourseSsoLaunchButton';
 
 function formatDuration(totalSeconds: number): string {
   const minutes = Math.max(0, Math.round(totalSeconds / 60));
@@ -135,9 +137,12 @@ export function MyLearningClient() {
                 <div className="absolute -right-10 -top-14 h-40 w-40 rounded-full bg-cyan-400/20 blur-2xl" />
                 <div className="relative flex items-start justify-between gap-5">
                   <div>
-                    <span className="inline-flex rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[11px] font-black tracking-wider backdrop-blur">
-                      {course.subjectCode}
-                    </span>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="inline-flex rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[11px] font-black tracking-wider backdrop-blur">
+                        {course.subjectCode}
+                      </span>
+                      <CourseOwnershipBadge status={course.ownershipStatus || 'owned'} label={course.ownershipLabel} className="bg-white/95" />
+                    </div>
                     <h2 className="mt-4 max-w-xl text-2xl font-black leading-tight">{course.title}</h2>
                   </div>
                   <div className="grid h-20 w-20 shrink-0 place-items-center rounded-full p-1 shadow-lg" style={{ background: `conic-gradient(#67e8f9 ${progress * 3.6}deg, rgba(255,255,255,.18) 0)` }}>
@@ -173,9 +178,16 @@ export function MyLearningClient() {
                     </p>
                     {enrollment.progress.lastPositionSeconds > 0 ? <p className="mt-1 text-xs text-slate-500">Tiếp tục tại {formatPosition(enrollment.progress.lastPositionSeconds)}</p> : null}
                   </div>
-                  <Link href={target} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 font-black text-white shadow-lg shadow-indigo-600/20 transition hover:bg-indigo-700">
-                    {progress >= 100 ? <><FiCheckCircle /> Xem lại</> : started ? <><FiPlay /> Tiếp tục học</> : <>Bắt đầu học <FiArrowRight /></>}
-                  </Link>
+                  <div className="flex shrink-0 flex-wrap items-center gap-2">
+                    {course.canLaunchCourse ? (
+                      <div className="w-full sm:w-auto">
+                        <CourseSsoLaunchButton courseId={course.id} targetPath={course.ssoTargetPath} label="Vào học" />
+                      </div>
+                    ) : null}
+                    <Link href={target} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 font-black text-white shadow-lg shadow-indigo-600/20 transition hover:bg-indigo-700">
+                      {progress >= 100 ? <><FiCheckCircle /> Xem lại</> : started ? <><FiPlay /> Tiếp tục học</> : <>Bắt đầu học <FiArrowRight /></>}
+                    </Link>
+                  </div>
                 </div>
               </div>
             </article>

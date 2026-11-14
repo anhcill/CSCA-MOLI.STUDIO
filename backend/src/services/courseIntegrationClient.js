@@ -64,6 +64,7 @@ function normalizeBaseUrl(rawUrl) {
 
 function resolveClientConfig(config = {}, env = process.env) {
   const baseUrl = normalizeBaseUrl(config.baseUrl ?? env.COURSE_LMS_BASE_URL ?? "");
+  const courseWebBaseUrl = normalizeBaseUrl(config.courseWebBaseUrl ?? env.COURSE_WEB_BASE_URL ?? "");
   const serviceToken = String(config.serviceToken ?? env.COURSE_LMS_SERVICE_TOKEN ?? "").trim();
   const integrationKey = String(config.integrationKey ?? env.COURSE_LMS_INTEGRATION_KEY ?? "").trim();
   const hmacSecret = String(config.hmacSecret ?? env.COURSE_LMS_HMAC_SECRET ?? "").trim();
@@ -84,6 +85,7 @@ function resolveClientConfig(config = {}, env = process.env) {
   );
   return {
     baseUrl,
+    courseWebBaseUrl,
     serviceToken,
     integrationKey,
     hmacSecret,
@@ -370,6 +372,43 @@ function createCourseIntegrationClient({
     });
   }
 
+  function exchangeSsoCode({ code, nonce, consumerSystem = "moly", consumeIp = null, correlationId = null }, opts = {}) {
+    if (!code || !nonce) {
+      throw new CourseIntegrationClientError(422, "VALIDATION_ERROR", "code and nonce are required.");
+    }
+    const body = {
+      code,
+      nonce,
+      consumer_system: consumerSystem,
+      consume_ip: consumeIp,
+      correlation_id: correlationId,
+    };
+    return postSigned("/sso/exchange", body, {
+      ...opts,
+      correlationId,
+      idempotencyKey: null,
+      requireIdempotencyKey: false,
+      validateData: (resBody) => Boolean(resBody.data && typeof resBody.data === "object" && !Array.isArray(resBody.data)),
+    }).then((res) => res.payload.data);
+  }
+
+  function bindSsoPeerIdentity({ externalUserId, targetUserId, email = null, nonce = null, correlationId = null }, opts = {}) {
+    const body = {
+      external_user_id: externalUserId,
+      target_user_id: targetUserId,
+      email,
+      nonce,
+      correlation_id: correlationId,
+    };
+    return postSigned("/sso/bind-identity", body, {
+      ...opts,
+      correlationId,
+      idempotencyKey: null,
+      requireIdempotencyKey: false,
+      validateData: (resBody) => Boolean(resBody.data && typeof resBody.data === "object"),
+    }).then((res) => res.payload.data);
+  }
+
   return {
     isConfigured,
     assertConfigured,
@@ -379,6 +418,8 @@ function createCourseIntegrationClient({
     revokeEntitlement,
     queryOwnership,
     getEventStatuses,
+    exchangeSsoCode,
+    bindSsoPeerIdentity,
   };
 }
 

@@ -75,6 +75,14 @@ export interface CourseCatalogItemDto {
   isHot: boolean;
   ratingAvg: number;
   ratingCount: number;
+  ownershipStatus?: string;
+  ownershipLabel?: string | null;
+  owned?: boolean;
+  canPurchase?: boolean;
+  blockCode?: string | null;
+  canLaunchCourse?: boolean;
+  courseOfferingId?: string | null;
+  ssoTargetPath?: string | null;
   enrolledCount: number;
   totalSections: number;
   totalLessons: number;
@@ -111,6 +119,14 @@ export interface CourseAccessDto {
   isEnrolled: boolean;
   reasonCode: string | null;
   ctaLabel: string;
+  ownershipStatus?: string;
+  ownershipLabel?: string | null;
+  owned?: boolean;
+  canPurchase?: boolean;
+  blockCode?: string | null;
+  canLaunchCourse?: boolean;
+  courseOfferingId?: string | null;
+  ssoTargetPath?: string | null;
 }
 
 export interface CurriculumLessonDto {

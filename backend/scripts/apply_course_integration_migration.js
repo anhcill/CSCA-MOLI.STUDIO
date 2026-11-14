@@ -9,6 +9,7 @@ const MIGRATION_FILE = path.join(
 const MIGRATION_FILES = [
   MIGRATION_FILE,
   path.join(__dirname, "../../database/migrations/077_moly_payment_outbox_sync.sql"),
+  path.join(__dirname, "../../database/migrations/078_moly_course_sso.sql"),
 ];
 
 const TABLES = [
