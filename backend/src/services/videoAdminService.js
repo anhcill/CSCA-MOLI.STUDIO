@@ -18,7 +18,7 @@ function pageQuery(query={}) {
 }
 const paged=(rows,p)=>({items:rows.slice(0,p.limit),page:p.page,limit:p.limit,hasMore:rows.length>p.limit});
 
-function createVideoAdminService({db,repository,payments,recalculateVip,sendRightsEmail,salesEnabled=()=>false}) {
+function createVideoAdminService({db,repository,payments,recalculateVip,sendRightsEmail,salesEnabled=()=>false,courseOutbox=null,courseOwnership=null}) {
   const tx=repository.transaction;
   const audit=(client,actor,action,type,id,details)=>client.query(`INSERT INTO video_admin_events(actor_id,action,entity_type,entity_id,details)
     VALUES ($1,$2,$3,$4,$5::jsonb)`,[positiveId(actor),action,type,id,JSON.stringify(details)]);
@@ -40,7 +40,7 @@ function createVideoAdminService({db,repository,payments,recalculateVip,sendRigh
     return {checked:rows.length};
   }
 
-  async function enrich(row,type,client=db) {
+  async function enrich(row,type,client=db,{userId=null}={}) {
     const value={...mapProduct(row,type),renewalMode:row.renewal_mode,subjectPrices:row.subject_prices||{}};
     const video=type==='video'?row:await repository.find('video',row.video_package_id,client);
     value.video=video?mapProduct(video,'video'):null;
@@ -55,18 +55,35 @@ function createVideoAdminService({db,repository,payments,recalculateVip,sendRigh
         value.canPurchase=salesEnabled();
       } catch(error) {if(!(error instanceof CourseApiError))throw error;value.configurationIssues.push(error.code);}
     }
+    if(userId!=null && courseOwnership) {
+      const ownership=await courseOwnership.evaluatePackageOwnership(userId,{
+        courseIds:value.video?.courseIds||[],videoPackageId:value.video?.id||null,client,
+      });
+      value.owned=ownership.owned;
+      value.ownershipStatus=ownership.status;
+      value.ownershipLabel=ownership.label;
+      value.purchaseBlockReason=ownership.blockCode||(!value.canPurchase&&!salesEnabled()?'VIDEO_SALES_DISABLED':null);
+      if(!ownership.canPurchase)value.canPurchase=false;
+    }
     return value;
   }
-  async function catalog(typeValue,query={},admin=false) {
+  async function catalog(typeValue,query={},admin=false,{userId=null,refreshOwnership=false}={}) {
     const type=productType(typeValue),p=pageQuery(query);
+    if(!admin && userId!=null && refreshOwnership && courseOwnership) {
+      await courseOwnership.syncUserOwnershipFromCourse(userId,{throwOnError:false}).catch(()=>{});
+    }
     const rows=await repository.list(type,{status:admin?null:'active',limit:p.limit+1,offset:p.offset});
-    const items=[];for(const row of rows)items.push(await enrich(row,type));
+    const items=[];for(const row of rows)items.push(await enrich(row,type,db,{userId:admin?null:userId}));
     return {...paged(items,p),checkoutAvailable:salesEnabled()};
   }
-  async function product(typeValue,idValue) {
+  async function product(typeValue,idValue,{userId=null,refreshOwnership=false}={}) {
     const type=productType(typeValue),row=await repository.find(type,positiveId(idValue));
     if(!row || row.status!=='active')fail('PRODUCT_NOT_AVAILABLE','Package not available.',404);
-    return enrich(row,type);
+    if(userId!=null && refreshOwnership && courseOwnership) {
+      const video=type==='video'?row:await repository.find('video',row.video_package_id,db);
+      await courseOwnership.syncUserOwnershipFromCourse(userId,{localCourseIds:video?.course_ids||null,throwOnError:false}).catch(()=>{});
+    }
+    return enrich(row,type,db,{userId});
   }
   async function saveProduct(typeValue,idValue,input,actor) {
     const type=productType(typeValue),id=idValue==null?null:positiveId(idValue);
@@ -236,6 +253,14 @@ function createVideoAdminService({db,repository,payments,recalculateVip,sendRigh
         await recalc(client,row.user_id);
       }
       await client.query("UPDATE user_video_entitlements SET status='revoked',revoked_at=NOW(),revoked_by=$2 WHERE id=$1",[id,actor]);
+      if(courseOutbox) {
+        const courseIds=(await client.query('SELECT course_id FROM video_entitlement_courses WHERE entitlement_id=$1 ORDER BY course_id ASC',[id])).rows.map(r=>Number(r.course_id));
+        await courseOutbox.enqueueEntitlementRevokeTx(client,{
+          userId:row.user_id,transactionId:row.transaction_id||null,entitlementId:row.id,
+          courseIds,videoPackageId:row.video_package_id,reason:why,
+          validFrom:row.starts_at,validUntil:row.expires_at,actorId:actor,
+        });
+      }
       await audit(client,actor,'revoked','entitlement',id,{userId:row.user_id,reason:why,vipEntitlementId:vipId||null});
       const product=await repository.find(row.combo_package_id?'combo':'video',row.combo_package_id||row.video_package_id,client);
       await client.query('INSERT INTO video_rights_outbox(event_key,user_id,payload) VALUES ($1,$2,$3::jsonb)',
@@ -261,6 +286,37 @@ function createVideoAdminService({db,repository,payments,recalculateVip,sendRigh
     await audit(db,actor,'payment_synced','order',0,{orderId:code,status:result.status});
     return result;
   }
+  async function refundOrder(code,input={},actor) {
+    if(typeof payments?.refundOrder!=='function')fail('REFUND_UNSUPPORTED','Refund handler is not configured.',501);
+    const result=await payments.refundOrder(code,{reason:input.reason,actorId:actor,refundReference:input.refundReference});
+    await audit(db,actor,'order_refunded','order',0,{orderId:result.orderId,revokedEntitlementIds:result.revokedEntitlementIds,alreadyRefunded:result.alreadyRefunded}).catch(()=>{});
+    return result;
+  }
+  async function ownershipOverview(userIdValue,{refresh=true}={}) {
+    const uid=positiveId(userIdValue,'userId');
+    if(refresh && courseOwnership) {
+      await courseOwnership.syncUserOwnershipFromCourse(uid,{throwOnError:false}).catch(()=>{});
+    }
+    const rightsData=await rights({page:1,limit:100},uid);
+    const hasExt=(await db.query("SELECT to_regclass('external_entitlements') AS rel")).rows[0]?.rel;
+    const externalEntitlements=hasExt?(await db.query(
+      `SELECT id,source_system,origin_system,external_grant_id,external_course_id,local_course_id,
+              status,COALESCE(effective_owned,TRUE) AS effective_owned,valid_from,valid_until,revoked_at,source_updated_at
+       FROM external_entitlements WHERE user_id=$1 ORDER BY source_updated_at DESC,id DESC LIMIT 100`,[uid])).rows:[];
+    const hasOutbox=(await db.query("SELECT to_regclass('integration_outbox') AS rel")).rows[0]?.rel;
+    const outboxEvents=hasOutbox?(await db.query(
+      `SELECT id,event_id,event_type,status,remote_status,external_grant_id,external_course_id,
+              transaction_id,entitlement_id,last_error_code,created_at,sent_at,remote_processed_at
+       FROM integration_outbox WHERE user_id=$1 ORDER BY id DESC LIMIT 100`,[uid])).rows:[];
+    const courseIds=[...new Set([
+      ...rightsData.items.flatMap(i=>i.courseIds||[]),
+      ...externalEntitlements.map(e=>Number(e.local_course_id)),
+    ].filter(id=>Number.isSafeInteger(id)&&id>0))];
+    const aggregate=courseOwnership
+      ? await courseOwnership.evaluatePackageOwnership(uid,{courseIds,client:db})
+      : null;
+    return { userId:uid, items:rightsData.items, externalEntitlements, outboxEvents, summary:aggregate };
+  }
   async function stats() {
     return (await db.query(`SELECT o.product_type AS type,COUNT(*)::int AS orders,
       COUNT(*) FILTER(WHERE o.fulfilled_at IS NOT NULL)::int AS completed,
@@ -269,6 +325,6 @@ function createVideoAdminService({db,repository,payments,recalculateVip,sendRigh
       FROM video_commerce_orders o JOIN transactions t ON t.id=o.transaction_id GROUP BY o.product_type`)).rows;
   }
   async function events(query={}) {const p=pageQuery(query);return paged((await db.query(`SELECT e.*,u.email AS actor FROM video_admin_events e JOIN users u ON u.id=e.actor_id ORDER BY e.id DESC LIMIT $1 OFFSET $2`,[p.limit+1,p.offset])).rows,p);}
-  return {catalog,product,saveProduct,lookup,rights,grant,bulkGrant,revoke,orders,sync,stats,events,audit,tx,retryRightsEmails};
+  return {catalog,product,saveProduct,lookup,rights,grant,bulkGrant,revoke,refundOrder,ownershipOverview,orders,sync,stats,events,audit,tx,retryRightsEmails};
 }
 module.exports={createVideoAdminService,pageQuery,paged};

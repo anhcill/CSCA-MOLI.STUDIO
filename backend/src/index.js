@@ -274,6 +274,7 @@ app.use("/api/study-station", require("./routes/studyStationRoutes")); // Motiva
 // CSCA Courses stay isolated behind the feature flag, while being enabled by
 // default now that the course schema has been rolled out.
 // Keep requires inside this block: a disabled/incomplete deployment must remain isolated.
+let startCourseOutboxWorker = null;
 if (coursesEnabled) {
   const { adminWriteLimiter } = require("./routes/courseRateLimiters");
   app.use("/api/courses", require("./routes/courseRoutes"));
@@ -288,8 +289,16 @@ if (coursesEnabled) {
   const {
     createCourseIntegrationAdminRoutes,
   } = require("./routes/courseIntegrationAdminRoutes");
+  const courseIntegrationRuntime = require("./services/courseIntegrationRuntime");
+  startCourseOutboxWorker = () => {
+    if (parseFeatureFlag(process.env.COURSE_INTEGRATION_WORKER_ENABLED, "COURSE_INTEGRATION_WORKER_ENABLED")) {
+      return courseIntegrationRuntime.startOutboxWorker();
+    }
+    return null;
+  };
   const {
     authenticate,
+    optionalAuth,
     authorizeAnyPermission,
   } = require("./middleware/authMiddleware");
   app.use(
@@ -297,6 +306,9 @@ if (coursesEnabled) {
     adminWriteLimiter,
     createCourseIntegrationAdminRoutes({
       service: createCourseIntegrationMappingService(db),
+      outbox: courseIntegrationRuntime.outbox,
+      ownership: courseIntegrationRuntime.ownership,
+      db,
       authenticate,
       authorizeAnyPermission,
     }),
@@ -320,9 +332,11 @@ if (coursesEnabled) {
       recalculateVip: (id, client) => require("./models/User").recalculateVipSummary(id, client),
       sendRightsEmail: data => require("./services/emailService").sendVideoRightsEmail(data),
       salesEnabled: () => parseFeatureFlag(process.env.CSCA_VIDEO_COMMERCE_SALES_ENABLED, "CSCA_VIDEO_COMMERCE_SALES_ENABLED"),
+      courseOutbox: courseIntegrationRuntime.outbox,
+      courseOwnership: courseIntegrationRuntime.ownership,
     });
     app.use("/api/video-commerce", adminWriteLimiter, createVideoShopRoutes({ service: videoAdmin,
-      coupons: createVideoCouponAdminService({ db, admin: videoAdmin }), authenticate, authorizePermission }));
+      coupons: createVideoCouponAdminService({ db, admin: videoAdmin }), authenticate, authorizePermission, optionalAuth }));
     app.use("/api/video-commerce/payments", adminWriteLimiter, createVideoPaymentRoutes({
       service: require("./services/videoPaymentRuntime"),
       authenticate,
@@ -387,6 +401,7 @@ try {
     console.log(`❤️  Health: http://localhost:${PORT}/health`);
 
     await runOptimizations();
+    if (startCourseOutboxWorker) startCourseOutboxWorker();
   });
 
   // Make io accessible to routes via app.locals
@@ -396,6 +411,7 @@ try {
   const server = app.listen(PORT, async () => {
     console.log(`🚀 Server running at http://localhost:${PORT}`);
     await runOptimizations();
+    if (startCourseOutboxWorker) startCourseOutboxWorker();
   });
   configureServerTimeouts(server);
 }

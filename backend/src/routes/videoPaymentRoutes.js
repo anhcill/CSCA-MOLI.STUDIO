@@ -14,6 +14,7 @@ function createVideoPaymentRoutes({ service, authenticate, authorizePermission }
     router.get('/admin/coupons/:id/scopes',handle(req=>service.couponScopes(req.params.id)));
     router.put('/admin/coupons/:id/scopes',handle(req=>service.setCouponScopes(req.params.id,req.body.scopes,req.user.id)));
     router.patch('/admin/products/:type/:id/config',handle(req=>service.configureProduct(req.params.type,req.params.id,req.body,req.user.id)));
+    router.post('/admin/orders/:orderId/refund',handle(req=>service.refundOrder(req.params.orderId,{reason:req.body?.reason,refundReference:req.body?.refundReference,actorId:req.user.id})));
   }
   router.post('/quote',handle(req=>service.quote(req.user.id,req.body)));
   router.post('/orders',handle(req=>service.createOrder(req.user.id,req.body),201));

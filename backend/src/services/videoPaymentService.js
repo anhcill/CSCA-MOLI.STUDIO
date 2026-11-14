@@ -10,7 +10,7 @@ const hash = value => crypto.createHash('sha256').update(JSON.stringify(value)).
 const fail = (code, message, status = 409) => { throw new CourseApiError(status, code, message); };
 const money = value => Number.isSafeInteger(Number(value)) && Number(value) >= 0 && Number(value) <= 2147483647;
 
-function createVideoPaymentService({ db, gateway, recalculateVip, sendEmail, now = () => new Date(), salesEnabled = () => false }) {
+function createVideoPaymentService({ db, gateway, recalculateVip, sendEmail, now = () => new Date(), salesEnabled = () => false, courseOutbox = null, courseOwnership = null }) {
   async function tx(work) {
     if (db.transaction) return db.transaction(work);
     const client = await db.pool.connect();
@@ -82,6 +82,33 @@ function createVideoPaymentService({ db, gateway, recalculateVip, sendEmail, now
   }
 
   async function checkOverlap(client, userId, snapshot) {
+    const mappingLookup = courseOutbox
+      ? await courseOutbox.resolveCourseMappingsForPurchase(client, {
+          courseIds: snapshot.video.courseIds,
+          videoPackageId: snapshot.video.packageId,
+          requireMappings: false,
+        })
+      : { syncEnabled: false, mappings: [] };
+    if (courseOwnership) {
+      const ownership = await courseOwnership.evaluatePackageOwnership(userId, {
+        courseIds: snapshot.video.courseIds,
+        videoPackageId: snapshot.video.packageId,
+        client,
+        currentNow: now(),
+      });
+      if (ownership.pendingSyncCourseIds.length > 0) {
+        fail('PENDING_SYNC', 'Quyền truy cập đang được đồng bộ với CSCA-Course, vui lòng chờ.');
+      }
+      if (ownership.blockedCourseIds.length > 0) {
+        fail('EXTERNAL_GRANT_BLOCKED', 'Tài khoản đã có bản ghi quyền đang tạm khóa trên CSCA-Course; không thể mua trùng.');
+      }
+      if (ownership.externalOwnedCourseIds.length > 0) {
+        fail('ALREADY_OWNED', 'Bạn đã sở hữu khóa học này trên hệ thống CSCA-Course.');
+      }
+      if (mappingLookup.syncEnabled && (ownership.owned || ownership.localOwnedCourseIds.length > 0)) {
+        fail('ALREADY_OWNED', 'Bạn đã sở hữu gói/khóa học này và quyền truy cập vẫn đang còn hiệu lực.');
+      }
+    }
     if (snapshot.renewalMode !== 'unconfigured') return;
     const rights = await client.query(`SELECT e.id FROM user_video_entitlements e
       JOIN video_entitlement_courses ec ON ec.entitlement_id = e.id
@@ -130,8 +157,14 @@ function createVideoPaymentService({ db, gateway, recalculateVip, sendEmail, now
     return { ...snapshot, ...totals, quoteHash: hash({ snapshot, totals }) };
   }
 
+  async function syncOwnershipBeforeTx(userId) {
+    if (!courseOwnership) return;
+    await courseOwnership.syncUserOwnershipFromCourse(userId, { throwOnError: false }).catch(() => {});
+  }
+
   async function quote(userIdValue, input) {
     const userId = positiveId(userIdValue), choice = selection(input);
+    await syncOwnershipBeforeTx(userId);
     return tx(async client => ({ ...await quoteLocked(client, await lockUser(client, userId), choice), salesEnabled: salesEnabled() }));
   }
 
@@ -142,19 +175,21 @@ function createVideoPaymentService({ db, gateway, recalculateVip, sendEmail, now
   }
   function orderDto(row) {
     return { orderId: row.transaction_code, type: row.product_type, productId: Number(row.product_id),
-      status: row.fulfilled_at ? 'completed' : row.paid_at ? 'awaiting_fulfillment' : row.received_amount > 0 ? 'payment_review' : row.status,
+      status: row.refunded_at ? 'refunded' : row.fulfilled_at ? 'completed' : row.paid_at ? 'awaiting_fulfillment' : row.received_amount > 0 ? 'payment_review' : row.status,
       amount: Number(row.amount), snapshot: row.snapshot, expiresAt: row.expires_at,
-      payment: row.fulfilled_at || ['cancelled','expired'].includes(row.status) ? null : (row.provider_payment ? {
+      payment: row.refunded_at || row.fulfilled_at || ['cancelled','expired'].includes(row.status) ? null : (row.provider_payment ? {
         ...row.provider_payment,
         bankName: row.provider_payment.bankName || (row.provider_payment.bin ? bankNameFromBin(row.provider_payment.bin) : null),
       } : null),
-      rights: row.result || null, fulfillmentError: row.fulfillment_error || null };
+      rights: row.result || null, fulfillmentError: row.fulfillment_error || null,
+      ...(row.refunded_at ? { refundedAt: row.refunded_at, refundReason: row.refund_reason || null } : {}) };
   }
   async function createOrder(userIdValue, input) {
     const userId = positiveId(userIdValue), choice = selection(input);
     if (typeof input.idempotencyKey !== 'string' || !/^[A-Za-z0-9_-]{8,120}$/.test(input.idempotencyKey)) fail('IDEMPOTENCY_KEY_REQUIRED', 'Use an 8-120 character request key.', 422);
     if (typeof input.quoteHash !== 'string' || !/^[0-9a-f]{64}$/.test(input.quoteHash)) fail('QUOTE_REQUIRED', 'Obtain a current quote before creating the order.', 422);
     const requestHash = hash({ choice, quoteHash: input.quoteHash });
+    await syncOwnershipBeforeTx(userId);
     let row = await tx(async client => {
       const user = await lockUser(client, userId);
       const previous = (await client.query(`${orderSql} WHERE o.user_id=$1 AND o.request_key=$2`, [userId, input.idempotencyKey])).rows[0];
@@ -294,10 +329,41 @@ function createVideoPaymentService({ db, gateway, recalculateVip, sendEmail, now
           }
         }
         const result = { videoEntitlementId:Number(right.id),videoExpiresAt:videoExpiry,vipEntitlementId,vipExpiresAt:vipExpiry };
+        const hasSnapshotCol = (await client.query(
+          "SELECT 1 FROM information_schema.columns WHERE table_name='user_video_entitlements' AND column_name='snapshot' LIMIT 1",
+        )).rows.length > 0;
+        if (hasSnapshotCol) {
+          await client.query(
+            'UPDATE user_video_entitlements SET snapshot = $2::jsonb, vip_entitlement_id = COALESCE(vip_entitlement_id, $3) WHERE id = $1',
+            [right.id, JSON.stringify(snapshot), vipEntitlementId],
+          );
+        }
         await client.query('UPDATE video_commerce_orders SET fulfilled_at=$2,fulfillment_error=NULL,result=$3::jsonb WHERE transaction_id=$1', [id,now(),JSON.stringify(result)]);
         await client.query("UPDATE transactions SET status='completed',paid_at=$2,vip_expires_at=$3,payment_channel=$4,updated_at=NOW() WHERE id=$1",
           [id,row.paid_at,vipExpiry,Number(row.amount) ? 'payos' : 'coupon_free']);
         await client.query('INSERT INTO video_payment_outbox(transaction_id) VALUES ($1) ON CONFLICT DO NOTHING', [id]);
+        if (courseOutbox) {
+          const mappingLookup = await courseOutbox.resolveCourseMappingsForPurchase(client, {
+            courseIds: snapshot.video.courseIds,
+            videoPackageId: snapshot.video.packageId,
+          });
+          if (mappingLookup.syncEnabled) {
+            await courseOutbox.enqueueProvisionAndGrantTx(client, {
+              user,
+              transactionId: id,
+              transactionCode: row.transaction_code,
+              entitlementId: right.id,
+              videoPackageId: snapshot.video.packageId,
+              productType: snapshot.type,
+              durationMode: snapshot.video.durationMode,
+              durationDays: snapshot.video.durationDays,
+              validFrom: now(),
+              validUntil: videoExpiry,
+              snapshot,
+              mappedCourses: mappingLookup.mappings,
+            });
+          }
+        }
       });
     } catch (error) {
       await db.query('UPDATE video_commerce_orders SET fulfillment_error=$2 WHERE transaction_id=$1 AND fulfilled_at IS NULL',
@@ -483,7 +549,113 @@ function createVideoPaymentService({ db, gateway, recalculateVip, sendEmail, now
       return config;
     });
   }
-  return {quote,createOrder,acceptPayment,status,cancel,history,deliverEmail,maintenance,couponScopes,setCouponScopes,configureProduct,productSnapshot};
+
+  /**
+   * Refunds a paid video/combo order and revokes ONLY the entitlement(s) tied to that specific transaction.
+   * Sibling orders, manual grants, and Course/Management entitlements remain completely intact.
+   */
+  async function refundOrder(orderIdOrCode, { reason: rawReason, actorId: rawActorId = null, refundReference = null } = {}) {
+    if (typeof rawReason !== 'string' || rawReason.trim().length < 3 || rawReason.length > 1000) {
+      fail('REASON_REQUIRED', 'Enter a refund reason (3-1000 characters).', 422);
+    }
+    const reasonText = rawReason.trim();
+    const actorId = rawActorId == null ? null : positiveId(rawActorId, 'actorId');
+    const refundRef = typeof refundReference === 'string' && refundReference.trim()
+      ? refundReference.trim().slice(0, 180)
+      : null;
+
+    return tx(async client => {
+      const lookupRes = Number.isSafeInteger(Number(orderIdOrCode)) && Number(orderIdOrCode) > 0
+        ? await client.query(`${orderSql} WHERE o.transaction_id=$1`, [Number(orderIdOrCode)])
+        : await client.query(`${orderSql} WHERE t.transaction_code=$1`, [String(orderIdOrCode || '')]);
+      const found = lookupRes.rows[0];
+      if (!found) fail('ORDER_NOT_FOUND', 'Order not found.', 404);
+
+      await lockUser(client, found.user_id);
+      const row = await orderById(client, found.transaction_id, true);
+      if (row.refunded_at) {
+        return { ...orderDto(row), alreadyRefunded: true, revokedEntitlementIds: [] };
+      }
+      if (!row.paid_at && !row.fulfilled_at) {
+        fail('ORDER_NOT_PAID', 'Only paid orders can be refunded.', 409);
+      }
+
+      const refundTimestamp = now();
+      const entitlements = (await client.query(
+        'SELECT * FROM user_video_entitlements WHERE transaction_id=$1 FOR UPDATE',
+        [row.transaction_id],
+      )).rows;
+
+      const revokedEntitlementIds = [];
+      let shouldRecalcVip = false;
+
+      for (const ent of entitlements) {
+        const courseIds = (await client.query(
+          'SELECT course_id FROM video_entitlement_courses WHERE entitlement_id=$1 ORDER BY course_id ASC',
+          [ent.id],
+        )).rows.map(r => Number(r.course_id));
+
+        if (ent.status !== 'revoked') {
+          await client.query(
+            `UPDATE user_video_entitlements
+             SET status='revoked', revoked_at=$2, revoked_by=$3, reason=COALESCE(reason, $4)
+             WHERE id=$1`,
+            [ent.id, refundTimestamp, actorId, reasonText],
+          );
+          revokedEntitlementIds.push(Number(ent.id));
+        }
+
+        const hasVipCol = (await client.query(
+          "SELECT 1 FROM information_schema.columns WHERE table_name='user_video_entitlements' AND column_name='vip_entitlement_id' LIMIT 1",
+        )).rows.length > 0;
+        const vipEntId = (hasVipCol ? ent.vip_entitlement_id : null) || row.result?.vipEntitlementId || null;
+        if (vipEntId) {
+          await client.query(
+            'UPDATE user_vip_entitlements SET is_active=FALSE WHERE id=$1 AND user_id=$2 AND transaction_id=$3',
+            [vipEntId, row.user_id, row.transaction_id],
+          );
+          shouldRecalcVip = true;
+        }
+
+        if (courseOutbox) {
+          await courseOutbox.enqueueEntitlementRevokeTx(client, {
+            userId: row.user_id,
+            transactionId: row.transaction_id,
+            entitlementId: ent.id,
+            courseIds,
+            videoPackageId: ent.video_package_id,
+            reason: reasonText,
+            revokedAt: refundTimestamp,
+            validFrom: ent.starts_at,
+            validUntil: ent.expires_at,
+            actorId,
+            refundReference: refundRef,
+          });
+        }
+      }
+
+      if (shouldRecalcVip) {
+        await recalculateVideoVip(client, row.user_id, recalculateVip);
+      }
+
+      const hasRefundCols = (await client.query(
+        "SELECT 1 FROM information_schema.columns WHERE table_name='video_commerce_orders' AND column_name='refunded_at' LIMIT 1",
+      )).rows.length > 0;
+      if (hasRefundCols) {
+        await client.query(
+          `UPDATE video_commerce_orders
+           SET refunded_at=$2, refund_reason=$3, refunded_by=$4, refund_reference=$5
+           WHERE transaction_id=$1`,
+          [row.transaction_id, refundTimestamp, reasonText, actorId, refundRef],
+        );
+      }
+      await client.query("UPDATE transactions SET status='refunded', updated_at=NOW() WHERE id=$1", [row.transaction_id]);
+
+      const updated = await orderById(client, row.transaction_id);
+      return { ...orderDto(updated), alreadyRefunded: false, revokedEntitlementIds };
+    });
+  }
+  return {quote,createOrder,acceptPayment,status,cancel,history,deliverEmail,maintenance,couponScopes,setCouponScopes,configureProduct,productSnapshot,refundOrder};
 }
 
 module.exports={createVideoPaymentService};
