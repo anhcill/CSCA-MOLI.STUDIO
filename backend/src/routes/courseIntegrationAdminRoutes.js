@@ -6,6 +6,9 @@ const { sendData, sendCourseError, CourseApiError } = require("../utils/courseRe
  */
 function createCourseIntegrationAdminRoutes({
   service,
+  outbox = null,
+  ownership = null,
+  db = null,
   authenticate,
   authorizeAnyPermission,
 }) {
@@ -73,6 +76,75 @@ function createCourseIntegrationAdminRoutes({
       }),
     ),
   );
+
+  if (db) {
+    router.get(
+      "/outbox",
+      handle(async (req) => {
+        const status = typeof req.query.status === "string" ? req.query.status.trim().toLowerCase() : null;
+        const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 200);
+        const rows = (await db.query(
+          `SELECT id, event_id, idempotency_key, correlation_id, event_type, aggregate_id,
+                  status, remote_status, remote_inbox_id, attempt_count, max_attempts,
+                  next_retry_at, sent_at, remote_processed_at, last_status_checked_at,
+                  last_error_code, last_error_message, user_id, transaction_id, entitlement_id,
+                  external_grant_id, external_course_id, created_at, updated_at
+           FROM integration_outbox
+           WHERE ($1::text IS NULL OR status = $1)
+           ORDER BY id DESC
+           LIMIT $2`,
+          [status || null, limit],
+        )).rows;
+        return rows;
+      }),
+    );
+
+    router.get(
+      "/conflicts",
+      handle(async (req) => {
+        const status = typeof req.query.status === "string" ? req.query.status.trim().toLowerCase() : null;
+        const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 200);
+        const rows = (await db.query(
+          `SELECT id, source_system, conflict_type, status, external_user_id, external_course_id,
+                  external_grant_id, candidate_user_id, existing_user_id, local_course_id,
+                  correlation_id, source_updated_at, reason, resolution_note, resolved_at, created_at
+           FROM integration_conflicts
+           WHERE ($1::text IS NULL OR status = $1)
+           ORDER BY id DESC
+           LIMIT $2`,
+          [status || null, limit],
+        )).rows;
+        return rows;
+      }),
+    );
+  }
+
+  if (outbox) {
+    router.post(
+      "/outbox/sync",
+      handle((req) =>
+        outbox.processAvailableOutboxJobs({
+          workerId: `admin-sync:${req.user?.id ?? "system"}`,
+          limit: Math.min(Math.max(Number(req.body?.limit) || 25, 1), 100),
+          reconcileBefore: req.body?.reconcileBefore !== false,
+          reconcileAfter: req.body?.reconcileAfter !== false,
+        }),
+      ),
+    );
+  }
+
+  if (ownership) {
+    router.post(
+      "/ownership/sync",
+      handle((req) =>
+        ownership.syncUserOwnershipFromCourse(req.body?.userId, {
+          localCourseIds: Array.isArray(req.body?.localCourseIds) ? req.body.localCourseIds : null,
+          correlationId: req.body?.correlationId || null,
+          throwOnError: true,
+        }),
+      ),
+    );
+  }
 
   return router;
 }

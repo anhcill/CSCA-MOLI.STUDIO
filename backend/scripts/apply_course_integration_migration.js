@@ -6,6 +6,10 @@ const MIGRATION_FILE = path.join(
   __dirname,
   "../../database/migrations/076_moly_course_integration_foundation.sql",
 );
+const MIGRATION_FILES = [
+  MIGRATION_FILE,
+  path.join(__dirname, "../../database/migrations/077_moly_payment_outbox_sync.sql"),
+];
 
 const TABLES = [
   "external_identities",
@@ -26,7 +30,9 @@ async function applyMigration(client) {
   }
   await client.query("BEGIN");
   try {
-    await client.query(fs.readFileSync(MIGRATION_FILE, "utf8"));
+    for (const file of MIGRATION_FILES) {
+      await client.query(fs.readFileSync(file, "utf8"));
+    }
     await client.query("COMMIT");
   } catch (error) {
     await client.query("ROLLBACK");
@@ -85,4 +91,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { applyMigration, MIGRATION_FILE, TABLES };
+module.exports = { applyMigration, MIGRATION_FILE, MIGRATION_FILES, TABLES };
