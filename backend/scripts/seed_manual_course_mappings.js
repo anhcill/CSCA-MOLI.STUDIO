@@ -19,8 +19,11 @@ async function applyManualMappingsFromList(database, entries = []) {
 }
 
 async function main() {
-  require("dotenv").config();
-  const db = require("../config/database");
+  const targetUrl = process.env.COURSE_INTEGRATION_DATABASE_URL;
+  if (!targetUrl) throw new Error("Set COURSE_INTEGRATION_DATABASE_URL to the intended database.");
+  const { Pool } = require("pg");
+  const pool = new Pool({ connectionString: targetUrl, connectionTimeoutMillis: 10000 });
+  const db = { pool, query: (text, values) => pool.query(text, values) };
   try {
     const fileIndex = process.argv.indexOf("--file");
     const filePath = fileIndex >= 0 ? process.argv[fileIndex + 1] : "";
