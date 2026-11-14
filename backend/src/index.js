@@ -282,6 +282,25 @@ if (coursesEnabled) {
   app.use("/api/admin/courses", adminWriteLimiter, require("./routes/adminCourseRoutes"));
   app.use("/api/admin/course-teaching", adminWriteLimiter, require("./routes/teacherCourseRoutes"));
   app.use("/api/admin/course-media", require("./routes/courseMediaRoutes"));
+  const {
+    createCourseIntegrationMappingService,
+  } = require("./services/courseIntegrationMappingService");
+  const {
+    createCourseIntegrationAdminRoutes,
+  } = require("./routes/courseIntegrationAdminRoutes");
+  const {
+    authenticate,
+    authorizeAnyPermission,
+  } = require("./middleware/authMiddleware");
+  app.use(
+    "/api/admin/course-integrations",
+    adminWriteLimiter,
+    createCourseIntegrationAdminRoutes({
+      service: createCourseIntegrationMappingService(db),
+      authenticate,
+      authorizeAnyPermission,
+    }),
+  );
   if (parseFeatureFlag(process.env.CSCA_BUNNY_STREAM_ENABLED, 'CSCA_BUNNY_STREAM_ENABLED')) {
     app.use('/api/admin/bunny-media', require('./routes/bunnyMediaRoutes'));
   }
