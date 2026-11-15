@@ -29,7 +29,7 @@ export function LearningSidebar({
 }: {
   courseSlug: string;
   sections: CurriculumSectionDto[];
-  activeLessonId: number;
+  activeLessonId: number | string;
   progressPct: number;
 }) {
   const lessons = sections.flatMap((section) => section.lessons);
@@ -90,12 +90,13 @@ export function LearningSidebar({
                         {item.durationSeconds > 0 ? <span className={`shrink-0 text-[11px] tabular-nums ${active ? 'text-white/70' : 'text-[#8f867e] dark:text-slate-500'}`}>{durationLabel(item.durationSeconds)}</span> : null}
                       </>
                     );
-                    return item.isLocked ? (
+                    const allowLockedNavigation = Boolean(item.href);
+                    return item.isLocked && !allowLockedNavigation ? (
                       <div key={item.id} className="flex gap-2 border-t border-[#eee6df] px-5 py-3.5 text-sm text-[#aaa098] dark:border-[#26354b] dark:text-slate-600">{content}</div>
                     ) : (
                       <Link
                         key={item.id}
-                        href={`/hoc/${courseSlug}/bai-hoc/${item.id}`}
+                        href={item.href || `/hoc/${courseSlug}/bai-hoc/${item.id}`}
                         aria-current={active ? 'page' : undefined}
                         className={`flex gap-2 border-t border-[#eee6df] px-5 py-3.5 text-sm transition dark:border-[#26354b] ${active ? 'bg-[#ad2033] font-bold text-white shadow-inner' : 'font-semibold text-[#5e5b5a] hover:bg-[#f7efe7] hover:text-[#902033] dark:text-slate-300 dark:hover:bg-[#13223a] dark:hover:text-[#f29aa7]'}`}
                       >

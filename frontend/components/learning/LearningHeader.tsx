@@ -7,11 +7,13 @@ export function LearningHeader({
   courseTitle,
   progressPct,
   onNotesClick,
+  badgeLabel,
 }: {
   courseSlug: string;
   courseTitle: string;
   progressPct: number;
   onNotesClick: () => void;
+  badgeLabel?: string | null;
 }) {
   const progress = Math.min(100, Math.max(0, progressPct));
   const roundedProgress = Math.round(progress);
@@ -27,6 +29,11 @@ export function LearningHeader({
             <Link href="/khoa-hoc" className="shrink-0 font-black text-[#38aaa4] hover:text-emerald-300">CSCA</Link>
             <FiChevronRight className="shrink-0 text-[#b69472]" />
             <Link href={`/khoa-hoc/${courseSlug}`} className="truncate font-bold text-[#f2d1a8] hover:text-white">{courseTitle}</Link>
+            {badgeLabel ? (
+              <span className="shrink-0 rounded-full border border-[#49b6ac]/40 bg-[#49b6ac]/15 px-2.5 py-0.5 text-[11px] font-black text-[#7ee3d8]">
+                {badgeLabel}
+              </span>
+            ) : null}
           </div>
         </div>
 

@@ -230,6 +230,23 @@ function createCourseIntegrationAdminRoutes({
         }),
       ),
     );
+
+    if (typeof catalogSync.runCurriculumBackfill === "function") {
+      router.post(
+        "/catalog/courses/:courseId/curriculum/backfill",
+        handle((req) => {
+          const idParam = String(req.params.courseId || "").trim();
+          const useRemote = req.body?.remote === true || req.query?.remote === "true";
+          return catalogSync.runCurriculumBackfill({
+            courseId: useRemote ? null : Number(idParam),
+            remoteCourseId: useRemote ? idParam : (req.body?.remoteCourseId || null),
+            profileId: req.body?.profileId || null,
+            limit: Math.min(Math.max(Number(req.body?.limit) || 200, 1), 500),
+            correlationId: req.headers["x-correlation-id"] || req.body?.correlationId || null,
+          });
+        }),
+      );
+    }
   }
 
   if (db) {

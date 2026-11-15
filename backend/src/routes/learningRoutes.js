@@ -1,11 +1,16 @@
 const express = require("express");
 const controller = require("../controllers/learningController");
 const videoPlaybackController = require("../controllers/videoPlaybackController");
-const { authenticate } = require("../middleware/authMiddleware");
+const { authenticate, optionalAuth } = require("../middleware/authMiddleware");
 const { playbackLimiter, progressLimiter } = require("./courseRateLimiters");
 const { courseFiles } = require("../middleware/courseFileUpload");
 
 const router = express.Router();
+
+// Day 3 external CSCA-Course workspace routes: optionalAuth allows public preview units
+// without login while non-preview access and delegated minting require live authenticated entitlement.
+router.get("/external/courses/:courseSlugOrId/workspace", optionalAuth, controller.getExternalWorkspace);
+router.get("/external/offerings/:profileId/units/:unitId", optionalAuth, controller.getExternalUnit);
 
 router.use(authenticate);
 router.get("/courses/:courseId", controller.getLearningCourse);

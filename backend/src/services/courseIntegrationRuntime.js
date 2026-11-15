@@ -4,6 +4,7 @@ const { createCourseOutboxSyncService } = require("./courseOutboxSyncService");
 const { createCourseOwnershipProjectionService } = require("./courseOwnershipProjectionService");
 const { createCourseReconciliationService } = require("./courseReconciliationService");
 const { createMolyCourseCatalogSyncService } = require("./molyCourseCatalogSyncService");
+const { createMolyCourseWorkspaceService } = require("./molyCourseWorkspaceService");
 const {
   createIntegrationLogger,
   isCatalogSyncKillSwitchActive,
@@ -15,6 +16,7 @@ const outbox = createCourseOutboxSyncService({ db, client });
 const ownership = createCourseOwnershipProjectionService({ db, client, outbox });
 const reconciliation = createCourseReconciliationService({ db, client, outbox });
 const catalogSync = createMolyCourseCatalogSyncService({ db, client });
+const workspace = createMolyCourseWorkspaceService({ db, client, ownership });
 const workerLog = createIntegrationLogger({ component: "course-worker" });
 
 let workerTimer = null;
@@ -110,6 +112,7 @@ module.exports = {
   ownership,
   reconciliation,
   catalogSync,
+  workspace,
   startOutboxWorker,
   stopOutboxWorker,
 };

@@ -86,12 +86,23 @@ export function CourseAccessCard({ course }: { course: CourseDetailDto }) {
   const blockCode = course.access.blockCode ?? course.blockCode ?? null;
   const isUnpricedBlocked = !course.access.canLearn && !course.owned
     && (course.checkoutReady === false || blockCode === 'PRICE_NOT_CONFIGURED');
+  const isCscaCourse = course.contentOrigin === 'csca_course';
+  const firstUnitHref = course.firstUnitHref || course.curriculum[0]?.lessons[0]?.href || null;
   const firstFreePreviewLesson = !course.access.canLearn
     ? course.curriculum.flatMap((s) => s.lessons).find((l) => l.isFreePreview)
     : undefined;
 
-  const openFirstLesson = (lastLessonId?: number | null) => {
+  const openFirstLesson = (lastLessonId?: number | string | null) => {
+    if (isCscaCourse && firstUnitHref) {
+      router.push(firstUnitHref);
+      return;
+    }
     const lessonId = lastLessonId ?? course.curriculum[0]?.lessons[0]?.id;
+    const lessonHref = course.curriculum.flatMap((s) => s.lessons).find((l) => l.id === lessonId)?.href;
+    if (lessonHref) {
+      router.push(lessonHref);
+      return;
+    }
     if (!lessonId) {
       setError('Khóa học chưa có bài học được xuất bản. Vui lòng quay lại sau.');
       setBusy(false);
@@ -191,27 +202,45 @@ export function CourseAccessCard({ course }: { course: CourseDetailDto }) {
           </div>
         ) : null}
 
-        {canLaunchCourse ? (
-          <div className="mb-3">
-            <CourseSsoLaunchButton courseId={course.id} targetPath={ssoTargetPath} label="Vào học" />
+        {isCscaCourse && (course.access.canLearn || course.owned) && firstUnitHref ? (
+          <div className="space-y-2.5">
+            <button
+              type="button"
+              onClick={() => router.push(firstUnitHref)}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 py-4 font-black text-white shadow-lg transition hover:-translate-y-0.5 hover:bg-indigo-700 dark:bg-indigo-600 dark:hover:bg-indigo-700"
+            >
+              <FiPlayCircle className="text-xl" />
+              {course.progress ? 'Tiếp tục học trên Moly' : 'Vào học ngay trên Moly'}
+            </button>
+            {canLaunchCourse ? (
+              <CourseSsoLaunchButton courseId={course.id} targetPath={ssoTargetPath} label="Mở trên CSCA-Course" className="!bg-slate-100 !text-slate-800 hover:!bg-slate-200 dark:!bg-slate-800 dark:!text-slate-100" />
+            ) : null}
           </div>
-        ) : null}
+        ) : (
+          <>
+            {canLaunchCourse ? (
+              <div className="mb-3">
+                <CourseSsoLaunchButton courseId={course.id} targetPath={ssoTargetPath} label="Vào học" />
+              </div>
+            ) : null}
 
-        {(!canLaunchCourse || course.curriculum.some((section) => section.lessons.length > 0)) ? (
-          <button
-            type="button"
-            onClick={handleAction}
-            disabled={busy || ownershipStatus === 'pending_sync' || ownershipStatus === 'grant_blocked' || isUnpricedBlocked}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 py-4 font-black text-white shadow-lg transition hover:-translate-y-0.5 hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-800 dark:hover:bg-indigo-700"
-          >
-            {course.access.canLearn || course.access.canEnroll ? <FiPlayCircle className="text-xl" /> : <FiPackage className="text-xl" />}
-            {busy ? 'Đang xử lý...' : actionLabel(course)}
-          </button>
-        ) : null}
+            {(!canLaunchCourse || course.curriculum.some((section) => section.lessons.length > 0)) ? (
+              <button
+                type="button"
+                onClick={handleAction}
+                disabled={busy || ownershipStatus === 'pending_sync' || ownershipStatus === 'grant_blocked' || isUnpricedBlocked}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 py-4 font-black text-white shadow-lg transition hover:-translate-y-0.5 hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-800 dark:hover:bg-indigo-700"
+              >
+                {course.access.canLearn || course.access.canEnroll ? <FiPlayCircle className="text-xl" /> : <FiPackage className="text-xl" />}
+                {busy ? 'Đang xử lý...' : actionLabel(course)}
+              </button>
+            ) : null}
+          </>
+        )}
         {firstFreePreviewLesson ? (
           <button
             type="button"
-            onClick={() => router.push(`/hoc/${course.slug}/bai-hoc/${firstFreePreviewLesson.id}`)}
+            onClick={() => router.push(firstFreePreviewLesson.href || `/hoc/${course.slug}/bai-hoc/${firstFreePreviewLesson.id}`)}
             className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm font-black text-emerald-800 transition hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200"
           >
             <FiPlayCircle className="text-lg" /> Xem bài học thử miễn phí

@@ -264,7 +264,55 @@ async function listExternalOnlyCourses(userId) {
   return result.rows;
 }
 
+async function listExternalFirstUnits(courseIds = []) {
+  const cleanIds = [...new Set((courseIds || []).map(Number).filter((id) => Number.isSafeInteger(id) && id > 0))];
+  if (!cleanIds.length) return new Map();
+
+  const caps = (
+    await db.query(
+      `SELECT
+         to_regclass('course_profile_projections') IS NOT NULL AS has_profiles,
+         to_regclass('course_unit_projections') IS NOT NULL AS has_units`,
+    )
+  ).rows[0];
+  if (!caps?.has_profiles || !caps?.has_units) return new Map();
+
+  const res = await db.query(
+    `SELECT DISTINCT ON (u.local_course_id)
+       u.local_course_id,
+       u.id AS unit_projection_id,
+       p.id AS profile_projection_id,
+       p.remote_profile_id,
+       p.mode
+     FROM course_unit_projections u
+     JOIN course_profile_projections p ON p.id = u.profile_projection_id
+     WHERE u.local_course_id = ANY($1::bigint[])
+       AND u.deleted_at IS NULL
+       AND u.is_published = TRUE
+       AND p.deleted_at IS NULL
+       AND p.status <> 'archived'
+     ORDER BY u.local_course_id ASC,
+              (CASE WHEN p.mode = 'INDEPENDENT' THEN 0 ELSE 1 END) ASC,
+              p.id ASC,
+              u.section_sort_order ASC,
+              u.remote_section_id ASC,
+              u.sort_order ASC,
+              u.id ASC`,
+    [cleanIds],
+  );
+  const byCourse = new Map();
+  for (const row of res.rows) {
+    byCourse.set(Number(row.local_course_id), {
+      unitProjectionId: Number(row.unit_projection_id),
+      profileProjectionId: Number(row.profile_projection_id),
+      remoteProfileId: String(row.remote_profile_id),
+      mode: row.mode,
+    });
+  }
+  return byCourse;
+}
+
 module.exports = {
-  listUserEnrollments, listExternalOnlyCourses, findPublishedLesson, listLessonResources,
+  listUserEnrollments, listExternalOnlyCourses, listExternalFirstUnits, findPublishedLesson, listLessonResources,
   getLessonNavigation, findProgress, upsertProgress, getCourseProgress,
 };

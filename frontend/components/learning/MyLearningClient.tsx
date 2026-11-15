@@ -117,19 +117,25 @@ export function MyLearningClient() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         {items.map(({ course, enrollment }) => {
+          const isCscaCourse = course.contentOrigin === 'csca_course'
+            || Boolean(enrollment.firstUnitHref || course.firstUnitHref);
+          const unitHref = enrollment.firstUnitHref || course.firstUnitHref || null;
           const isExternalOnly = Boolean(
-            enrollment.isExternalOnly
-            || course.isExternalOnly
-            || enrollment.source === 'external'
-            || !enrollment.progress,
+            !isCscaCourse
+            && !unitHref
+            && (
+              enrollment.isExternalOnly
+              || course.isExternalOnly
+              || enrollment.source === 'external'
+              || !enrollment.progress
+            ),
           );
           const progress = isExternalOnly ? 0 : Math.min(100, Math.max(0, enrollment.progress?.completionPct ?? 0));
           const roundedProgress = Math.round(progress);
           const lessonId = isExternalOnly ? null : enrollment.progress?.lastLessonId ?? null;
           const started = !isExternalOnly && (Boolean(lessonId) || progress > 0);
-          const target = lessonId
-            ? `/hoc/${course.slug}/bai-hoc/${lessonId}`
-            : `/khoa-hoc/${course.slug}`;
+          const target = unitHref
+            || (lessonId ? `/hoc/${course.slug}/bai-hoc/${lessonId}` : `/khoa-hoc/${course.slug}`);
           const coverStyle = course.thumbnailUrl
             ? { backgroundImage: `linear-gradient(90deg, rgba(15,23,42,.9), rgba(30,41,59,.45)), url("${course.thumbnailUrl}")` }
             : undefined;
@@ -148,7 +154,7 @@ export function MyLearningClient() {
                         {course.subjectCode}
                       </span>
                       <CourseOwnershipBadge status={course.ownershipStatus || 'owned'} label={course.ownershipLabel} className="bg-white/95" />
-                      {isExternalOnly ? (
+                      {(isExternalOnly || isCscaCourse) ? (
                         <span className="inline-flex rounded-full border border-emerald-300/40 bg-emerald-500/20 px-3 py-1 text-[11px] font-bold text-emerald-100 backdrop-blur">
                           CSCA-Course
                         </span>
@@ -214,19 +220,24 @@ export function MyLearningClient() {
                       <div className="min-w-0">
                         <p className="text-xs font-black uppercase tracking-wider text-slate-400">{started ? 'Học gần nhất' : 'Sẵn sàng bắt đầu'}</p>
                         <p className="mt-1 truncate font-bold text-slate-800 dark:text-slate-100">
-                          {enrollment.progress?.lastLessonTitle || 'Bắt đầu bài học đầu tiên'}
+                          {enrollment.progress?.lastLessonTitle || (isCscaCourse ? 'Mở không gian học trên Moly' : 'Bắt đầu bài học đầu tiên')}
                         </p>
                         {(enrollment.progress?.lastPositionSeconds ?? 0) > 0 ? <p className="mt-1 text-xs text-slate-500">Tiếp tục tại {formatPosition(enrollment.progress?.lastPositionSeconds ?? 0)}</p> : null}
                       </div>
                       <div className="flex shrink-0 flex-wrap items-center gap-2">
+                        <Link href={target} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 font-black text-white shadow-lg shadow-indigo-600/20 transition hover:bg-indigo-700">
+                          {progress >= 100 ? <><FiCheckCircle /> Xem lại</> : started ? <><FiPlay /> Tiếp tục học</> : <>Vào học ngay <FiArrowRight /></>}
+                        </Link>
                         {course.canLaunchCourse ? (
                           <div className="w-full sm:w-auto">
-                            <CourseSsoLaunchButton courseId={course.id} targetPath={course.ssoTargetPath} label="Vào học" />
+                            <CourseSsoLaunchButton
+                              courseId={course.id}
+                              targetPath={course.ssoTargetPath}
+                              label={isCscaCourse ? 'Mở trên CSCA-Course' : 'Vào học'}
+                              className={isCscaCourse ? '!bg-slate-200 !text-slate-800 hover:!bg-slate-300 dark:!bg-slate-800 dark:!text-slate-100' : ''}
+                            />
                           </div>
                         ) : null}
-                        <Link href={target} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 font-black text-white shadow-lg shadow-indigo-600/20 transition hover:bg-indigo-700">
-                          {progress >= 100 ? <><FiCheckCircle /> Xem lại</> : started ? <><FiPlay /> Tiếp tục học</> : <>Bắt đầu học <FiArrowRight /></>}
-                        </Link>
                       </div>
                     </div>
                   </>

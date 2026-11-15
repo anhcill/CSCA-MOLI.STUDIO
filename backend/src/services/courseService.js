@@ -193,12 +193,102 @@ async function listCatalog(query, user) {
   };
 }
 
-async function getCourseLanding(slug, user) {
+function buildProjectedCurriculum(row, projected, canLearnCourse) {
+  const { profiles = [], activeProfile = null, units = [] } = projected || {};
+  const bySection = new Map();
+  const activeProfileRemoteId = activeProfile ? String(activeProfile.remote_profile_id) : null;
+  const activeProfileProjId = activeProfile ? Number(activeProfile.id) : null;
+
+  for (const unit of units) {
+    const secKey = unit.remote_section_id || unit.section_title || "sec:default";
+    if (!bySection.has(secKey)) {
+      bySection.set(secKey, {
+        id: Number(unit.section_sort_order ?? bySection.size) + 1,
+        remoteSectionId: secKey,
+        title: unit.section_title || "Chương 1",
+        description: null,
+        sortOrder: toFiniteNumber(unit.section_sort_order),
+        totalDurationSeconds: 0,
+        lessons: [],
+      });
+    }
+    const sec = bySection.get(secKey);
+    const durationSeconds = toFiniteNumber(unit.duration_seconds);
+    const isPublicPreview = unit.is_public_preview === true;
+    const slugId = `u-${unit.id}`;
+    const href = activeProfileRemoteId
+      ? `/hoc/${row.slug}/bai-hoc/${slugId}?profileId=${encodeURIComponent(activeProfileRemoteId)}`
+      : `/hoc/${row.slug}/bai-hoc/${slugId}`;
+
+    sec.totalDurationSeconds += durationSeconds;
+    sec.lessons.push({
+      id: slugId,
+      unitProjectionId: Number(unit.id),
+      externalKey: `${unit.unit_type}:${unit.remote_unit_id}`,
+      slug: slugId,
+      title: unit.title,
+      summary: unit.summary || null,
+      lessonType: "video",
+      unitType: unit.unit_type,
+      remoteUnitId: String(unit.remote_unit_id),
+      profileId: activeProfileRemoteId,
+      profileProjectionId: activeProfileProjId,
+      href,
+      sortOrder: toFiniteNumber(unit.sort_order),
+      durationSeconds,
+      isFreePreview: isPublicPreview,
+      isPublicPreview,
+      isRequired: true,
+      isLocked: !isPublicPreview && !canLearnCourse,
+      progressStatus: unit.progress_status || "not_started",
+      videoPartCount: toFiniteNumber(unit.video_part_count),
+      hasTheory: unit.has_theory === true,
+      vocabCount: toFiniteNumber(unit.vocab_count),
+      formulaCount: toFiniteNumber(unit.formula_count),
+      fileCount: toFiniteNumber(unit.file_count),
+      quizCount: toFiniteNumber(unit.quiz_count),
+      assignmentCount: toFiniteNumber(unit.assignment_count),
+    });
+  }
+
+  return {
+    projectedProfiles: profiles.map((p) => {
+      const caps = (p.metadata && typeof p.metadata === "object" && p.metadata.capabilities) || {};
+      return {
+        id: Number(p.id),
+        profileProjectionId: Number(p.id),
+        remoteProfileId: String(p.remote_profile_id),
+        externalOfferingId: String(p.external_offering_id),
+        mode: String(p.mode || "MIRROR").toUpperCase(),
+        title: p.title || null,
+        status: p.status || "active",
+        allowFileDownload: caps.allowFileDownload != null
+          ? Boolean(caps.allowFileDownload)
+          : p.allow_file_download !== false,
+        deviceLimit: toFiniteNumber(caps.deviceLimit ?? p.device_limit ?? 2),
+      };
+    }),
+    activeProfileId: activeProfileRemoteId,
+    activeProfileProjectionId: activeProfileProjId,
+    detailCurriculum: [...bySection.values()],
+  };
+}
+
+async function getCourseLanding(slug, user, options = {}) {
   const row = await repository.findPublishedBySlug(String(slug || "").trim());
   if (!row) throw new CourseApiError(404, "COURSE_NOT_FOUND", "Course not found.");
-  const enrollment = user ? await repository.findEnrollment(user.id, row.id) : null;
-  const [{ sections, lessons }, metadata, progressRow, packageEntitlement] = await Promise.all([
-    repository.listCurriculum(row.id, { userId: user?.id || null }),
+  const isExternalOrigin = row.content_origin === "csca_course";
+  const enrollment = user && !isExternalOrigin ? await repository.findEnrollment(user.id, row.id) : null;
+  const [curriculumData, projected, metadata, progressRow, packageEntitlement] = await Promise.all([
+    isExternalOrigin
+      ? Promise.resolve({ sections: [], lessons: [] })
+      : repository.listCurriculum(row.id, { userId: user?.id || null }),
+    isExternalOrigin
+      ? repository.listProjectedCurriculum(row.id, {
+          profileId: options?.profileId || null,
+          userId: user?.id || null,
+        })
+      : Promise.resolve(null),
     repository.listCourseMetadata(row.id),
     user && enrollment ? repository.getCourseProgress(user.id, row.id) : null,
     user && row.access_type === "package"
@@ -208,24 +298,44 @@ async function getCourseLanding(slug, user) {
   const videoEntitlement = user ? await videoAccess.find(user.id, row.id) : null;
   const access = accessView(user, row, enrollment, packageEntitlement, videoEntitlement);
   const ownershipInfo = (await loadCourseOwnershipMap(user?.id || null, [row.id])).get(Number(row.id)) || null;
+  const effectiveCanLearn = isExternalOrigin
+    ? Boolean(access.canLearn || (ownershipInfo?.owned && ownershipInfo?.canLaunchCourse))
+    : access.canLearn;
+
   const totalLessons = toFiniteNumber(progressRow?.required_lessons);
   const completedLessons = toFiniteNumber(progressRow?.completed_lessons);
-  const detailCurriculum = buildCurriculum(sections, lessons).map((section) => {
-    const mappedLessons = section.lessons.map((lesson) => ({
-      id: lesson.id, externalKey: lesson.externalKey, slug: lesson.slug,
-      title: lesson.title, summary: lesson.summary, lessonType: lesson.lessonType,
-      sortOrder: lesson.sortOrder, durationSeconds: lesson.estimatedDurationSeconds,
-      isFreePreview: lesson.isFreePreview, isRequired: lesson.isRequired,
-      isLocked: !lesson.isFreePreview && !access.canLearn,
-      progressStatus: lesson.progress?.status || "not_started",
-    }));
-    return {
-      id: section.id, title: section.title, description: section.description,
-      sortOrder: section.sortOrder,
-      totalDurationSeconds: mappedLessons.reduce((sum, lesson) => sum + lesson.durationSeconds, 0),
-      lessons: mappedLessons,
+  let detailCurriculum;
+  let projectedMeta = {};
+
+  if (isExternalOrigin) {
+    const built = buildProjectedCurriculum(row, projected, effectiveCanLearn);
+    detailCurriculum = built.detailCurriculum;
+    const firstUnit = detailCurriculum[0]?.lessons?.[0] || null;
+    projectedMeta = {
+      projectedProfiles: built.projectedProfiles,
+      activeProfileId: built.activeProfileId,
+      activeProfileProjectionId: built.activeProfileProjectionId,
+      firstUnitHref: firstUnit?.href || null,
     };
-  });
+  } else {
+    detailCurriculum = buildCurriculum(curriculumData.sections, curriculumData.lessons).map((section) => {
+      const mappedLessons = section.lessons.map((lesson) => ({
+        id: lesson.id, externalKey: lesson.externalKey, slug: lesson.slug,
+        title: lesson.title, summary: lesson.summary, lessonType: lesson.lessonType,
+        sortOrder: lesson.sortOrder, durationSeconds: lesson.estimatedDurationSeconds,
+        isFreePreview: lesson.isFreePreview, isRequired: lesson.isRequired,
+        isLocked: !lesson.isFreePreview && !effectiveCanLearn,
+        progressStatus: lesson.progress?.status || "not_started",
+      }));
+      return {
+        id: section.id, title: section.title, description: section.description,
+        sortOrder: section.sortOrder,
+        totalDurationSeconds: mappedLessons.reduce((sum, lesson) => sum + lesson.durationSeconds, 0),
+        lessons: mappedLessons,
+      };
+    });
+  }
+
   const catalogItem = mapCatalogItem({
     ...row,
     enrollment_id: enrollment?.id,
@@ -233,9 +343,10 @@ async function getCourseLanding(slug, user) {
     total_required: totalLessons,
     course_completion_pct: progressRow?.course_completion_pct,
   });
-  const unpricedSyncedBlock = !access.canLearn && !ownershipInfo?.owned && catalogItem.checkoutReady === false;
+  const unpricedSyncedBlock = !effectiveCanLearn && !ownershipInfo?.owned && catalogItem.checkoutReady === false;
   return {
     ...catalogItem,
+    ...projectedMeta,
     descriptionHtml: row.description || "",
     outcomes: metadata.outcomes.map((item) => item.content),
     requirements: metadata.requirements.map((item) => item.content),
@@ -244,19 +355,19 @@ async function getCourseLanding(slug, user) {
     access: {
       accessType: row.access_type,
       canEnroll: unpricedSyncedBlock ? false : access.canEnroll,
-      canLearn: access.canLearn,
-      isEnrolled: access.isEnrolled,
+      canLearn: effectiveCanLearn,
+      isEnrolled: isExternalOrigin ? Boolean(ownershipInfo?.owned) : access.isEnrolled,
       reasonCode: unpricedSyncedBlock ? "PRICE_NOT_CONFIGURED" : access.denialCode,
       ...mergeCourseOwnershipView({
         checkoutReady: catalogItem.checkoutReady,
-        ctaLabel: access.canLearn
+        ctaLabel: effectiveCanLearn
           ? "Tiếp tục học"
           : unpricedSyncedBlock
             ? "Chưa mở bán"
             : access.canEnroll
               ? "Đăng ký học"
               : "Xem quyền truy cập",
-      }, ownershipInfo, access.canLearn),
+      }, ownershipInfo, effectiveCanLearn),
     },
     curriculum: detailCurriculum,
   };

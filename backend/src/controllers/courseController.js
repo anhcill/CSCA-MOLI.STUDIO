@@ -11,7 +11,8 @@ async function listCatalog(req, res) {
 
 async function getCourseLanding(req, res) {
   try {
-    return sendData(res, await courseService.getCourseLanding(req.params.slug, req.user));
+    const profileId = req.query?.profileId || req.query?.profile_id || null;
+    return sendData(res, await courseService.getCourseLanding(req.params.slug, req.user, { profileId }));
   } catch (error) {
     return sendCourseError(res, error);
   }

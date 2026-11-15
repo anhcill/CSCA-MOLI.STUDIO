@@ -148,6 +148,7 @@ function courseDetail(raw: CourseDetailDto & {
     certificateEnabled: raw.certificateEnabled === true,
     curriculum: Array.isArray(raw.curriculum) ? raw.curriculum : [],
     access: {
+      ...(raw.access ?? {}),
       accessType: raw.access?.accessType ?? raw.accessType,
       canEnroll: raw.access?.canEnroll === true,
       canLearn: raw.access?.canLearn === true,
@@ -155,6 +156,10 @@ function courseDetail(raw: CourseDetailDto & {
       reasonCode: raw.access?.reasonCode ?? raw.access?.denialCode ?? null,
       ctaLabel: raw.access?.ctaLabel ?? (raw.access?.canLearn ? 'Tiếp tục học' : 'Đăng ký học'),
     },
+    projectedProfiles: Array.isArray(raw.projectedProfiles) ? raw.projectedProfiles : undefined,
+    activeProfileId: raw.activeProfileId ?? null,
+    activeProfileProjectionId: raw.activeProfileProjectionId ?? null,
+    firstUnitHref: raw.firstUnitHref ?? null,
   };
 }
 
@@ -293,9 +298,10 @@ export const coursesApi = {
     return { ...catalog, items: (catalog.items ?? []).map(catalogItem) };
   },
 
-  async getCourse(slug: string): Promise<CourseDetailDto> {
+  async getCourse(slug: string, options?: { profileId?: string | null }): Promise<CourseDetailDto> {
     const response = await axios.get<ApiSuccessEnvelope<CourseDetailDto>>(
       `/courses/${encodeURIComponent(slug)}`,
+      options?.profileId ? { params: { profileId: options.profileId } } : undefined,
     );
     return courseDetail(unwrapData(response.data));
   },

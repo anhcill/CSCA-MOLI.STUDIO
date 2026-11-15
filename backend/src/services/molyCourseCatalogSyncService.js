@@ -927,6 +927,631 @@ function createMolyCourseCatalogSyncService({
     };
   }
 
+  async function hasUnitProjectionTables(runner = db) {
+    try {
+      const res = await runner.query(
+        `SELECT
+           to_regclass('course_unit_projections') IS NOT NULL AS has_units,
+           to_regclass('course_file_projections') IS NOT NULL AS has_files`,
+      );
+      const row = res.rows[0] || {};
+      return Boolean(row.has_units && row.has_files);
+    } catch {
+      return false;
+    }
+  }
+
+  async function refreshCourseProjectionTotalsTx(runner, localCourseId) {
+    const cid = Number(localCourseId);
+    if (!Number.isSafeInteger(cid) || cid <= 0) return;
+
+    const preferredProfileRes = await runner.query(
+      `SELECT p.id
+       FROM course_profile_projections p
+       LEFT JOIN course_unit_projections u
+         ON u.profile_projection_id = p.id
+        AND u.deleted_at IS NULL
+        AND u.is_published = TRUE
+       WHERE p.local_course_id = $1::bigint
+         AND p.deleted_at IS NULL
+         AND p.status <> 'archived'
+       GROUP BY p.id, p.mode
+       ORDER BY COUNT(u.id) DESC, (CASE WHEN p.mode = 'INDEPENDENT' THEN 0 ELSE 1 END) ASC, p.id ASC
+       LIMIT 1`,
+      [cid],
+    );
+    const preferredProfileId = preferredProfileRes.rows[0]?.id ? Number(preferredProfileRes.rows[0].id) : null;
+
+    if (!preferredProfileId) {
+      await runner.query(
+        `UPDATE courses
+         SET total_sections = 0,
+             total_lessons = 0,
+             total_duration_seconds = 0,
+             content_updated_at = NOW(),
+             updated_at = NOW()
+         WHERE id = $1::bigint
+           AND content_origin = 'csca_course'`,
+        [cid],
+      );
+      return;
+    }
+
+    await runner.query(
+      `UPDATE courses
+       SET total_sections = stats.total_sections,
+           total_lessons = stats.total_lessons,
+           total_duration_seconds = stats.total_duration_seconds,
+           content_updated_at = NOW(),
+           updated_at = NOW()
+       FROM (
+         SELECT
+           COUNT(DISTINCT COALESCE(NULLIF(remote_section_id, ''), NULLIF(section_title, ''), 'sec:default'))::int AS total_sections,
+           COUNT(*)::int AS total_lessons,
+           COALESCE(SUM(duration_seconds), 0)::int AS total_duration_seconds
+         FROM course_unit_projections
+         WHERE profile_projection_id = $2::bigint
+           AND deleted_at IS NULL
+           AND is_published = TRUE
+       ) stats
+       WHERE id = $1::bigint
+         AND content_origin = 'csca_course'`,
+      [cid, preferredProfileId],
+    );
+  }
+
+  async function upsertUnitAndFilesTx(runner, {
+    profileProjectionId,
+    localCourseId,
+    unit,
+    fallbackRevision = 1,
+    defaultUpdatedAt = null,
+  }) {
+    const unitType = unit?.unitType === "class_session" ? "class_session" : "lesson";
+    const remoteUnitId = String(unit?.unitId || unit?.remoteUnitId || "").trim();
+    if (!remoteUnitId) {
+      throw new MolyCatalogSyncError(422, "VALIDATION_ERROR", "Curriculum unit requires unitId.");
+    }
+
+    const revision = Math.max(1, Number(unit?.revision || fallbackRevision || 1));
+    const sourceUpdatedAt = toIso(unit?.sourceUpdatedAt || defaultUpdatedAt || now().toISOString()) || now().toISOString();
+    const deleted = Boolean(unit?.deleted);
+    const deletedAt = deleted ? (toIso(unit?.deletedAt) || sourceUpdatedAt) : null;
+    const isPublished = !deleted && Boolean(unit?.isPublished);
+    const isPublicPreview = isPublished && Boolean(unit?.isPublicPreview);
+
+    const counts = unit?.counts && typeof unit.counts === "object" ? unit.counts : {};
+    const theory = unit?.theory && typeof unit.theory === "object" ? unit.theory : {};
+    const unitFiles = Array.isArray(unit?.files) ? unit.files : [];
+    const safeMetadata = {
+      unitKey: unit?.unitKey || `${unitType}:${remoteUnitId}`,
+      sessionNumber: unit?.sessionNumber != null ? Number(unit.sessionNumber) : null,
+      videoPartCount: Number(unit?.videoPartCount ?? counts.videos ?? 0),
+      videoParts: Array.isArray(unit?.videoParts)
+        ? unit.videoParts.map((vp, idx) => ({
+            partId: vp?.partId != null ? String(vp.partId) : `part-${idx + 1}`,
+            title: vp?.title ? String(vp.title) : `Phần ${idx + 1}`,
+            videoType: vp?.videoType || "primary",
+            durationSeconds: Math.max(0, Number(vp?.durationSeconds || 0)),
+            sortOrder: Number(vp?.sortOrder ?? idx),
+          }))
+        : [],
+      theory: {
+        hasTheory: Boolean(theory.hasTheory),
+        hasTranscript: Boolean(theory.hasTranscript),
+        takeawayCount: Number(theory.takeawayCount || 0),
+        timestampCount: Number(theory.timestampCount || 0),
+        title: theory.title ? String(theory.title) : null,
+        summary: theory.summary ? String(theory.summary) : null,
+        updatedAt: toIso(theory.updatedAt),
+      },
+      quizzes: Array.isArray(unit?.quizzes)
+        ? unit.quizzes.map((q) => ({
+            quizId: q?.quizId != null ? String(q.quizId) : null,
+            title: q?.title ? String(q.title) : "",
+            durationMinutes: q?.durationMinutes != null ? Number(q.durationMinutes) : null,
+            passingScore: q?.passingScore != null ? Number(q.passingScore) : 60,
+          }))
+        : [],
+      assignments: Array.isArray(unit?.assignments)
+        ? unit.assignments.map((a) => ({
+            assignmentId: a?.assignmentId != null ? String(a.assignmentId) : null,
+            title: a?.title ? String(a.title) : "",
+            maxScore: a?.maxScore != null ? Number(a.maxScore) : 10,
+            dueDate: toIso(a?.dueDate),
+          }))
+        : [],
+    };
+
+    const existingUnitRes = await runner.query(
+      `SELECT id, last_revision, source_updated_at
+       FROM course_unit_projections
+       WHERE profile_projection_id = $1::bigint
+         AND unit_type = $2::varchar
+         AND remote_unit_id = $3::varchar
+       FOR UPDATE`,
+      [Number(profileProjectionId), unitType, remoteUnitId],
+    );
+    const existingUnit = existingUnitRes.rows[0] || null;
+    if (
+      existingUnit
+      && isStaleIncoming({
+        incomingRevision: revision,
+        incomingUpdatedAt: sourceUpdatedAt,
+        storedRevision: existingUnit.last_revision,
+        storedUpdatedAt: existingUnit.source_updated_at,
+      })
+    ) {
+      return { action: "stale", unitProjectionId: Number(existingUnit.id), unitType, remoteUnitId };
+    }
+
+    const upsertedUnit = (
+      await runner.query(
+        `INSERT INTO course_unit_projections (
+           profile_projection_id, local_course_id, remote_section_id, section_title, section_sort_order,
+           unit_type, remote_unit_id, title, summary, sort_order, duration_seconds,
+           is_published, is_public_preview, video_part_count, has_theory, vocab_count, formula_count,
+           file_count, quiz_count, assignment_count, last_revision, source_updated_at, deleted_at, metadata
+         )
+         VALUES (
+           $1::bigint, $2::bigint, $3::varchar, $4::varchar, $5::integer,
+           $6::varchar, $7::varchar, $8::varchar, $9::text, $10::integer, $11::integer,
+           $12::boolean, $13::boolean, $14::integer, $15::boolean, $16::integer, $17::integer,
+           $18::integer, $19::integer, $20::integer, $21::bigint, $22::timestamptz, $23::timestamptz, $24::jsonb
+         )
+         ON CONFLICT (profile_projection_id, unit_type, remote_unit_id)
+         DO UPDATE SET
+           local_course_id = EXCLUDED.local_course_id,
+           remote_section_id = EXCLUDED.remote_section_id,
+           section_title = EXCLUDED.section_title,
+           section_sort_order = EXCLUDED.section_sort_order,
+           title = EXCLUDED.title,
+           summary = EXCLUDED.summary,
+           sort_order = EXCLUDED.sort_order,
+           duration_seconds = EXCLUDED.duration_seconds,
+           is_published = EXCLUDED.is_published,
+           is_public_preview = EXCLUDED.is_public_preview,
+           video_part_count = EXCLUDED.video_part_count,
+           has_theory = EXCLUDED.has_theory,
+           vocab_count = EXCLUDED.vocab_count,
+           formula_count = EXCLUDED.formula_count,
+           file_count = EXCLUDED.file_count,
+           quiz_count = EXCLUDED.quiz_count,
+           assignment_count = EXCLUDED.assignment_count,
+           last_revision = EXCLUDED.last_revision,
+           source_updated_at = EXCLUDED.source_updated_at,
+           deleted_at = EXCLUDED.deleted_at,
+           metadata = COALESCE(course_unit_projections.metadata, '{}'::jsonb) || EXCLUDED.metadata,
+           updated_at = NOW()
+         WHERE (
+           course_unit_projections.last_revision < EXCLUDED.last_revision
+           OR (
+             course_unit_projections.last_revision = EXCLUDED.last_revision
+             AND course_unit_projections.source_updated_at <= EXCLUDED.source_updated_at
+           )
+         )
+         RETURNING *`,
+        [
+          Number(profileProjectionId),
+          Number(localCourseId),
+          unit?.sectionId != null ? String(unit.sectionId).slice(0, 128) : "sec:default",
+          String(unit?.sectionTitle || "Chương 1").slice(0, 255),
+          Number.parseInt(unit?.sectionSortOrder ?? 0, 10) || 0,
+          unitType,
+          remoteUnitId.slice(0, 128),
+          String(unit?.title || `Bài học #${remoteUnitId}`).slice(0, 255),
+          unit?.summary != null ? String(unit.summary) : null,
+          Number.parseInt(unit?.sortOrder ?? 0, 10) || 0,
+          Math.max(0, Number.parseInt(unit?.durationSeconds ?? 0, 10) || 0),
+          isPublished,
+          isPublicPreview,
+          Math.max(0, Number.parseInt(unit?.videoPartCount ?? counts.videos ?? 0, 10) || 0),
+          Boolean(theory?.hasTheory),
+          Math.max(0, Number.parseInt(counts.vocab ?? 0, 10) || 0),
+          Math.max(0, Number.parseInt(counts.formulas ?? 0, 10) || 0),
+          Math.max(0, Number.parseInt(counts.files ?? unitFiles.length, 10) || 0),
+          Math.max(0, Number.parseInt(counts.quizzes ?? safeMetadata.quizzes.length, 10) || 0),
+          Math.max(0, Number.parseInt(counts.assignments ?? safeMetadata.assignments.length, 10) || 0),
+          revision,
+          sourceUpdatedAt,
+          deletedAt,
+          JSON.stringify(safeMetadata),
+        ],
+      )
+    ).rows[0];
+
+    if (!upsertedUnit) {
+      return { action: "stale", unitProjectionId: existingUnit ? Number(existingUnit.id) : null, unitType, remoteUnitId };
+    }
+
+    const seenFileIds = [];
+    for (let idx = 0; idx < unitFiles.length; idx += 1) {
+      const f = unitFiles[idx];
+      const remoteFileId = String(f?.fileId || f?.id || "").trim();
+      if (!remoteFileId) continue;
+      seenFileIds.push(remoteFileId);
+
+      const fileUpdatedAt = toIso(f?.updatedAt || sourceUpdatedAt) || sourceUpdatedAt;
+      await runner.query(
+        `INSERT INTO course_file_projections (
+           profile_projection_id, unit_projection_id, remote_file_id, title, original_filename,
+           mime_type, file_kind, size_bytes, is_slide, allow_download_override, sort_order,
+           is_published, last_revision, source_updated_at, deleted_at, metadata
+         )
+         VALUES (
+           $1::bigint, $2::bigint, $3::varchar, $4::varchar, $5::varchar,
+           $6::varchar, $7::varchar, $8::bigint, $9::boolean, $10::boolean, $11::integer,
+           $12::boolean, $13::bigint, $14::timestamptz, $15::timestamptz, $16::jsonb
+         )
+         ON CONFLICT (unit_projection_id, remote_file_id)
+         DO UPDATE SET
+           title = EXCLUDED.title,
+           original_filename = EXCLUDED.original_filename,
+           mime_type = EXCLUDED.mime_type,
+           file_kind = EXCLUDED.file_kind,
+           size_bytes = EXCLUDED.size_bytes,
+           is_slide = EXCLUDED.is_slide,
+           allow_download_override = EXCLUDED.allow_download_override,
+           sort_order = EXCLUDED.sort_order,
+           is_published = EXCLUDED.is_published,
+           last_revision = GREATEST(course_file_projections.last_revision, EXCLUDED.last_revision),
+           source_updated_at = GREATEST(course_file_projections.source_updated_at, EXCLUDED.source_updated_at),
+           deleted_at = EXCLUDED.deleted_at,
+           metadata = COALESCE(course_file_projections.metadata, '{}'::jsonb) || EXCLUDED.metadata,
+           updated_at = NOW()`,
+        [
+          Number(profileProjectionId),
+          Number(upsertedUnit.id),
+          remoteFileId.slice(0, 128),
+          String(f?.title || f?.originalFilename || `Tài liệu ${idx + 1}`).slice(0, 255),
+          f?.originalFilename ? String(f.originalFilename).slice(0, 255) : null,
+          f?.mimeType ? String(f.mimeType).slice(0, 150) : null,
+          f?.fileKind ? String(f.fileKind).slice(0, 50) : "document",
+          f?.sizeBytes != null ? Math.max(0, Number.parseInt(f.sizeBytes, 10) || 0) : null,
+          Boolean(f?.isSlide),
+          f?.allowDownloadOverride != null ? Boolean(f.allowDownloadOverride) : null,
+          Number.parseInt(f?.sortOrder ?? idx, 10) || 0,
+          !deleted && f?.isPublished !== false && isPublished,
+          revision,
+          fileUpdatedAt,
+          deleted ? deletedAt : null,
+          JSON.stringify({ updatedAt: fileUpdatedAt }),
+        ],
+      );
+    }
+
+    // Reconcile detached/removed files for this unit
+    await runner.query(
+      `UPDATE course_file_projections
+       SET deleted_at = COALESCE(deleted_at, $2::timestamptz),
+           is_published = FALSE,
+           last_revision = GREATEST(last_revision, $3::bigint),
+           source_updated_at = GREATEST(source_updated_at, $2::timestamptz),
+           updated_at = NOW()
+       WHERE unit_projection_id = $1::bigint
+         AND deleted_at IS NULL
+         AND NOT (remote_file_id = ANY($4::text[]))`,
+      [Number(upsertedUnit.id), sourceUpdatedAt, revision, seenFileIds],
+    );
+
+    return {
+      action: existingUnit ? "updated" : "inserted",
+      unitProjectionId: Number(upsertedUnit.id),
+      unitType,
+      remoteUnitId,
+    };
+  }
+
+  async function reconcileProfileMissingUnitsTx(runner, {
+    profileProjectionId,
+    activeUnitKeys = [],
+    revision = 1,
+    deletedAt = now().toISOString(),
+  }) {
+    const revNum = Math.max(1, Number(revision || 1));
+    const ts = toIso(deletedAt) || now().toISOString();
+    const res = await runner.query(
+      `UPDATE course_unit_projections
+       SET deleted_at = COALESCE(deleted_at, $2::timestamptz),
+           is_published = FALSE,
+           last_revision = GREATEST(last_revision, $3::bigint),
+           source_updated_at = GREATEST(source_updated_at, $2::timestamptz),
+           updated_at = NOW()
+       WHERE profile_projection_id = $1::bigint
+         AND deleted_at IS NULL
+         AND NOT ((unit_type || ':' || remote_unit_id) = ANY($4::text[]))
+       RETURNING id`,
+      [Number(profileProjectionId), ts, revNum, activeUnitKeys],
+    );
+    const tombUnitIds = res.rows.map((r) => Number(r.id));
+    if (tombUnitIds.length > 0) {
+      await runner.query(
+        `UPDATE course_file_projections
+         SET deleted_at = COALESCE(deleted_at, $2::timestamptz),
+             is_published = FALSE,
+             last_revision = GREATEST(last_revision, $3::bigint),
+             source_updated_at = GREATEST(source_updated_at, $2::timestamptz),
+             updated_at = NOW()
+         WHERE unit_projection_id = ANY($1::bigint[])
+           AND deleted_at IS NULL`,
+        [tombUnitIds, ts, revNum],
+      );
+    }
+    return tombUnitIds.length;
+  }
+
+  async function applyCurriculumRecordTx(runner, payload, {
+    correlationId = null,
+    eventType = "curriculum.upserted",
+    eventDeleted = false,
+    eventDeletedAt = null,
+    envelopeRevision = 1,
+    sourceUpdatedAt = null,
+    reconcileMissing = false,
+  } = {}) {
+    if (!(await hasUnitProjectionTables(runner))) {
+      return { action: "skipped_schema_missing", unitsApplied: 0, staleCount: 0, tombstonedCount: 0 };
+    }
+
+    const effectiveTs = toIso(eventDeletedAt || sourceUpdatedAt || now().toISOString()) || now().toISOString();
+    const revFallback = Math.max(1, Number(envelopeRevision || 1));
+
+    // Tombstone batch path (`curriculum.tombstoned` with `beforeDeleteSnapshot`)
+    if (Array.isArray(payload?.tombstonedUnits) && payload.tombstonedUnits.length > 0) {
+      const remoteCourseId = payload.courseId != null ? String(payload.courseId) : null;
+      const profileIds = Array.isArray(payload.profileIds) ? payload.profileIds.map(String) : [];
+      const profRes = profileIds.length > 0
+        ? await runner.query(
+            `SELECT id, local_course_id
+             FROM course_profile_projections
+             WHERE source_system = $1 AND remote_profile_id = ANY($2::text[])`,
+            [SOURCE_SYSTEM, profileIds],
+          )
+        : (remoteCourseId
+            ? await runner.query(
+                `SELECT id, local_course_id
+                 FROM course_profile_projections
+                 WHERE source_system = $1 AND remote_course_id = $2::varchar`,
+                [SOURCE_SYSTEM, remoteCourseId],
+              )
+            : { rows: [] });
+
+      const profIds = profRes.rows.map((r) => Number(r.id));
+      const touchedCourseIds = new Set(profRes.rows.map((r) => Number(r.local_course_id)).filter(Boolean));
+      let tombstonedCount = 0;
+
+      if (profIds.length > 0) {
+        for (const tu of payload.tombstonedUnits) {
+          const uType = tu?.unitType === "class_session" ? "class_session" : "lesson";
+          const uId = String(tu?.unitId || "").trim();
+          if (!uId) continue;
+          const delTs = toIso(tu?.deletedAt || effectiveTs) || effectiveTs;
+          const updated = await runner.query(
+            `UPDATE course_unit_projections
+             SET deleted_at = COALESCE(deleted_at, $4::timestamptz),
+                 is_published = FALSE,
+                 last_revision = GREATEST(last_revision, $5::bigint),
+                 source_updated_at = GREATEST(source_updated_at, $4::timestamptz),
+                 updated_at = NOW()
+             WHERE profile_projection_id = ANY($1::bigint[])
+               AND unit_type = $2::varchar
+               AND remote_unit_id = $3::varchar
+             RETURNING id`,
+            [profIds, uType, uId, delTs, revFallback],
+          );
+          tombstonedCount += updated.rowCount || 0;
+          const ids = updated.rows.map((r) => Number(r.id));
+          if (ids.length > 0) {
+            await runner.query(
+              `UPDATE course_file_projections
+               SET deleted_at = COALESCE(deleted_at, $2::timestamptz),
+                   is_published = FALSE,
+                   last_revision = GREATEST(last_revision, $3::bigint),
+                   source_updated_at = GREATEST(source_updated_at, $2::timestamptz),
+                   updated_at = NOW()
+               WHERE unit_projection_id = ANY($1::bigint[])`,
+              [ids, delTs, revFallback],
+            );
+          }
+        }
+      }
+
+      for (const cid of touchedCourseIds) {
+        await refreshCourseProjectionTotalsTx(runner, cid);
+      }
+
+      return {
+        action: tombstonedCount > 0 ? "tombstoned" : "processed",
+        unitsApplied: 0,
+        staleCount: 0,
+        tombstonedCount,
+      };
+    }
+
+    const profileItems = Array.isArray(payload?.profiles)
+      ? payload.profiles
+      : (payload?.profile ? [payload.profile] : []);
+    if (profileItems.length === 0) {
+      return { action: "processed", unitsApplied: 0, staleCount: 0, tombstonedCount: 0 };
+    }
+
+    let unitsApplied = 0;
+    let staleCount = 0;
+    let tombstonedCount = 0;
+    const touchedCourseIds = new Set();
+
+    for (const prof of profileItems) {
+      const remoteProfileId = String(prof?.profileId || "").trim();
+      if (!remoteProfileId) continue;
+
+      let profProj = (
+        await runner.query(
+          `SELECT * FROM course_profile_projections
+           WHERE source_system = $1 AND remote_profile_id = $2::varchar
+           LIMIT 1
+           FOR UPDATE`,
+          [SOURCE_SYSTEM, remoteProfileId],
+        )
+      ).rows[0] || null;
+
+      if (!profProj && payload?.course && prof?.courseId) {
+        // Ensure parent course & profile exist cleanly if curriculum arrives right after catalog insert
+        const ensuredCourse = await applyCourseRecordTx(runner, payload.course, { correlationId });
+        const ensuredProf = await applyProfileRecordTx(runner, prof, {
+          parentLocalCourse: ensuredCourse?.localCourseId
+            ? (await runner.query(`SELECT * FROM courses WHERE id = $1`, [ensuredCourse.localCourseId])).rows[0]
+            : null,
+          correlationId,
+        });
+        if (ensuredProf?.profileProjectionId) {
+          profProj = (
+            await runner.query(`SELECT * FROM course_profile_projections WHERE id = $1`, [ensuredProf.profileProjectionId])
+          ).rows[0] || null;
+        }
+      }
+
+      if (!profProj) {
+        throw new MolyCatalogSyncError(
+          425,
+          "PROFILE_PROJECTION_MISSING",
+          `Profile projection ${remoteProfileId} must be synced before curriculum.`,
+        );
+      }
+
+      touchedCourseIds.add(Number(profProj.local_course_id));
+      const profMeta = {
+        sections: Array.isArray(prof.sections) ? prof.sections : [],
+        capabilities: prof.capabilities || {},
+      };
+      await runner.query(
+        `UPDATE course_profile_projections
+         SET metadata = COALESCE(metadata, '{}'::jsonb) || $2::jsonb,
+             updated_at = NOW()
+         WHERE id = $1::bigint`,
+        [Number(profProj.id), JSON.stringify(profMeta)],
+      );
+
+      if (eventDeleted === true || eventType === "curriculum.tombstoned" && (!Array.isArray(prof.units) || prof.units.length === 0)) {
+        tombstonedCount += await reconcileProfileMissingUnitsTx(runner, {
+          profileProjectionId: profProj.id,
+          activeUnitKeys: [],
+          revision: Math.max(revFallback, Number(prof.revision || 1)),
+          deletedAt: effectiveTs,
+        });
+        continue;
+      }
+
+      const incomingUnits = Array.isArray(prof.units) ? prof.units : [];
+      const activeKeys = [];
+      for (const u of incomingUnits) {
+        if (!u?.deleted) {
+          const ut = u?.unitType === "class_session" ? "class_session" : "lesson";
+          activeKeys.push(`${ut}:${String(u.unitId || u.remoteUnitId || "").trim()}`);
+        }
+        const unitRes = await upsertUnitAndFilesTx(runner, {
+          profileProjectionId: profProj.id,
+          localCourseId: profProj.local_course_id,
+          unit: {
+            ...u,
+            deleted: Boolean(u.deleted || eventDeleted === true),
+            deletedAt: u.deletedAt || (eventDeleted === true ? effectiveTs : null),
+          },
+          fallbackRevision: Math.max(revFallback, Number(prof.revision || 1)),
+          defaultUpdatedAt: effectiveTs,
+        });
+        if (unitRes.action === "stale") staleCount += 1;
+        else unitsApplied += 1;
+      }
+
+      if (reconcileMissing) {
+        tombstonedCount += await reconcileProfileMissingUnitsTx(runner, {
+          profileProjectionId: profProj.id,
+          activeUnitKeys: activeKeys,
+          revision: Math.max(revFallback, Number(prof.revision || 1)),
+          deletedAt: effectiveTs,
+        });
+      }
+    }
+
+    for (const cid of touchedCourseIds) {
+      await refreshCourseProjectionTotalsTx(runner, cid);
+    }
+
+    return {
+      action: staleCount > 0 && unitsApplied === 0 && tombstonedCount === 0 ? "stale" : "updated",
+      unitsApplied,
+      staleCount,
+      tombstonedCount,
+    };
+  }
+
+  async function applyUnitContentRecordTx(runner, payload, {
+    correlationId = null,
+    envelopeRevision = 1,
+    sourceUpdatedAt = null,
+  } = {}) {
+    if (!(await hasUnitProjectionTables(runner))) {
+      return { action: "skipped_schema_missing", unitsApplied: 0, staleCount: 0 };
+    }
+    const items = Array.isArray(payload?.profiles) ? payload.profiles : [];
+    let unitsApplied = 0;
+    let staleCount = 0;
+    const touchedCourseIds = new Set();
+
+    for (const item of items) {
+      const remoteProfileId = String(item?.profileId || "").trim();
+      const unit = item?.unit;
+      if (!remoteProfileId || !unit) continue;
+
+      const profProj = (
+        await runner.query(
+          `SELECT * FROM course_profile_projections
+           WHERE source_system = $1 AND remote_profile_id = $2::varchar
+           LIMIT 1`,
+          [SOURCE_SYSTEM, remoteProfileId],
+        )
+      ).rows[0] || null;
+      if (!profProj) {
+        throw new MolyCatalogSyncError(
+          425,
+          "PROFILE_PROJECTION_MISSING",
+          `Profile projection ${remoteProfileId} must be synced before unit content.`,
+        );
+      }
+
+      touchedCourseIds.add(Number(profProj.local_course_id));
+      if (item.capabilities && typeof item.capabilities === "object") {
+        await runner.query(
+          `UPDATE course_profile_projections
+           SET metadata = COALESCE(metadata, '{}'::jsonb) || $2::jsonb,
+               updated_at = NOW()
+           WHERE id = $1::bigint`,
+          [Number(profProj.id), JSON.stringify({ capabilities: item.capabilities })],
+        );
+      }
+
+      const res = await upsertUnitAndFilesTx(runner, {
+        profileProjectionId: profProj.id,
+        localCourseId: profProj.local_course_id,
+        unit,
+        fallbackRevision: Number(unit.revision || envelopeRevision || 1),
+        defaultUpdatedAt: sourceUpdatedAt,
+      });
+      if (res.action === "stale") staleCount += 1;
+      else unitsApplied += 1;
+    }
+
+    for (const cid of touchedCourseIds) {
+      await refreshCourseProjectionTotalsTx(runner, cid);
+    }
+
+    return {
+      action: staleCount > 0 && unitsApplied === 0 ? "stale" : "updated",
+      unitsApplied,
+      staleCount,
+    };
+  }
+
   async function processInboxRow(inboxRow, { workerId = "inline" } = {}) {
     const envelope = typeof inboxRow.payload === "string"
       ? JSON.parse(inboxRow.payload)
@@ -942,6 +1567,22 @@ function createMolyCourseCatalogSyncService({
             correlationId: inboxRow.correlation_id,
             eventDeleted: inboxRow.deleted,
             eventDeletedAt: inboxRow.deleted_at,
+          });
+        } else if (aggType === "curriculum") {
+          applied = await applyCurriculumRecordTx(txClient, innerPayload, {
+            correlationId: inboxRow.correlation_id,
+            eventType: inboxRow.event_type,
+            eventDeleted: inboxRow.deleted,
+            eventDeletedAt: inboxRow.deleted_at,
+            envelopeRevision: inboxRow.aggregate_revision,
+            sourceUpdatedAt: inboxRow.source_updated_at,
+            reconcileMissing: true,
+          });
+        } else if (aggType === "unit_content") {
+          applied = await applyUnitContentRecordTx(txClient, innerPayload, {
+            correlationId: inboxRow.correlation_id,
+            envelopeRevision: inboxRow.aggregate_revision,
+            sourceUpdatedAt: inboxRow.source_updated_at,
           });
         } else {
           applied = await applyCourseRecordTx(txClient, innerPayload, {
@@ -1405,6 +2046,20 @@ function createMolyCourseCatalogSyncService({
         limit: 100,
       });
 
+      let curriculumBackfill = null;
+      if (typeof client?.fetchCourseCurriculum === "function" && (await hasUnitProjectionTables(db))) {
+        try {
+          curriculumBackfill = await runCurriculumBackfill({
+            correlationId: corr,
+            limit: Math.max(limit, 200),
+          });
+        } catch (currErr) {
+          integrationLog.warn("catalog_backfill_curriculum_followup_failed", {
+            message: currErr?.message,
+          }, corr);
+        }
+      }
+
       observeMetricLatency("moly.catalog_backfill_ms", Date.now() - startMs);
       recordMetric("moly.catalog_backfill_runs");
 
@@ -1418,6 +2073,7 @@ function createMolyCourseCatalogSyncService({
         drainedInboxCount: drainedInbox.claimed || 0,
         highWaterRevision: Math.max(afterRevision, highestRevisionSeen),
         snapshotAnchorRevision,
+        curriculumBackfill,
       };
     } catch (error) {
       await db.query(
@@ -1436,15 +2092,187 @@ function createMolyCourseCatalogSyncService({
     }
   }
 
+  /**
+   * Pulls Day 3 curriculum metadata across all (or one specified) synced csca_course
+   * offerings via signed v2 HTTP into `course_unit_projections` and `course_file_projections`,
+   * never writing to native `course_lessons` or `course_sections`.
+   */
+  async function runCurriculumBackfill({
+    courseId = null,
+    remoteCourseId = null,
+    profileId = null,
+    limit = 200,
+    maxPages = MAX_BACKFILL_PAGES,
+    correlationId = null,
+  } = {}) {
+    if (!(await hasCatalogSyncTables(db)) || !(await hasUnitProjectionTables(db))) {
+      throw new MolyCatalogSyncError(503, "CATALOG_SYNC_SCHEMA_MISSING", "Unit projection sync tables are not migrated.");
+    }
+    if (!client || typeof client.fetchCourseCurriculum !== "function") {
+      throw new MolyCatalogSyncError(503, "COURSE_CLIENT_UNAVAILABLE", "CSCA-Course curriculum client is unavailable.");
+    }
+    const corr = resolveCorrelationId(correlationId);
+    if (isCatalogSyncKillSwitchActive(env)) {
+      return { paused: true, reason: "kill_switch", coursesProcessed: 0, unitsApplied: 0, tombstonedCount: 0 };
+    }
+
+    let targets = [];
+    if (remoteCourseId != null && String(remoteCourseId).trim()) {
+      targets = [String(remoteCourseId).trim()];
+    } else if (courseId != null) {
+      const cRes = await db.query(
+        `SELECT DISTINCT COALESCE(cpp.remote_course_id, REPLACE(c.external_key, 'csca-course:', '')) AS rc_id
+         FROM courses c
+         LEFT JOIN course_profile_projections cpp ON cpp.local_course_id = c.id AND cpp.source_system = $2
+         WHERE c.id = $1::bigint AND c.content_origin = 'csca_course'`,
+        [Number(courseId), SOURCE_SYSTEM],
+      );
+      targets = cRes.rows.map((r) => String(r.rc_id || "").trim()).filter((v) => /^\d+$/.test(v));
+    } else {
+      const allRes = await db.query(
+        `SELECT DISTINCT COALESCE(cpp.remote_course_id, REPLACE(c.external_key, 'csca-course:', '')) AS rc_id
+         FROM courses c
+         LEFT JOIN course_profile_projections cpp ON cpp.local_course_id = c.id AND cpp.source_system = $1
+         WHERE c.content_origin = 'csca_course'
+           AND c.tombstoned_at IS NULL`,
+        [SOURCE_SYSTEM],
+      );
+      targets = allRes.rows.map((r) => String(r.rc_id || "").trim()).filter((v) => /^\d+$/.test(v));
+    }
+
+    let coursesProcessed = 0;
+    let pagesProcessed = 0;
+    let unitsApplied = 0;
+    let staleCount = 0;
+    let tombstonedCount = 0;
+
+    for (const rcId of targets) {
+      const cpStream = `course-curriculum:${rcId}`;
+      await db.query(
+        `INSERT INTO course_sync_checkpoints (stream_name, source_system, sync_status)
+         VALUES ($1, $2, 'backfilling')
+         ON CONFLICT (stream_name) DO UPDATE SET sync_status = 'backfilling', updated_at = NOW()`,
+        [cpStream, SOURCE_SYSTEM],
+      );
+
+      let cursor = null;
+      let sweepCompleted = false;
+      const seenActiveByProfile = new Map();
+      const maxRevByProfile = new Map();
+
+      try {
+        for (let page = 0; page < maxPages; page += 1) {
+          const pageData = await client.fetchCourseCurriculum({
+            courseId: rcId,
+            profileId: profileId || undefined,
+            cursor,
+            limit,
+            includeTombstoned: true,
+            correlationId: corr,
+          });
+          pagesProcessed += 1;
+          const pageProfiles = Array.isArray(pageData?.profiles) ? pageData.profiles : [];
+          for (const p of pageProfiles) {
+            const pIdStr = String(p.profileId || "");
+            if (!seenActiveByProfile.has(pIdStr)) seenActiveByProfile.set(pIdStr, new Set());
+            const set = seenActiveByProfile.get(pIdStr);
+            for (const u of p.units || []) {
+              const rev = Number(u?.revision || 1);
+              maxRevByProfile.set(pIdStr, Math.max(rev, maxRevByProfile.get(pIdStr) || 1));
+              if (!u.deleted) {
+                const ut = u?.unitType === "class_session" ? "class_session" : "lesson";
+                set.add(`${ut}:${String(u.unitId || "").trim()}`);
+              }
+            }
+          }
+
+          const outcome = await withTx((txClient) =>
+            applyCurriculumRecordTx(txClient, pageData, {
+              correlationId: corr,
+              eventType: "curriculum.upserted",
+              envelopeRevision: pageData?.course?.revision || 1,
+              sourceUpdatedAt: now().toISOString(),
+              reconcileMissing: false,
+            }),
+          );
+          unitsApplied += outcome.unitsApplied || 0;
+          staleCount += outcome.staleCount || 0;
+
+          const hasMore = Boolean(pageData?.pagination?.hasMore);
+          cursor = hasMore ? (pageData?.pagination?.nextCursor || null) : null;
+          if (!hasMore || !cursor) {
+            sweepCompleted = true;
+            break;
+          }
+        }
+
+        if (sweepCompleted) {
+          const reconciled = await withTx(async (txClient) => {
+            let removed = 0;
+            const touchedLocalCourses = new Set();
+            for (const [pIdStr, activeSet] of seenActiveByProfile.entries()) {
+              const pRow = (
+                await txClient.query(
+                  `SELECT id, local_course_id FROM course_profile_projections WHERE source_system = $1 AND remote_profile_id = $2::varchar LIMIT 1`,
+                  [SOURCE_SYSTEM, pIdStr],
+                )
+              ).rows[0];
+              if (!pRow) continue;
+              touchedLocalCourses.add(Number(pRow.local_course_id));
+              removed += await reconcileProfileMissingUnitsTx(txClient, {
+                profileProjectionId: pRow.id,
+                activeUnitKeys: [...activeSet],
+                revision: maxRevByProfile.get(pIdStr) || 1,
+                deletedAt: now().toISOString(),
+              });
+            }
+            for (const cid of touchedLocalCourses) {
+              await refreshCourseProjectionTotalsTx(txClient, cid);
+            }
+            return removed;
+          });
+          tombstonedCount += reconciled;
+        }
+
+        await db.query(
+          `UPDATE course_sync_checkpoints
+           SET sync_status = 'idle', last_cursor = NULL, last_synced_at = NOW(), last_error_code = NULL, last_error_message = NULL
+           WHERE stream_name = $1`,
+          [cpStream],
+        );
+        coursesProcessed += 1;
+      } catch (err) {
+        await db.query(
+          `UPDATE course_sync_checkpoints
+           SET sync_status = 'error', last_error_code = $2, last_error_message = $3
+           WHERE stream_name = $1`,
+          [cpStream, String(err?.code || err?.errorCode || "CURRICULUM_BACKFILL_ERROR").slice(0, 80), String(err?.message || "Failed").slice(0, 1000)],
+        ).catch(() => {});
+        throw err;
+      }
+    }
+
+    return {
+      paused: false,
+      coursesProcessed,
+      pagesProcessed,
+      unitsApplied,
+      staleCount,
+      tombstonedCount,
+    };
+  }
+
   return {
     MolyCatalogSyncError,
     normalizeSubjectCode,
     normalizeCourseLevel,
     validateEnvelope,
     hasCatalogSyncTables,
+    hasUnitProjectionTables,
     ingestCatalogEvents,
     processAvailableInboxJobs,
     runCatalogBackfill,
+    runCurriculumBackfill,
   };
 }
 

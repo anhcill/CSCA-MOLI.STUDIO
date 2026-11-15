@@ -159,7 +159,8 @@ async function setupDay5MolyEnv(t, { envOverrides = {} } = {}) {
     ...envOverrides,
   };
 
-  let fakeNow = new Date('2026-11-15T12:00:00.000Z');
+  const baseNow = new Date(Date.now() + 120_000);
+  let fakeNow = new Date(baseNow.getTime());
   const httpCalls = [];
   const remoteState = {
     identities: [],
@@ -377,6 +378,7 @@ async function setupDay5MolyEnv(t, { envOverrides = {} } = {}) {
     httpCalls,
     remoteState,
     logEntries,
+    baseNow,
     setNow: (d) => { fakeNow = d; },
   };
 }
@@ -579,12 +581,14 @@ test('Day 5: Reconcile repairs missing grant & revoked entitlement, preserves co
   );
 
   // 5) Stale pending event (> 10 mins) and dead-letter event in outbox
+  const staleCreatedAt = new Date(ctx.baseNow.getTime() - 30 * 60_000).toISOString();
   await ctx.db.query(
     `INSERT INTO integration_outbox
        (source_system, target_system, event_id, idempotency_key, correlation_id, event_type, aggregate_type, aggregate_id, payload, source_updated_at, status, created_at)
      VALUES
-       ('moly', 'csca-course', 'evt-stale-1', 'idem-stale-1', 'corr-stale-1', 'user.provisioned', 'user', 'moly:stale', '{"event_id":"evt-stale-1","external_user_id":"moly:stale","source_system":"moly"}'::jsonb, NOW(), 'pending', '2026-11-15T11:30:00.000Z'),
+       ('moly', 'csca-course', 'evt-stale-1', 'idem-stale-1', 'corr-stale-1', 'user.provisioned', 'user', 'moly:stale', '{"event_id":"evt-stale-1","external_user_id":"moly:stale","source_system":"moly"}'::jsonb, NOW(), 'pending', $1),
        ('moly', 'csca-course', 'evt-dlq-1', 'idem-dlq-1', 'corr-dlq-1', 'user.provisioned', 'user', 'moly:dlq', '{}'::jsonb, NOW(), 'dead_letter', NOW())`,
+    [staleCreatedAt],
   );
 
   // Step A: Dry-Run detects all categories with ZERO outbox mutations

@@ -458,7 +458,7 @@ describe('Day 3 Moly <-> CSCA-Course payment & entitlement sync', () => {
   let app;
 
   beforeEach(async () => {
-    fakeNowMs = Date.UTC(2026, 10, 15, 10, 0, 0);
+    fakeNowMs = Date.now() + 120_000;
     const getNow = () => new Date(fakeNowMs);
     pg = new PGlite();
     await createBootstrappedSchema(pg, { includeVideoCommerce: true });

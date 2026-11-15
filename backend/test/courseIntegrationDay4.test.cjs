@@ -327,7 +327,8 @@ async function setupDay4MolyEnv(t) {
   await createBootstrappedSchema(pg);
   const db = wrapPgliteDb(pg);
 
-  let fakeNow = new Date('2026-11-15T10:00:00.000Z');
+  const baseNow = new Date(Date.now() + 120_000);
+  let fakeNow = new Date(baseNow.getTime());
   const peerRequests = [];
   const boundPeerIdentities = [];
   let ssoExchangeHandler = async () => ({
@@ -455,6 +456,7 @@ async function setupDay4MolyEnv(t) {
     ssoService,
     peerRequests,
     boundPeerIdentities,
+    baseNow,
     setNow: (d) => { fakeNow = d instanceof Date ? d : new Date(d); },
     setSsoExchangeHandler: (fn) => { ssoExchangeHandler = fn; },
     setOwnershipQueryHandler: (fn) => { ownershipQueryHandler = fn; },
@@ -795,7 +797,7 @@ test('Expired code, open redirect launch, and revocation at exchange time fail c
     codeChallenge: computePkceChallengeS256(vExp),
     codeChallengeMethod: 'S256',
   });
-  ctx.setNow(new Date('2026-11-15T10:02:30.000Z')); // +150s > 90s
+  ctx.setNow(new Date(ctx.baseNow.getTime() + 150_000)); // +150s > 90s
   const expReq = signInboundCourseRequest({
     code: issuedExp.code,
     nonce: issuedExp.state,
@@ -1115,14 +1117,14 @@ test('P1 Security: 2-browser-context Login-CSRF & Safe-Link cookie isolation, pa
   // Expired browser tx fails closed before contacting peer
   const contextExpired = request.agent(ctx.app);
   const startExp = await startMolyBrowserSso(contextExpired, { targetPath: '/khoa-hoc' });
-  ctx.setNow(new Date('2026-11-15T10:04:00.000Z')); // +240s > 180s
+  ctx.setNow(new Date(ctx.baseNow.getTime() + 240_000)); // +240s > 180s
   const expTxRes = await contextExpired
     .post('/api/sso/consume')
     .send({ code: 'code-exp', state: startExp.state });
   assert.equal(expTxRes.status, 401);
   assert.equal(expTxRes.body.code, 'SSO_BROWSER_TX_EXPIRED');
   assert.equal(exchangeCalls.length, 0);
-  ctx.setNow(new Date('2026-11-15T10:00:00.000Z'));
+  ctx.setNow(new Date(ctx.baseNow.getTime()));
 
   // 2) Safe-Linking on passwordless local user: Context A initiates -> LINK_REQUIRED
   const startLink = await startMolyBrowserSso(contextA, { targetPath: '/khoa-hoc' });

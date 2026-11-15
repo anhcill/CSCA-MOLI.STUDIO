@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { FiChevronDown } from 'react-icons/fi';
 import type { CurriculumSectionDto } from '@/lib/types/courses';
 import { LessonRow } from './LessonRow';
@@ -17,9 +17,15 @@ export function CurriculumAccordion({
   sections: CurriculumSectionDto[];
   courseSlug?: string;
 }) {
-  const [open, setOpen] = useState<Set<number>>(() => new Set(sections.slice(0, 1).map((item) => item.id)));
+  const [open, setOpen] = useState<Set<number | string>>(() => new Set(sections.slice(0, 1).map((item) => item.id)));
+  useEffect(() => {
+    setOpen((current) => {
+      if (sections.some((section) => current.has(section.id))) return current;
+      return new Set(sections.slice(0, 1).map((item) => item.id));
+    });
+  }, [sections]);
   if (!sections.length) return <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-slate-500 dark:border-slate-700 dark:bg-slate-950/60 dark:text-slate-400">Chương trình học đang được cập nhật.</div>;
-  const toggle = (id: number) => setOpen((current) => { const next = new Set(current); next.has(id) ? next.delete(id) : next.add(id); return next; });
+  const toggle = (id: number | string) => setOpen((current) => { const next = new Set(current); next.has(id) ? next.delete(id) : next.add(id); return next; });
   const allOpen = open.size === sections.length;
   const toggleAll = () => setOpen(allOpen ? new Set() : new Set(sections.map((section) => section.id)));
 

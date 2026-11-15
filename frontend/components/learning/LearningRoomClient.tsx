@@ -27,6 +27,7 @@ import { LearningHeader } from './LearningHeader';
 import { LearningRoomLoading } from './LearningRoomLoading';
 import { LearningSidebar } from './LearningSidebar';
 import { LessonAssignmentPanel } from './LessonAssignmentPanel';
+import { ExternalLearningWorkspace } from './ExternalLearningWorkspace';
 import { LessonQuestionPanel } from '@/components/courses/LessonQuestionPanel';
 
 type LessonPanel = 'overview' | 'curriculum' | 'notes' | 'resources' | 'assignment' | 'qa';
@@ -66,7 +67,30 @@ function formatDuration(seconds: number) {
   return `${String(minutes).padStart(2, '0')}:${String(remainder).padStart(2, '0')}`;
 }
 
-export function LearningRoomClient({ courseSlug, lessonId }: { courseSlug: string; lessonId: number }) {
+export function LearningRoomClient({
+  courseSlug,
+  lessonId,
+  externalUnitId,
+  initialProfileId = null,
+}: {
+  courseSlug: string;
+  lessonId?: number;
+  externalUnitId?: string;
+  initialProfileId?: string | null;
+}) {
+  if (externalUnitId) {
+    return (
+      <ExternalLearningWorkspace
+        courseSlug={courseSlug}
+        externalUnitId={externalUnitId}
+        initialProfileId={initialProfileId}
+      />
+    );
+  }
+  return <NativeLearningRoomClient courseSlug={courseSlug} lessonId={lessonId ?? 0} />;
+}
+
+function NativeLearningRoomClient({ courseSlug, lessonId }: { courseSlug: string; lessonId: number }) {
   const [room, setRoom] = useState<LearningRoomDto | null>(null);
   const [session, setSession] = useState<PlaybackSessionDto | null>(null);
   const [loading, setLoading] = useState(true);

@@ -130,6 +130,9 @@ async function listMyEnrollments(user) {
     user.id,
     externalRows.map((row) => Number(row.id)),
   );
+  const firstUnitMap = await learningRepository.listExternalFirstUnits(
+    externalRows.map((row) => Number(row.id)),
+  );
   const externalItems = [];
   for (const row of externalRows) {
     const courseId = Number(row.id);
@@ -139,6 +142,10 @@ async function listMyEnrollments(user) {
     }
     const baseCourse = catalogCourse(row, null);
     const mergedCourse = courseService.mergeCourseOwnershipView(baseCourse, ownershipInfo, false);
+    const firstUnit = firstUnitMap.get(courseId) || null;
+    const firstUnitHref = firstUnit
+      ? `/hoc/${row.slug}/bai-hoc/u-${firstUnit.unitProjectionId}?profileId=${encodeURIComponent(firstUnit.remoteProfileId)}`
+      : null;
     externalItems.push({
       enrollment: {
         id: -Math.abs(Number(row.external_entitlement_id || courseId)),
@@ -150,13 +157,19 @@ async function listMyEnrollments(user) {
         expiresAt: row.valid_until || null,
         completedAt: null,
         isExternalOnly: true,
-        learningDestination: "csca-course",
+        learningDestination: firstUnitHref ? "moly_workspace" : "csca-course",
+        firstUnitHref,
+        firstUnitSlug: firstUnit ? `u-${firstUnit.unitProjectionId}` : null,
+        activeProfileId: firstUnit ? firstUnit.remoteProfileId : null,
         progress: null,
       },
       course: {
         ...mergedCourse,
         isExternalOnly: true,
-        learningDestination: "csca-course",
+        learningDestination: firstUnitHref ? "moly_workspace" : "csca-course",
+        firstUnitHref,
+        firstUnitSlug: firstUnit ? `u-${firstUnit.unitProjectionId}` : null,
+        activeProfileId: firstUnit ? firstUnit.remoteProfileId : null,
       },
     });
   }

@@ -104,6 +104,9 @@ export interface CourseCatalogItemDto {
   remoteCourseId?: string | null;
   checkoutReady?: boolean;
   profiles?: CourseProfileSummaryDto[];
+  firstUnitHref?: string | null;
+  firstUnitSlug?: string | null;
+  activeProfileId?: string | null;
   enrolledCount: number;
   totalSections: number;
   totalLessons: number;
@@ -154,7 +157,7 @@ export interface CourseAccessDto {
 }
 
 export interface CurriculumLessonDto {
-  id: number;
+  id: number | string;
   externalKey: string;
   slug: string;
   title: string;
@@ -171,10 +174,24 @@ export interface CurriculumLessonDto {
   videoAssetId?: number | null;
   contentHtml?: string | null;
   estimatedDurationSeconds?: number;
+  unitProjectionId?: number;
+  unitType?: 'lesson' | 'class_session';
+  remoteUnitId?: string;
+  profileId?: string | null;
+  profileProjectionId?: number | null;
+  href?: string | null;
+  isPublicPreview?: boolean;
+  videoPartCount?: number;
+  hasTheory?: boolean;
+  vocabCount?: number;
+  formulaCount?: number;
+  fileCount?: number;
+  quizCount?: number;
+  assignmentCount?: number;
 }
 
 export interface CurriculumSectionDto {
-  id: number;
+  id: number | string;
   title: string;
   description: string | null;
   sortOrder: number;
@@ -191,6 +208,10 @@ export interface CourseDetailDto extends CourseCatalogItemDto {
   certificateEnabled: boolean;
   access: CourseAccessDto;
   curriculum: CurriculumSectionDto[];
+  projectedProfiles?: ProjectedProfileSummaryDto[];
+  activeProfileId?: string | null;
+  activeProfileProjectionId?: number | null;
+  firstUnitHref?: string | null;
 }
 
 export interface EnrollmentDto {
@@ -204,6 +225,9 @@ export interface EnrollmentDto {
   completedAt: string | null;
   isExternalOnly?: boolean;
   learningDestination?: string;
+  firstUnitHref?: string | null;
+  firstUnitSlug?: string | null;
+  activeProfileId?: string | null;
   progress: CourseProgressSummaryDto | null;
 }
 
@@ -212,7 +236,8 @@ export interface MyLearningItemDto {
   course: CourseCatalogItemDto;
 }
 
-export interface LearningLessonDto extends CurriculumLessonDto {
+export interface LearningLessonDto extends Omit<CurriculumLessonDto, 'id'> {
+  id: number;
   contentHtml: string | null;
   resources: LessonResourceDto[];
   assignment: LessonAssignmentDto | null;
@@ -567,3 +592,263 @@ export const COURSE_STATUS_LABELS: Record<CourseStatus, string> = {
   review: 'Chờ duyệt',
   archived: 'Lưu trữ',
 };
+
+export interface ProjectedProfileSummaryDto {
+  id: number;
+  profileProjectionId: number;
+  remoteProfileId: string;
+  externalOfferingId: string;
+  remoteCourseId?: string;
+  mode: 'MIRROR' | 'INDEPENDENT';
+  title: string | null;
+  status: string;
+  allowFileDownload?: boolean;
+  deviceLimit?: number;
+  capabilities?: {
+    allowFileDownload?: boolean;
+    deviceLimit?: number;
+    canPlayVideo?: boolean;
+    isPublicPreviewAccess?: boolean;
+    [key: string]: unknown;
+  };
+}
+
+export interface ExternalWorkspaceUnitSummaryDto {
+  id: string;
+  unitProjectionId: number;
+  unitKey: string;
+  unitType: 'lesson' | 'class_session';
+  remoteUnitId: string;
+  sectionId: string;
+  sectionTitle: string;
+  sectionSortOrder: number;
+  sessionNumber: number;
+  title: string;
+  summary: string | null;
+  sortOrder: number;
+  durationSeconds: number;
+  href: string;
+  isPublished: boolean;
+  isPublicPreview: boolean;
+  isLocked: boolean;
+  isCompleted: boolean;
+  watchedPercent: number;
+  lockReason: string | null;
+  videoPartCount: number;
+  hasTheory: boolean;
+  vocabCount: number;
+  formulaCount: number;
+  fileCount: number;
+  quizCount: number;
+  assignmentCount: number;
+}
+
+export interface ExternalVideoPartDto {
+  id?: string;
+  assetId?: string;
+  placementId?: string;
+  partId?: string;
+  partNumber?: number;
+  title: string;
+  videoType?: string;
+  isPublished?: boolean;
+  provider?: string;
+  playbackStatus?: string;
+  durationSeconds?: number;
+  thumbnailUrl?: string | null;
+  embedUrl?: string | null;
+  availableResolutions?: string[];
+  watchProgress?: {
+    lastPositionSeconds: number;
+    watchedSeconds: number;
+    completionPercent: number;
+    isCompleted: boolean;
+  } | null;
+}
+
+export interface ExternalUnitTimestampDto {
+  timeSeconds?: number;
+  seconds?: number;
+  time?: string;
+  label?: string;
+  title?: string;
+  description?: string;
+}
+
+export interface ExternalUnitTheoryDto {
+  title: string | null;
+  summary?: string | null;
+  contentHtml: string | null;
+  keyTakeaways?: string[];
+  transcript?: string | null;
+  timestamps?: ExternalUnitTimestampDto[];
+}
+
+export interface ExternalUnitVocabularyDto {
+  id?: string;
+  term: string;
+  pinyin?: string | null;
+  sinoVietnamese?: string | null;
+  meaning: string;
+  partOfSpeech?: string | null;
+  exampleSentence?: string | null;
+  exampleMeaning?: string | null;
+  audioUrl?: string | null;
+}
+
+export interface ExternalUnitFormulaVariableDto {
+  symbol?: string;
+  name?: string;
+  unit?: string;
+  description?: string;
+}
+
+export interface ExternalUnitFormulaDto {
+  id?: string;
+  subject?: string | null;
+  chapterName?: string | null;
+  nameVi?: string | null;
+  nameZh?: string | null;
+  pinyin?: string | null;
+  latexExpression: string;
+  description?: string | null;
+  variablesExplanation?: ExternalUnitFormulaVariableDto[];
+}
+
+export interface ExternalUnitFileDto {
+  id: string;
+  fileName: string;
+  title: string;
+  sizeBytes: number;
+  mimeType: string | null;
+  fileKind: string;
+  allowView?: boolean;
+  allowDownload?: boolean;
+}
+
+export interface ExternalUnitQuizDto {
+  id: string;
+  title: string;
+  durationMinutes?: number | null;
+  passingScore?: number;
+  attemptsCount?: number;
+  isCompleted?: boolean;
+  bestScore?: number | null;
+  maxScore?: number | null;
+}
+
+export interface ExternalUnitAssignmentDto {
+  id: string;
+  title: string;
+  description?: string;
+  maxScore?: number;
+  dueDate?: string | null;
+  isSubmitted?: boolean;
+  score?: number | null;
+}
+
+export interface ExternalUnitNoteDto {
+  id: string;
+  timestampSeconds: number;
+  content: string;
+  createdAt: string | null;
+}
+
+export interface ExternalUnitDetailDto {
+  id: string;
+  unitProjectionId?: number;
+  projectionSlug?: string;
+  unitType?: 'lesson' | 'class_session';
+  type?: 'lesson' | 'class_session';
+  sectionId?: string | null;
+  sectionTitle?: string | null;
+  title: string;
+  description?: string;
+  sessionNumber?: number;
+  isLocked?: boolean;
+  lockReason?: string | null;
+  requiredPrevUnitId?: string | null;
+  requiredPrevUnitTitle?: string | null;
+  requiredPrevUnitNumber?: number | null;
+  isPublicPreview?: boolean;
+  isPublicPreviewAccess?: boolean;
+  video?: ExternalVideoPartDto | null;
+  videos?: ExternalVideoPartDto[];
+  watchProgress?: {
+    lastPositionSeconds: number;
+    watchedSeconds: number;
+    durationSeconds: number;
+    partCount: number;
+    completionPercent: number;
+    isCompleted: boolean;
+    isVideoCompleted?: boolean;
+    isQuizCompleted?: boolean;
+  } | null;
+  theory?: ExternalUnitTheoryDto | null;
+  files?: ExternalUnitFileDto[];
+  assignments?: ExternalUnitAssignmentDto[];
+  quizzes?: ExternalUnitQuizDto[];
+  vocabulary?: ExternalUnitVocabularyDto[];
+  formulas?: ExternalUnitFormulaDto[];
+  notes?: ExternalUnitNoteDto[];
+}
+
+export interface ExternalWorkspaceCapabilitiesDto {
+  canPlayVideo?: boolean;
+  canJoinLive?: boolean;
+  canCheckIn?: boolean;
+  showCalendar?: boolean;
+  canSubmitAssignments?: boolean;
+  allowFileDownload?: boolean;
+  deviceLimit?: number;
+  enforceTrustedDevices?: boolean;
+  isPublicPreviewAccess?: boolean;
+}
+
+export interface ExternalWorkspaceSourceClassDto {
+  id: string;
+  title: string;
+  status: string;
+  instructorName: string | null;
+}
+
+export interface ExternalWorkspaceProgressDto {
+  completedUnits: number;
+  totalUnits: number;
+  overallPercent: number;
+}
+
+export interface ExternalSelectedUnitLockDto {
+  locked: boolean;
+  code: string;
+  reason: string | null;
+  requiredPrevUnitTitle?: string | null;
+}
+
+export interface ExternalCourseWorkspaceDto {
+  course: {
+    id: number;
+    slug: string;
+    title: string;
+    shortDescription: string;
+    thumbnailUrl: string | null;
+    contentOrigin: 'csca_course';
+    remoteCourseId: string;
+    ssoTargetPath: string;
+  };
+  profile: ProjectedProfileSummaryDto & {
+    capabilities: ExternalWorkspaceCapabilitiesDto;
+  };
+  profiles: ProjectedProfileSummaryDto[];
+  sourceClass: ExternalWorkspaceSourceClassDto | null;
+  progress: ExternalWorkspaceProgressDto | null;
+  isPublicPreviewAccess: boolean;
+  delegatedSession: {
+    expiresAt: string;
+    ttlSeconds: number;
+    scopes: string[];
+  } | null;
+  units: ExternalWorkspaceUnitSummaryDto[];
+  activeUnit: ExternalUnitDetailDto | null;
+  selectedUnitLock: ExternalSelectedUnitLockDto | null;
+}

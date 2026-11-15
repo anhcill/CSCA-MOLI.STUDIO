@@ -335,11 +335,90 @@ async function getCourseProgress(userId, courseId) {
   return result.rows[0] || null;
 }
 
+async function listProjectedCurriculum(courseId, { profileId = null, userId = null, includeUnpublished = false } = {}) {
+  const caps = (
+    await db.query(
+      `SELECT
+         to_regclass('course_profile_projections') IS NOT NULL AS has_profiles,
+         to_regclass('course_unit_projections') IS NOT NULL AS has_units,
+         to_regclass('course_progress_projections') IS NOT NULL AS has_progress`,
+    )
+  ).rows[0];
+  if (!caps?.has_profiles || !caps?.has_units) {
+    return { profiles: [], units: [] };
+  }
+
+  const profRes = await db.query(
+    `SELECT id, source_system, remote_profile_id, external_offering_id, remote_course_id,
+            local_course_id, mode,
+            COALESCE(NULLIF(badge_label, ''), metadata->>'title') AS title,
+            badge_label, allow_file_download, device_limit, enforce_trusted_devices,
+            status, last_revision, source_updated_at, metadata
+     FROM course_profile_projections
+     WHERE local_course_id = $1::bigint
+       AND deleted_at IS NULL
+       AND status <> 'archived'
+     ORDER BY (CASE WHEN mode = 'INDEPENDENT' THEN 0 ELSE 1 END) ASC, id ASC`,
+    [courseId],
+  );
+  const profiles = profRes.rows || [];
+  if (!profiles.length) {
+    return { profiles: [], units: [] };
+  }
+
+  const requestedStr = profileId != null && String(profileId).trim() ? String(profileId).trim() : null;
+  const activeProfile = requestedStr
+    ? profiles.find((p) => String(p.remote_profile_id) === requestedStr || String(p.id) === requestedStr) || profiles[0]
+    : profiles[0];
+
+  const progressSelect = caps.has_progress
+    ? `CASE
+         WHEN cp.is_unit_completed THEN 'completed'
+         WHEN COALESCE(cp.completion_pct, 0) > 0 OR COALESCE(cp.watched_seconds, 0) > 0 THEN 'in_progress'
+         ELSE NULL
+       END AS progress_status,
+       COALESCE(cp.completion_pct, 0) AS watched_percent,
+       CASE WHEN cp.is_unit_completed THEN cp.source_updated_at ELSE NULL END AS progress_completed_at`
+    : `NULL::varchar AS progress_status, 0::numeric AS watched_percent, NULL::timestamptz AS progress_completed_at`;
+  const progressJoin = caps.has_progress
+    ? `LEFT JOIN course_progress_projections cp
+         ON cp.user_id = $2::bigint
+        AND cp.profile_projection_id = u.profile_projection_id
+        AND cp.unit_type = u.unit_type
+        AND cp.remote_unit_id = u.remote_unit_id`
+    : ``;
+
+  const unitsRes = await db.query(
+    `SELECT u.id, u.profile_projection_id, u.local_course_id,
+            u.remote_section_id, u.section_title, u.section_sort_order,
+            u.unit_type, u.remote_unit_id, u.title, u.summary, u.sort_order, u.duration_seconds,
+            u.is_published, u.is_public_preview, u.video_part_count, u.has_theory,
+            u.vocab_count, u.formula_count, u.file_count, u.quiz_count, u.assignment_count,
+            u.metadata, u.last_revision, u.source_updated_at,
+            ${progressSelect}
+     FROM course_unit_projections u
+     ${progressJoin}
+     WHERE u.local_course_id = $1::bigint
+       AND u.profile_projection_id = $3::bigint
+       AND u.deleted_at IS NULL
+       AND ($4::boolean = TRUE OR u.is_published = TRUE)
+     ORDER BY u.section_sort_order ASC, u.remote_section_id ASC, u.sort_order ASC, u.id ASC`,
+    [courseId, userId || null, Number(activeProfile.id), Boolean(includeUnpublished)],
+  );
+
+  return {
+    profiles,
+    activeProfile,
+    units: unitsRes.rows || [],
+  };
+}
+
 module.exports = {
   listPublished,
   findPublishedBySlug,
   findPublishedById,
   listCurriculum,
+  listProjectedCurriculum,
   listCourseMetadata,
   findEnrollment,
   findActivePackageEntitlement,

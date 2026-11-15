@@ -13,6 +13,8 @@ import type {
   UpdateLessonProgressInput,
   LessonSubmissionDto,
   LessonQuestionThreadDto,
+  ExternalCourseWorkspaceDto,
+  ExternalUnitDetailDto,
 } from '@/lib/types/courses';
 
 function unwrapData<T>(payload: unknown): T {
@@ -88,8 +90,8 @@ export const learningApi = {
     const index = flattened.findIndex((item) => item.id === lessonId);
     const normalizedLesson = {
       ...room.lesson,
-      previousLessonId: room.lesson.previousLessonId ?? flattened[index - 1]?.id ?? null,
-      nextLessonId: room.lesson.nextLessonId ?? flattened[index + 1]?.id ?? null,
+      previousLessonId: room.lesson.previousLessonId ?? (typeof flattened[index - 1]?.id === 'number' ? (flattened[index - 1]!.id as number) : null),
+      nextLessonId: room.lesson.nextLessonId ?? (typeof flattened[index + 1]?.id === 'number' ? (flattened[index + 1]!.id as number) : null),
     };
     return { ...room, lesson: normalizedLesson };
   },
@@ -159,6 +161,45 @@ export const learningApi = {
     const response = await axios.post<ApiSuccessEnvelope<LessonQuestionThreadDto[]>>(
       `/learning/lessons/${encodeURIComponent(lessonId)}/questions/${encodeURIComponent(threadId)}/replies`, payload,
       { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 120000 },
+    );
+    return unwrapData(response.data);
+  },
+
+  async getExternalCourseWorkspace({
+    courseSlugOrId,
+    profileId = null,
+    unitId = null,
+  }: {
+    courseSlugOrId: string | number;
+    profileId?: string | null;
+    unitId?: string | number | null;
+  }): Promise<ExternalCourseWorkspaceDto> {
+    const response = await axios.get<ApiSuccessEnvelope<ExternalCourseWorkspaceDto>>(
+      `/learning/external/courses/${encodeURIComponent(String(courseSlugOrId))}/workspace`,
+      {
+        params: {
+          ...(profileId ? { profileId } : {}),
+          ...(unitId != null && String(unitId).trim() ? { unitId: String(unitId) } : {}),
+        },
+      },
+    );
+    return unwrapData(response.data);
+  },
+
+  async getExternalUnitDetail({
+    profileId,
+    unitId,
+    courseId = null,
+  }: {
+    profileId: string;
+    unitId: string | number;
+    courseId?: string | number | null;
+  }): Promise<ExternalUnitDetailDto> {
+    const response = await axios.get<ApiSuccessEnvelope<ExternalUnitDetailDto>>(
+      `/learning/external/offerings/${encodeURIComponent(profileId)}/units/${encodeURIComponent(String(unitId))}`,
+      {
+        params: courseId != null ? { courseId: String(courseId) } : undefined,
+      },
     );
     return unwrapData(response.data);
   },

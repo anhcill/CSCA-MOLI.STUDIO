@@ -177,6 +177,7 @@ function createCourseIntegrationClient({
     routePath,
     payload,
     {
+      apiVersion = "v1",
       correlationId,
       idempotencyKey,
       requireIdempotencyKey = true,
@@ -225,7 +226,8 @@ function createCourseIntegrationClient({
       min: MIN_TIMEOUT_MS,
       max: MAX_TIMEOUT_MS,
     });
-    const url = `${cfg.baseUrl}/api/integrations/v1${routePath}`;
+    const resolvedVersion = String(apiVersion || "v1").replace(/^\/+|\/+$/g, "");
+    const url = `${cfg.baseUrl}/api/integrations/${resolvedVersion}${routePath}`;
     // Serialize body once per logical command; compute fresh timestamp/signature per attempt.
     const rawBody = JSON.stringify(payload);
 
@@ -305,7 +307,7 @@ function createCourseIntegrationClient({
         throw lastError;
       }
 
-      if ((response.status === 200 || response.status === 202) && parsedBody.success === true) {
+      if ((response.status === 200 || response.status === 201 || response.status === 202) && parsedBody.success === true) {
         if (typeof validateData === "function" && !validateData(parsedBody)) {
           throw new CourseIntegrationClientError(
             502,
@@ -376,6 +378,7 @@ function createCourseIntegrationClient({
       maxTransportAttempts,
       timeoutMs,
       validateData,
+      extraHeaders = {},
     } = {},
   ) {
     const integrationLog = logger && logger !== console && typeof logger.info === "function"
@@ -437,6 +440,7 @@ function createCourseIntegrationClient({
             "X-Event-Timestamp": timestamp,
             "X-Correlation-ID": reqCorr,
             "X-Signature": signature,
+            ...(extraHeaders && typeof extraHeaders === "object" ? extraHeaders : {}),
             Accept: "application/json",
           },
           signal: AbortSignal.timeout(requestTimeoutMs),
@@ -679,6 +683,143 @@ function createCourseIntegrationClient({
     });
   }
 
+  async function fetchCourseCurriculum({
+    courseId,
+    profileId = null,
+    afterRevision,
+    afterId,
+    cursor = null,
+    limit = 200,
+    includeTombstoned = true,
+    correlationId,
+    maxTransportAttempts,
+    timeoutMs,
+  } = {}) {
+    const cid = encodeURIComponent(String(courseId || "").trim());
+    return getSigned(
+      `/catalog/courses/${cid}/curriculum`,
+      {
+        profile_id: profileId ?? undefined,
+        after_revision: afterRevision ?? undefined,
+        after_id: afterId ?? undefined,
+        cursor: cursor ?? undefined,
+        limit,
+        include_tombstoned: includeTombstoned ? "true" : "false",
+      },
+      {
+        apiVersion: "v2",
+        correlationId,
+        maxTransportAttempts,
+        timeoutMs,
+        validateData: (body) => Boolean(body && body.success === true && body.data && Array.isArray(body.data.profiles)),
+      },
+    ).then((res) => res.payload.data);
+  }
+
+  async function mintDelegatedLearningSession({
+    externalUserId,
+    courseId = null,
+    profileId,
+    scopes = ["workspace:read", "video:play"],
+    ttlSeconds = 300,
+    metadata = {},
+    idempotencyKey = null,
+    correlationId,
+    maxTransportAttempts,
+    timeoutMs,
+  } = {}) {
+    const corr = resolveCorrelationId(correlationId);
+    const effectiveIdemKey = idempotencyKey || `dls:${externalUserId}:${profileId}:${crypto.randomUUID()}`;
+    return postSigned(
+      "/learning/sessions",
+      {
+        externalUserId: String(externalUserId),
+        courseId: courseId != null ? String(courseId) : null,
+        profileId: String(profileId),
+        scopes,
+        ttlSeconds,
+        metadata,
+      },
+      {
+        apiVersion: "v2",
+        idempotencyKey: effectiveIdemKey,
+        correlationId: corr,
+        maxTransportAttempts,
+        timeoutMs,
+        validateData: (body) => Boolean(body && body.success === true && body.data && typeof body.data.sessionToken === "string"),
+      },
+    ).then((res) => res.payload.data);
+  }
+
+  async function fetchDelegatedWorkspace({
+    sessionToken,
+    profileId,
+    unitId = null,
+    correlationId,
+    maxTransportAttempts,
+    timeoutMs,
+  } = {}) {
+    const pid = encodeURIComponent(String(profileId || "").trim());
+    return getSigned(
+      `/learning/offerings/${pid}/workspace`,
+      { unitId: unitId ?? undefined },
+      {
+        apiVersion: "v2",
+        correlationId,
+        maxTransportAttempts,
+        timeoutMs,
+        extraHeaders: { "X-Delegated-Session": String(sessionToken || "") },
+        validateData: (body) => Boolean(body && body.success === true && body.data && Array.isArray(body.data.units)),
+      },
+    ).then((res) => res.payload.data);
+  }
+
+  async function fetchDelegatedUnit({
+    sessionToken,
+    profileId,
+    unitId,
+    correlationId,
+    maxTransportAttempts,
+    timeoutMs,
+  } = {}) {
+    const pid = encodeURIComponent(String(profileId || "").trim());
+    const uid = encodeURIComponent(String(unitId || "").trim());
+    return getSigned(
+      `/learning/offerings/${pid}/units/${uid}`,
+      {},
+      {
+        apiVersion: "v2",
+        correlationId,
+        maxTransportAttempts,
+        timeoutMs,
+        extraHeaders: { "X-Delegated-Session": String(sessionToken || "") },
+        validateData: (body) => Boolean(body && body.success === true && body.data && body.data.id),
+      },
+    ).then((res) => res.payload.data);
+  }
+
+  async function fetchPublicPreviewUnit({
+    profileId,
+    unitId = "default",
+    correlationId,
+    maxTransportAttempts,
+    timeoutMs,
+  } = {}) {
+    const pid = encodeURIComponent(String(profileId || "").trim());
+    const uid = encodeURIComponent(String(unitId || "default").trim());
+    return getSigned(
+      `/learning/preview/offerings/${pid}/units/${uid}`,
+      {},
+      {
+        apiVersion: "v2",
+        correlationId,
+        maxTransportAttempts,
+        timeoutMs,
+        validateData: (body) => Boolean(body && body.success === true && body.data && body.data.activeUnit),
+      },
+    ).then((res) => res.payload.data);
+  }
+
   return {
     isConfigured,
     assertConfigured,
@@ -689,6 +830,11 @@ function createCourseIntegrationClient({
     queryOwnership,
     queryReconciliationSnapshot,
     fetchCatalogCourses,
+    fetchCourseCurriculum,
+    mintDelegatedLearningSession,
+    fetchDelegatedWorkspace,
+    fetchDelegatedUnit,
+    fetchPublicPreviewUnit,
     getSigned,
     getEventStatuses,
     exchangeSsoCode,
