@@ -46,16 +46,36 @@ function learningHref(course: CourseCatalogItemDto) {
   return lessonId ? `/hoc/${course.slug}/bai-hoc/${lessonId}` : `/khoa-hoc/${course.slug}`;
 }
 
+function offeringBadgeLabel(course: CourseCatalogItemDto): string | null {
+  const profiles = course.profiles ?? [];
+  if (!profiles.length) return null;
+  const active = profiles.filter((p) => p.status === 'active');
+  const pool = active.length ? active : profiles;
+  const firstWithBadge = pool.find((p) => p.badgeLabel?.trim());
+  if (firstWithBadge?.badgeLabel) return firstWithBadge.badgeLabel.trim();
+  const hasMirror = pool.some((p) => p.mode === 'MIRROR');
+  const hasIndep = pool.some((p) => p.mode === 'INDEPENDENT');
+  if (hasMirror && hasIndep) return 'Live & Tự học';
+  return hasMirror ? 'Bản ghi lớp Live' : 'Khóa video độc lập';
+}
+
 function StatusBadges({ course }: { course: CourseCatalogItemDto }) {
+  const unpricedBlocked = course.checkoutReady === false && !course.owned && !course.progress;
+  const modeLabel = offeringBadgeLabel(course);
   return (
     <div className="flex flex-wrap gap-2">
       {course.ownershipStatus ? (
         <CourseOwnershipBadge status={course.ownershipStatus} label={course.ownershipLabel} className="shadow" />
       ) : (
         <span className={`rounded-full px-3 py-1 text-[11px] font-black text-white shadow ${course.progress ? 'bg-[#ad2335]' : 'bg-[#173654]'}`}>
-          {accessLabel(course)}
+          {unpricedBlocked ? 'Chưa mở bán' : accessLabel(course)}
         </span>
       )}
+      {modeLabel ? (
+        <span className="rounded-full bg-[#1d4ed8]/90 px-3 py-1 text-[11px] font-bold text-white shadow">
+          {modeLabel}
+        </span>
+      ) : null}
       {course.isNew ? <span className="rounded-full bg-[#3e8c77] px-3 py-1 text-[11px] font-black text-white shadow">MỚI</span> : null}
       {course.isHot ? <span className="rounded-full bg-[#c38224] px-3 py-1 text-[11px] font-black text-white shadow">HOT</span> : null}
     </div>
@@ -112,6 +132,9 @@ export function CourseCard({ course, variant = 'compact' }: { course: CourseCata
             <div className="p-6 sm:p-8">
               <span className="text-xs font-black uppercase tracking-[.12em] text-[#247d7e]">▰ {subject.label}</span>
               <h3 className="mt-3 font-sans text-2xl font-black leading-tight text-[#16233b] dark:text-[#f4e8d6] sm:text-3xl">{course.title}</h3>
+              {course.instructor?.displayName ? (
+                <p className="mt-1.5 text-sm font-semibold text-[#5a5048] dark:text-slate-300">Giảng viên: {course.instructor.displayName}</p>
+              ) : null}
               <p className="mt-2 text-sm font-bold text-[#c77715]">★ {course.ratingAvg.toFixed(1)} <span className="font-medium text-[#7e746d] dark:text-slate-400">({course.ratingCount} đánh giá)</span></p>
               <p className="mt-4 line-clamp-3 text-sm leading-6 text-[#665d56] dark:text-slate-300">{course.shortDescription || 'Lộ trình học có hệ thống, giải thích dễ hiểu và bám sát mục tiêu kỳ thi CSCA.'}</p>
               <div className="mt-5"><CourseMetrics course={course} bordered /></div>
@@ -122,6 +145,10 @@ export function CourseCard({ course, variant = 'compact' }: { course: CourseCata
               <p className="text-center font-sans text-4xl font-black text-[#b9aa9d] dark:text-[#5b687c]">勤学</p>
               {course.canLaunchCourse ? (
                 <CourseSsoLaunchButton courseId={course.id} targetPath={course.ssoTargetPath} label="Vào học" />
+              ) : course.checkoutReady === false && !course.owned && !course.progress ? (
+                <Link href={detailHref} className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#6b7280] px-4 py-3 text-sm font-black text-white shadow">
+                  Chưa mở bán <FiArrowRight />
+                </Link>
               ) : (
                 <Link href={continueHref} className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#af1f33] px-4 py-3 text-sm font-black text-white shadow transition hover:bg-[#92172a]">
                   {course.progress
@@ -161,6 +188,9 @@ export function CourseCard({ course, variant = 'compact' }: { course: CourseCata
       <div className="flex flex-1 flex-col p-5">
         <span className={`text-[11px] font-black uppercase tracking-[.1em] ${featured ? 'text-emerald-300' : 'text-[#257d7e]'}`}>{subject.label}</span>
         <h3 className={`mt-2 line-clamp-2 font-sans text-xl font-black leading-snug ${featured ? 'text-white' : 'text-[#17243d] dark:text-[#f4e8d6]'}`}>{course.title}</h3>
+        {course.instructor?.displayName ? (
+          <p className={`mt-1 text-xs font-semibold ${featured ? 'text-slate-300' : 'text-[#6f665f] dark:text-slate-400'}`}>Giảng viên: {course.instructor.displayName}</p>
+        ) : null}
         <p className={`mt-2 text-sm font-bold ${featured ? 'text-amber-300' : 'text-[#c77715]'}`}>★ {course.ratingAvg.toFixed(1)} <span className={`font-medium ${featured ? 'text-slate-400' : 'text-[#8b8077] dark:text-slate-400'}`}>({course.ratingCount})</span></p>
         <p className={`mt-3 line-clamp-2 min-h-10 text-sm leading-5 ${featured ? 'text-slate-300' : 'text-[#6f665f] dark:text-slate-300'}`}>{course.shortDescription}</p>
         <div className={`mt-5 ${featured ? '[&_span]:text-slate-300 [&>div]:border-white/15' : ''}`}><CourseMetrics course={course} /></div>
@@ -179,9 +209,11 @@ export function CourseCard({ course, variant = 'compact' }: { course: CourseCata
                 ? 'Cần xác minh tài khoản'
                 : course.ownershipStatus === 'pending_sync'
                   ? 'Đang đồng bộ quyền'
-                  : course.ownershipStatus === 'not_owned' && course.accessType !== 'free'
-                    ? 'Mua khóa học'
-                    : 'Xem chi tiết'} <FiArrowRight />
+                  : course.checkoutReady === false && !course.owned
+                    ? 'Chưa mở bán'
+                    : course.ownershipStatus === 'not_owned' && course.accessType !== 'free'
+                      ? 'Mua khóa học'
+                      : 'Xem chi tiết'} <FiArrowRight />
         </Link>
       </div>
     </article>

@@ -322,9 +322,19 @@ if (coursesEnabled) {
       outbox: courseIntegrationRuntime.outbox,
       ownership: courseIntegrationRuntime.ownership,
       reconciliation: courseIntegrationRuntime.reconciliation,
+      catalogSync: courseIntegrationRuntime.catalogSync,
       db,
       authenticate,
       authorizeAnyPermission,
+    }),
+  );
+  const {
+    createCourseIntegrationV2Routes,
+  } = require("./routes/courseIntegrationV2Routes");
+  app.use(
+    "/api/integrations/v2",
+    createCourseIntegrationV2Routes({
+      catalogSync: courseIntegrationRuntime.catalogSync,
     }),
   );
   if (parseFeatureFlag(process.env.CSCA_BUNNY_STREAM_ENABLED, 'CSCA_BUNNY_STREAM_ENABLED')) {

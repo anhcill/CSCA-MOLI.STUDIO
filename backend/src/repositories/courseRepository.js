@@ -18,10 +18,108 @@ const COURSE_COLUMNS = `
     WHERE cpa.course_id = c.id
   ), '[]'::jsonb) AS packages`;
 
+const catalogCapsCache = new WeakMap();
+
+async function getCatalogCaps() {
+  const cacheKey = db?.pool || db;
+  if (cacheKey && typeof cacheKey === "object") {
+    const cached = catalogCapsCache.get(cacheKey);
+    if (cached && cached.hasOrigin && cached.hasProfiles && cached.hasMappings && cached.hasVideoPackages) {
+      return cached;
+    }
+  }
+  try {
+    const res = await db.query(
+      `SELECT
+         EXISTS (
+           SELECT 1 FROM information_schema.columns
+           WHERE table_name = 'courses' AND column_name = 'content_origin'
+         ) AS has_origin,
+         to_regclass('course_profile_projections') IS NOT NULL AS has_profiles,
+         to_regclass('external_course_mappings') IS NOT NULL AS has_mappings,
+         (to_regclass('video_package_courses') IS NOT NULL AND to_regclass('video_packages') IS NOT NULL) AS has_video_packages`,
+    );
+    const row = res.rows[0] || {};
+    const caps = {
+      hasOrigin: row.has_origin === true,
+      hasProfiles: row.has_profiles === true,
+      hasMappings: row.has_mappings === true,
+      hasVideoPackages: row.has_video_packages === true,
+    };
+    if (cacheKey && typeof cacheKey === "object"
+      && caps.hasOrigin && caps.hasProfiles && caps.hasMappings && caps.hasVideoPackages) {
+      catalogCapsCache.set(cacheKey, caps);
+    }
+    return caps;
+  } catch {
+    return { hasOrigin: false, hasProfiles: false, hasMappings: false, hasVideoPackages: false };
+  }
+}
+
+function buildCourseColumns(caps) {
+  const extra = [];
+  if (caps.hasOrigin) {
+    extra.push(
+      "c.content_origin, c.remote_source_system, c.remote_course_id, c.sync_revision, c.tombstoned_at",
+    );
+  }
+  if (caps.hasMappings && caps.hasOrigin) {
+    extra.push(`COALESCE((
+      SELECT ecm.metadata
+      FROM external_course_mappings ecm
+      WHERE ecm.local_course_id = c.id
+        AND ecm.source_system = COALESCE(c.remote_source_system, 'csca-course')
+        AND ecm.deleted_at IS NULL
+      ORDER BY (ecm.remote_profile_id IS NULL) DESC, (ecm.status = 'active') DESC, ecm.id DESC
+      LIMIT 1
+    ), '{}'::jsonb) AS remote_metadata`);
+  }
+  if (caps.hasProfiles) {
+    extra.push(`COALESCE((
+      SELECT jsonb_agg(
+        jsonb_build_object(
+          'id', p.id,
+          'remoteProfileId', p.remote_profile_id,
+          'externalOfferingId', p.external_offering_id,
+          'mode', p.mode,
+          'badgeLabel', p.badge_label,
+          'status', p.status,
+          'checkoutReady', p.checkout_ready,
+          'managementClassId', p.management_class_id,
+          'sourceLiveClassId', p.source_live_class_id,
+          'allowFileDownload', p.allow_file_download,
+          'deviceLimit', p.device_limit,
+          'enforceTrustedDevices', p.enforce_trusted_devices,
+          'instructor', p.metadata->'instructor'
+        )
+        ORDER BY (p.status = 'active') DESC, (p.mode = 'INDEPENDENT') DESC, p.id ASC
+      )
+      FROM course_profile_projections p
+      WHERE p.local_course_id = c.id
+        AND p.deleted_at IS NULL
+        AND p.status <> 'tombstoned'
+    ), '[]'::jsonb) AS projected_profiles`);
+  }
+  if (caps.hasVideoPackages) {
+    extra.push(`EXISTS (
+      SELECT 1
+      FROM video_package_courses vpc
+      JOIN video_packages vp ON vp.id = vpc.video_package_id
+      WHERE vpc.course_id = c.id
+        AND vp.status = 'active'
+        AND COALESCE(vp.price_vnd, 0) > 0
+    ) AS has_priced_video_package`);
+  }
+  return extra.length ? `${COURSE_COLUMNS},\n  ${extra.join(",\n  ")}` : COURSE_COLUMNS;
+}
+
 async function listPublished({ userId = null, subjectCode = null, accessType = null, page = 1, limit = 12 }) {
   const offset = (page - 1) * limit;
+  const caps = await getCatalogCaps();
+  const columns = buildCourseColumns(caps);
+  const aliveFilter = caps.hasOrigin ? " AND c.tombstoned_at IS NULL" : "";
   const result = await db.query(
-    `SELECT ${COURSE_COLUMNS}, COUNT(*) OVER()::int AS total_count,
+    `SELECT ${columns}, COUNT(*) OVER()::int AS total_count,
        e.id AS enrollment_id, e.status AS enrollment_status,
        COALESCE(progress.completed_required, 0)::int AS completed_required,
        COALESCE(progress.total_required, 0)::int AS total_required,
@@ -46,6 +144,7 @@ async function listPublished({ userId = null, subjectCode = null, accessType = n
      WHERE c.status = 'published'
        AND ($2::text IS NULL OR c.subject_code = $2)
        AND ($3::text IS NULL OR c.access_type = $3)
+       ${aliveFilter}
      ORDER BY c.is_featured DESC, c.published_at DESC NULLS LAST, c.id DESC
      LIMIT $4 OFFSET $5`,
     [userId, subjectCode, accessType, limit, offset],
@@ -54,18 +153,24 @@ async function listPublished({ userId = null, subjectCode = null, accessType = n
 }
 
 async function findPublishedBySlug(slug) {
+  const caps = await getCatalogCaps();
+  const columns = buildCourseColumns(caps);
+  const aliveFilter = caps.hasOrigin ? " AND c.tombstoned_at IS NULL" : "";
   const result = await db.query(
-    `SELECT ${COURSE_COLUMNS} FROM courses c
-     WHERE c.slug = $1 AND c.status = 'published' LIMIT 1`,
+    `SELECT ${columns} FROM courses c
+     WHERE c.slug = $1 AND c.status = 'published'${aliveFilter} LIMIT 1`,
     [slug],
   );
   return result.rows[0] || null;
 }
 
 async function findPublishedById(courseId) {
+  const caps = await getCatalogCaps();
+  const columns = buildCourseColumns(caps);
+  const aliveFilter = caps.hasOrigin ? " AND c.tombstoned_at IS NULL" : "";
   const result = await db.query(
-    `SELECT ${COURSE_COLUMNS} FROM courses c
-     WHERE c.id = $1 AND c.status = 'published' LIMIT 1`,
+    `SELECT ${columns} FROM courses c
+     WHERE c.id = $1 AND c.status = 'published'${aliveFilter} LIMIT 1`,
     [courseId],
   );
   return result.rows[0] || null;

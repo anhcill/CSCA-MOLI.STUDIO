@@ -11,7 +11,7 @@ function resolveInboundConfig(config = {}, env = process.env) {
   };
 }
 
-function createCourseInboundAuth({ config = {}, env = process.env } = {}) {
+function createCourseInboundAuth({ config = {}, env = process.env, allowBodylessGet = false } = {}) {
   return function verifyCourseInboundAuth(req, res, next) {
     const cfg = resolveInboundConfig(config, env);
     if (!cfg.serviceToken || !cfg.integrationKey || !cfg.hmacSecret) {
@@ -56,14 +56,28 @@ function createCourseInboundAuth({ config = {}, env = process.env } = {}) {
       });
     }
 
-    if (!Buffer.isBuffer(req.rawBody)) {
-      return res.status(400).json({ success: false, code: "RAW_BODY_REQUIRED", message: "Raw JSON bytes are required." });
+    const httpMethod = String(req.method || "POST").toUpperCase();
+    const isBodylessRead = allowBodylessGet
+      && (httpMethod === "GET" || httpMethod === "HEAD")
+      && (!Buffer.isBuffer(req.rawBody) || req.rawBody.length === 0);
+
+    let expectedDigest;
+    if (isBodylessRead) {
+      const canonicalInput = `${httpMethod}\n${req.originalUrl || req.url || "/"}`;
+      expectedDigest = crypto
+        .createHmac("sha256", cfg.hmacSecret)
+        .update(Buffer.from(`${timestamp}.${canonicalInput}`, "utf8"))
+        .digest("hex");
+    } else {
+      if (!Buffer.isBuffer(req.rawBody)) {
+        return res.status(400).json({ success: false, code: "RAW_BODY_REQUIRED", message: "Raw JSON bytes are required." });
+      }
+      const rawBodyBuf = req.rawBody;
+      expectedDigest = crypto
+        .createHmac("sha256", cfg.hmacSecret)
+        .update(Buffer.concat([Buffer.from(`${timestamp}.`, "utf8"), rawBodyBuf]))
+        .digest("hex");
     }
-    const rawBodyBuf = req.rawBody;
-    const expectedDigest = crypto
-      .createHmac("sha256", cfg.hmacSecret)
-      .update(Buffer.concat([Buffer.from(`${timestamp}.`, "utf8"), rawBodyBuf]))
-      .digest("hex");
     const expectedSig = `sha256=${expectedDigest}`;
 
     if (!constantTimeEqual(signature.toLowerCase(), expectedSig.toLowerCase())) {

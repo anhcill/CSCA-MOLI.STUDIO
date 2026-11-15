@@ -10,6 +10,7 @@ function createCourseIntegrationAdminRoutes({
   outbox = null,
   ownership = null,
   reconciliation = null,
+  catalogSync = null,
   db = null,
   authenticate,
   authorizeAnyPermission,
@@ -215,6 +216,55 @@ function createCourseIntegrationAdminRoutes({
           includeActions: req.query.includeActions !== "false",
         }),
       ),
+    );
+  }
+
+  if (catalogSync) {
+    router.post(
+      "/catalog/backfill",
+      handle((req) =>
+        catalogSync.runCatalogBackfill({
+          reset: req.body?.reset === true,
+          limit: Math.min(Math.max(Number(req.body?.limit) || 100, 1), 500),
+          correlationId: req.headers["x-correlation-id"] || req.body?.correlationId || null,
+        }),
+      ),
+    );
+  }
+
+  if (db) {
+    router.get(
+      "/catalog/checkpoints",
+      handle(async () => {
+        const res = await db.query(
+          `SELECT stream_name, source_system, last_cursor, after_entity_id, high_water_revision,
+                  snapshot_anchor_revision, high_water_updated_at, sync_status,
+                  last_error_code, last_error_message, last_synced_at, updated_at
+           FROM course_sync_checkpoints
+           ORDER BY stream_name ASC`,
+        );
+        return res.rows;
+      }),
+    );
+
+    router.get(
+      "/catalog/inbox",
+      handle(async (req) => {
+        const status = typeof req.query.status === "string" ? req.query.status.trim().toLowerCase() : null;
+        const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 200);
+        const res = await db.query(
+          `SELECT id, event_id, idempotency_key, correlation_id, event_type,
+                  aggregate_type, aggregate_id, aggregate_revision, status,
+                  attempt_count, next_retry_at, processed_at, last_error_code,
+                  last_error_message, created_at, updated_at
+           FROM moly_course_sync_inbox
+           WHERE ($1::text IS NULL OR status = $1)
+           ORDER BY id DESC
+           LIMIT $2`,
+          [status || null, limit],
+        );
+        return res.rows;
+      }),
     );
   }
 

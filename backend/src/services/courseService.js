@@ -21,13 +21,17 @@ function mergeCourseOwnershipView(base, ownershipInfo, localOwned = false) {
   const label = ownershipInfo && ownershipInfo.status !== "not_owned"
     ? ownershipInfo.label
     : (localOwned ? "Đã sở hữu" : "Mua khóa học");
+  const owned = Boolean(ownershipInfo?.owned || localOwned);
+  const checkoutReady = base?.checkoutReady !== false;
+  const blockedUnpriced = !owned && !checkoutReady;
   return {
     ...base,
+    checkoutReady,
     ownershipStatus: status,
-    ownershipLabel: label,
-    owned: Boolean(ownershipInfo?.owned || localOwned),
-    canPurchase: !localOwned && (ownershipInfo?.canPurchase ?? true),
-    blockCode: ownershipInfo?.blockCode || null,
+    ownershipLabel: blockedUnpriced ? "Chưa mở bán" : label,
+    owned,
+    canPurchase: blockedUnpriced ? false : (!localOwned && (ownershipInfo?.canPurchase ?? true)),
+    blockCode: ownershipInfo?.blockCode || (blockedUnpriced ? "PRICE_NOT_CONFIGURED" : null),
     canLaunchCourse: Boolean(ownershipInfo?.canLaunchCourse),
     courseOfferingId: ownershipInfo?.courseOfferingId || null,
     ssoTargetPath: ownershipInfo?.ssoTargetPath || null,
@@ -138,7 +142,9 @@ function mapCatalogItem(row) {
     isNew: course.isNew, isHot: course.isHot, ratingAvg: course.ratingAvg,
     ratingCount: course.ratingCount, enrolledCount: course.enrolledCount,
     totalSections: course.totalSections, totalLessons: course.totalLessons,
-    totalDurationSeconds: course.totalDurationSeconds, instructor: null, progress,
+    totalDurationSeconds: course.totalDurationSeconds, instructor: course.instructor, progress,
+    contentOrigin: course.contentOrigin, remoteCourseId: course.remoteCourseId,
+    checkoutReady: course.checkoutReady, profiles: course.profiles,
     packages: course.packages,
     publishedAt: course.publishedAt, contentUpdatedAt: course.contentUpdatedAt,
   };
@@ -220,14 +226,16 @@ async function getCourseLanding(slug, user) {
       lessons: mappedLessons,
     };
   });
+  const catalogItem = mapCatalogItem({
+    ...row,
+    enrollment_id: enrollment?.id,
+    completed_required: completedLessons,
+    total_required: totalLessons,
+    course_completion_pct: progressRow?.course_completion_pct,
+  });
+  const unpricedSyncedBlock = !access.canLearn && !ownershipInfo?.owned && catalogItem.checkoutReady === false;
   return {
-    ...mapCatalogItem({
-      ...row,
-      enrollment_id: enrollment?.id,
-      completed_required: completedLessons,
-      total_required: totalLessons,
-      course_completion_pct: progressRow?.course_completion_pct,
-    }),
+    ...catalogItem,
     descriptionHtml: row.description || "",
     outcomes: metadata.outcomes.map((item) => item.content),
     requirements: metadata.requirements.map((item) => item.content),
@@ -235,12 +243,19 @@ async function getCourseLanding(slug, user) {
     certificateEnabled: row.certificate_enabled === true,
     access: {
       accessType: row.access_type,
-      canEnroll: access.canEnroll,
+      canEnroll: unpricedSyncedBlock ? false : access.canEnroll,
       canLearn: access.canLearn,
       isEnrolled: access.isEnrolled,
-      reasonCode: access.denialCode,
+      reasonCode: unpricedSyncedBlock ? "PRICE_NOT_CONFIGURED" : access.denialCode,
       ...mergeCourseOwnershipView({
-        ctaLabel: access.canLearn ? "Tiếp tục học" : access.canEnroll ? "Đăng ký học" : "Xem quyền truy cập",
+        checkoutReady: catalogItem.checkoutReady,
+        ctaLabel: access.canLearn
+          ? "Tiếp tục học"
+          : unpricedSyncedBlock
+            ? "Chưa mở bán"
+            : access.canEnroll
+              ? "Đăng ký học"
+              : "Xem quyền truy cập",
       }, ownershipInfo, access.canLearn),
     },
     curriculum: detailCurriculum,
@@ -259,6 +274,10 @@ async function enroll(courseIdValue, user) {
     ? await repository.findActivePackageEntitlement(user.id, courseId)
     : null;
   const videoEntitlement = await videoAccess.find(user.id, courseId);
+  const courseDto = mapCourse(course);
+  if (courseDto.contentOrigin === "csca_course" && !courseDto.checkoutReady && !videoEntitlement && !packageEntitlement && !isActiveEnrollment(existing)) {
+    throw new CourseApiError(422, "PRICE_NOT_CONFIGURED", "Course pricing is not configured for self-enrollment yet.");
+  }
   if (!hasEntitlement(user, course, existing, packageEntitlement, videoEntitlement)) {
     throw new CourseApiError(
       403,

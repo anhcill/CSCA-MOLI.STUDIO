@@ -52,8 +52,20 @@ function createVideoPaymentService({ db, gateway, recalculateVip, sendEmail, now
       if (!subjects.includes(choice.selectedSubjectCode)) fail('SUBJECT_REQUIRED', 'Choose a subject included in this video package.', 422);
       subjects = [choice.selectedSubjectCode];
     } else if (choice.selectedSubjectCode) fail('SUBJECT_NOT_REQUIRED', 'This package does not accept a subject override.', 422);
-    const courses = (await client.query(`SELECT c.id, c.subject_code, c.status FROM video_package_courses vc
-      JOIN courses c ON c.id = vc.course_id WHERE vc.video_package_id = $1 ORDER BY c.id`, [video.id])).rows;
+    const schemaFlags = (await client.query(
+      `SELECT
+         EXISTS (
+           SELECT 1 FROM information_schema.columns
+           WHERE table_name = 'courses' AND column_name = 'content_origin'
+         ) AS has_origin,
+         to_regclass('course_profile_projections') IS NOT NULL AS has_proj`,
+    )).rows[0] || {};
+    const courseSelect = schemaFlags.has_origin
+      ? `SELECT c.id, c.subject_code, c.status, c.content_origin FROM video_package_courses vc
+         JOIN courses c ON c.id = vc.course_id WHERE vc.video_package_id = $1 ORDER BY c.id`
+      : `SELECT c.id, c.subject_code, c.status FROM video_package_courses vc
+         JOIN courses c ON c.id = vc.course_id WHERE vc.video_package_id = $1 ORDER BY c.id`;
+    const courses = (await client.query(courseSelect, [video.id])).rows;
     const included = courses.filter(course => subjects.includes(course.subject_code));
     if (!included.length || included.some(course => course.status !== 'published')
       || subjects.some(subject => !included.some(course => course.subject_code === subject))) {
@@ -62,6 +74,26 @@ function createVideoPaymentService({ db, gateway, recalculateVip, sendEmail, now
     const subjectPrice = video.requires_subject_choice ? product.subject_prices?.[subjects[0]] : undefined;
     const price = subjectPrice ?? product.price_vnd;
     if (price == null || !money(price)) fail('PRICE_NOT_CONFIGURED', 'Package price is not configured.', 422);
+    if (schemaFlags.has_origin && included.some((c) => c.content_origin === 'csca_course')) {
+      const syncedIds = included.filter((c) => c.content_origin === 'csca_course').map((c) => Number(c.id));
+      if (Number(price) <= 0) {
+        fail('PRICE_NOT_CONFIGURED', 'Synced CSCA-Course offering price is not configured.', 422);
+      }
+      if (schemaFlags.has_proj && syncedIds.length > 0) {
+        const projRows = (await client.query(
+          `SELECT local_course_id,
+                  COUNT(*) FILTER (WHERE deleted_at IS NULL AND status <> 'tombstoned')::int AS total_profiles,
+                  COUNT(*) FILTER (WHERE deleted_at IS NULL AND status = 'active' AND checkout_ready = TRUE)::int AS ready_profiles
+           FROM course_profile_projections
+           WHERE local_course_id = ANY($1::bigint[])
+           GROUP BY local_course_id`,
+          [syncedIds],
+        )).rows;
+        if (projRows.some((r) => Number(r.total_profiles) > 0 && Number(r.ready_profiles) === 0)) {
+          fail('PRICE_NOT_CONFIGURED', 'Synced CSCA-Course offering is not open for checkout yet.', 422);
+        }
+      }
+    }
     const snapshot = { version: 1, type: choice.type, productId: Number(product.id), name: product.name,
       originalAmount: Number(price), renewalMode: product.renewal_mode,
       video: { packageId: Number(video.id), name: video.name, subjects, courseIds: included.map(course => Number(course.id)),

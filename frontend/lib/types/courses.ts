@@ -37,10 +37,25 @@ export interface ApiErrorEnvelope {
 }
 
 export interface CourseInstructorDto {
-  id: number;
+  id: number | string;
   displayName: string;
   avatarUrl: string | null;
   headline: string | null;
+}
+
+export interface CourseProfileSummaryDto {
+  id: number;
+  remoteProfileId: string | null;
+  externalOfferingId: string | null;
+  mode: 'MIRROR' | 'INDEPENDENT';
+  badgeLabel: string | null;
+  status: 'active' | 'inactive' | 'archived' | 'tombstoned';
+  checkoutReady: boolean;
+  managementClassId: string | null;
+  sourceLiveClassId: string | null;
+  allowFileDownload: boolean;
+  deviceLimit: number;
+  enforceTrustedDevices: boolean;
 }
 
 export interface CoursePackageSummaryDto {
@@ -85,6 +100,10 @@ export interface CourseCatalogItemDto {
   ssoTargetPath?: string | null;
   isExternalOnly?: boolean;
   learningDestination?: string;
+  contentOrigin?: 'moly_native' | 'csca_course';
+  remoteCourseId?: string | null;
+  checkoutReady?: boolean;
+  profiles?: CourseProfileSummaryDto[];
   enrolledCount: number;
   totalSections: number;
   totalLessons: number;
@@ -131,6 +150,7 @@ export interface CourseAccessDto {
   ssoTargetPath?: string | null;
   isExternalOnly?: boolean;
   learningDestination?: string;
+  checkoutReady?: boolean;
 }
 
 export interface CurriculumLessonDto {

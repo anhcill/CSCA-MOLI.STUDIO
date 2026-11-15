@@ -56,6 +56,13 @@ function isIntegrationKillSwitchActive(env = process.env) {
   return disabledFlag === "true" || killFlag === "true";
 }
 
+function isCatalogSyncKillSwitchActive(env = process.env) {
+  if (isIntegrationKillSwitchActive(env)) return true;
+  const disabledFlag = String(env?.COURSE_CATALOG_SYNC_DISABLED || "").trim().toLowerCase();
+  const pullDisabledFlag = String(env?.COURSE_CATALOG_PULL_DISABLED || "").trim().toLowerCase();
+  return disabledFlag === "true" || pullDisabledFlag === "true";
+}
+
 const metricsCounters = new Map();
 const latencyStats = new Map();
 
@@ -136,6 +143,7 @@ module.exports = {
   redactSensitiveData,
   resolveCorrelationId,
   isIntegrationKillSwitchActive,
+  isCatalogSyncKillSwitchActive,
   recordMetric,
   observeMetricLatency,
   getIntegrationMetricsSnapshot,

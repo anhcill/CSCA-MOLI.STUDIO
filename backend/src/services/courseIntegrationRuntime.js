@@ -3,8 +3,10 @@ const { createCourseIntegrationClient } = require("./courseIntegrationClient");
 const { createCourseOutboxSyncService } = require("./courseOutboxSyncService");
 const { createCourseOwnershipProjectionService } = require("./courseOwnershipProjectionService");
 const { createCourseReconciliationService } = require("./courseReconciliationService");
+const { createMolyCourseCatalogSyncService } = require("./molyCourseCatalogSyncService");
 const {
   createIntegrationLogger,
+  isCatalogSyncKillSwitchActive,
   isIntegrationKillSwitchActive,
 } = require("../utils/integrationLogger");
 
@@ -12,11 +14,13 @@ const client = createCourseIntegrationClient();
 const outbox = createCourseOutboxSyncService({ db, client });
 const ownership = createCourseOwnershipProjectionService({ db, client, outbox });
 const reconciliation = createCourseReconciliationService({ db, client, outbox });
+const catalogSync = createMolyCourseCatalogSyncService({ db, client });
 const workerLog = createIntegrationLogger({ component: "course-worker" });
 
 let workerTimer = null;
 let workerRunning = false;
 let lastReconcileAtMs = 0;
+let lastCatalogPullAtMs = 0;
 
 function startOutboxWorker({
   intervalMs = Number.parseInt(String(process.env.COURSE_INTEGRATION_WORKER_INTERVAL_MS || "5000"), 10) || 5000,
@@ -39,6 +43,30 @@ function startOutboxWorker({
         reconcileBefore: true,
         reconcileAfter: true,
       });
+      if (!isCatalogSyncKillSwitchActive()) {
+        await catalogSync.processAvailableInboxJobs({
+          workerId: `moly-catalog-${process.pid}`,
+          limit: 50,
+        }).catch((err) => {
+          workerLog.warn("catalog_inbox_worker_deferred", {
+            code: err?.code || "CATALOG_INBOX_ERROR",
+            message: err?.message || "Catalog inbox processing deferred.",
+          });
+        });
+        const catalogPullIntervalMs = Number.parseInt(
+          String(process.env.COURSE_CATALOG_PULL_INTERVAL_MS || "0"),
+          10,
+        ) || 0;
+        if (catalogPullIntervalMs > 0 && Date.now() - lastCatalogPullAtMs >= catalogPullIntervalMs) {
+          lastCatalogPullAtMs = Date.now();
+          await catalogSync.runCatalogBackfill({ limit: 100 }).catch((err) => {
+            workerLog.warn("scheduled_catalog_pull_deferred", {
+              code: err?.code || "CATALOG_PULL_ERROR",
+              message: err?.message || "Scheduled catalog backfill deferred.",
+            });
+          });
+        }
+      }
       if (reconcileIntervalMs > 0 && Date.now() - lastReconcileAtMs >= reconcileIntervalMs) {
         lastReconcileAtMs = Date.now();
         await reconciliation.runReconciliation({
@@ -81,6 +109,7 @@ module.exports = {
   outbox,
   ownership,
   reconciliation,
+  catalogSync,
   startOutboxWorker,
   stopOutboxWorker,
 };

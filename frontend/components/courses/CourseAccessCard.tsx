@@ -48,6 +48,8 @@ function durationLabel(seconds: number) {
 
 function accessHeading(course: CourseDetailDto, names: string[]) {
   if (course.access.canLearn) return 'Bạn đã có quyền học';
+  const unpricedBlocked = course.checkoutReady === false && !course.owned;
+  if (unpricedBlocked) return 'Đang cập nhật học phí';
   if (course.accessType === 'free') return 'Khóa học miễn phí';
   if (course.accessType === 'contact') return 'Liên hệ để đăng ký';
   if (course.accessType === 'private') return 'Khóa học riêng';
@@ -56,6 +58,10 @@ function accessHeading(course: CourseDetailDto, names: string[]) {
 
 function actionLabel(course: CourseDetailDto) {
   if (course.access.canLearn) return course.progress ? 'Tiếp tục học' : 'Bắt đầu học';
+  const blockCode = course.access.blockCode ?? course.blockCode ?? null;
+  if ((course.checkoutReady === false && !course.owned) || blockCode === 'PRICE_NOT_CONFIGURED') {
+    return 'Chưa mở bán';
+  }
   if (course.access.canEnroll) return course.accessType === 'free' ? 'Đăng ký miễn phí' : 'Đăng ký học';
   const ownershipStatus = course.access.ownershipStatus ?? course.ownershipStatus;
   if (ownershipStatus === 'expired') return 'Mua lại khóa học';
@@ -77,6 +83,9 @@ export function CourseAccessCard({ course }: { course: CourseDetailDto }) {
   const ownershipLabel = course.access.ownershipLabel ?? course.ownershipLabel ?? null;
   const canLaunchCourse = Boolean(course.access.canLaunchCourse ?? course.canLaunchCourse);
   const ssoTargetPath = course.access.ssoTargetPath ?? course.ssoTargetPath ?? null;
+  const blockCode = course.access.blockCode ?? course.blockCode ?? null;
+  const isUnpricedBlocked = !course.access.canLearn && !course.owned
+    && (course.checkoutReady === false || blockCode === 'PRICE_NOT_CONFIGURED');
   const firstFreePreviewLesson = !course.access.canLearn
     ? course.curriculum.flatMap((s) => s.lessons).find((l) => l.isFreePreview)
     : undefined;
@@ -93,6 +102,7 @@ export function CourseAccessCard({ course }: { course: CourseDetailDto }) {
 
   const handleAction = async () => {
     if (course.access.canLearn) return openFirstLesson(course.progress?.lastLessonId);
+    if (isUnpricedBlocked) return;
 
     if (!course.access.canEnroll) {
       if (course.access.reasonCode === 'AUTH_REQUIRED') {
@@ -129,6 +139,8 @@ export function CourseAccessCard({ course }: { course: CourseDetailDto }) {
         <p className="mt-2 text-2xl font-black">{accessHeading(course, names)}</p>
         {course.access.canLearn ? (
           <p className="mt-2 text-sm font-semibold text-indigo-100">Quyền học của bạn đang hoạt động.</p>
+        ) : isUnpricedBlocked ? (
+          <p className="mt-2 text-sm font-semibold text-indigo-100">Khóa học đã được đồng bộ và đang chờ cấu hình gói học phí để mở bán.</p>
         ) : names.length ? (
           <div className="mt-3 flex flex-wrap gap-2">
             {names.map((name) => (
@@ -173,6 +185,12 @@ export function CourseAccessCard({ course }: { course: CourseDetailDto }) {
           </div>
         ) : null}
 
+        {isUnpricedBlocked ? (
+          <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-800 dark:border-amber-800/70 dark:bg-amber-950/40 dark:text-amber-200">
+            <p>Khóa học chưa cấu hình học phí trên Moly nên chưa thể thanh toán hoặc tự đăng ký.</p>
+          </div>
+        ) : null}
+
         {canLaunchCourse ? (
           <div className="mb-3">
             <CourseSsoLaunchButton courseId={course.id} targetPath={ssoTargetPath} label="Vào học" />
@@ -183,7 +201,7 @@ export function CourseAccessCard({ course }: { course: CourseDetailDto }) {
           <button
             type="button"
             onClick={handleAction}
-            disabled={busy || ownershipStatus === 'pending_sync' || ownershipStatus === 'grant_blocked'}
+            disabled={busy || ownershipStatus === 'pending_sync' || ownershipStatus === 'grant_blocked' || isUnpricedBlocked}
             className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 py-4 font-black text-white shadow-lg transition hover:-translate-y-0.5 hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-800 dark:hover:bg-indigo-700"
           >
             {course.access.canLearn || course.access.canEnroll ? <FiPlayCircle className="text-xl" /> : <FiPackage className="text-xl" />}

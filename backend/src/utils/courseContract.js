@@ -21,8 +21,59 @@ function toNullableNumber(value) {
   return Number.isFinite(number) ? number : null;
 }
 
+function parseProjectedProfiles(row) {
+  if (!Array.isArray(row?.projected_profiles)) return [];
+  return row.projected_profiles
+    .filter((p) => p && typeof p === "object")
+    .map((p) => ({
+      id: toFiniteNumber(p.id),
+      remoteProfileId: p.remoteProfileId || p.remote_profile_id || null,
+      externalOfferingId: p.externalOfferingId || p.external_offering_id || null,
+      mode: p.mode || "INDEPENDENT",
+      badgeLabel: p.badgeLabel || p.badge_label || null,
+      status: p.status || "active",
+      checkoutReady: p.checkoutReady === true || p.checkout_ready === true,
+      managementClassId: p.managementClassId || p.management_class_id || null,
+      sourceLiveClassId: p.sourceLiveClassId || p.source_live_class_id || null,
+      allowFileDownload: p.allowFileDownload !== false && p.allow_file_download !== false,
+      deviceLimit: toNullableNumber(p.deviceLimit ?? p.device_limit) ?? 2,
+      enforceTrustedDevices: p.enforceTrustedDevices !== false && p.enforce_trusted_devices !== false,
+    }));
+}
+
+function parseRemoteInstructor(row) {
+  const remoteMeta = row?.remote_metadata && typeof row.remote_metadata === "object"
+    ? row.remote_metadata
+    : null;
+  const profileWithInstructor = Array.isArray(row?.projected_profiles)
+    ? row.projected_profiles.find((p) => p && typeof p === "object" && p.instructor)
+    : null;
+  const raw = remoteMeta?.instructor || profileWithInstructor?.instructor || null;
+  if (!raw || typeof raw !== "object") return null;
+  const displayName = String(raw.displayName || raw.fullName || raw.name || "").trim();
+  if (!displayName) return null;
+  return {
+    id: raw.id ?? toNullableNumber(row.instructor_id) ?? 0,
+    displayName,
+    avatarUrl: raw.avatarUrl || null,
+    headline: raw.headline || raw.title || raw.role || null,
+  };
+}
+
 function mapCourse(row) {
   if (!row) return null;
+  const profiles = parseProjectedProfiles(row);
+  const instructor = parseRemoteInstructor(row);
+  const contentOrigin = row.content_origin === "csca_course" ? "csca_course" : "moly_native";
+  const priceVnd = toFiniteNumber(row.price_vnd);
+  const hasReadyProfile = profiles.some((p) => p.status === "active" && p.checkoutReady === true);
+  const hasPricedVideoPackage = row.has_priced_video_package === true;
+  const checkoutReady = contentOrigin !== "csca_course"
+    ? true
+    : (
+      row.access_type === "free"
+      || (profiles.length > 0 ? hasReadyProfile : (priceVnd > 0 || hasPricedVideoPackage))
+    );
   return {
     id: toFiniteNumber(row.id),
     externalKey: row.external_key,
@@ -35,14 +86,20 @@ function mapCourse(row) {
     thumbnailUrl: row.thumbnail_url,
     previewVideoAssetId: toNullableNumber(row.preview_video_asset_id),
     instructorId: toNullableNumber(row.instructor_id),
+    instructor,
     accessType: row.access_type,
     requiredTier: row.required_tier,
     packages: Array.isArray(row.packages)
       ? row.packages.map((pkg) => ({ id: toFiniteNumber(pkg.id), name: pkg.name }))
       : [],
-    priceVnd: toFiniteNumber(row.price_vnd),
+    priceVnd,
     compareAtPriceVnd: toNullableNumber(row.compare_at_price_vnd),
     status: row.status,
+    contentOrigin,
+    remoteCourseId: row.remote_course_id || null,
+    syncRevision: toNullableNumber(row.sync_revision),
+    profiles,
+    checkoutReady,
     isFeatured: row.is_featured === true,
     isNew: row.is_new === true,
     isHot: row.is_hot === true,

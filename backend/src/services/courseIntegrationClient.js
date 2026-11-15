@@ -2,6 +2,7 @@ const crypto = require("crypto");
 const { CourseApiError } = require("../utils/courseResponses");
 const {
   createIntegrationLogger,
+  isCatalogSyncKillSwitchActive,
   isIntegrationKillSwitchActive,
   observeMetricLatency,
   recordMetric,
@@ -47,6 +48,21 @@ function buildMolySignature({ timestamp, rawBody, secret }) {
   const digest = crypto
     .createHmac("sha256", secret)
     .update(Buffer.concat([prefixBuf, bodyBuf]))
+    .digest("hex");
+  return `sha256=${digest}`;
+}
+
+function buildMolyGetSignature({ timestamp, method = "GET", originalUrl = "/", secret }) {
+  if (typeof timestamp !== "string" || !timestamp.trim()) {
+    throw new Error("timestamp is required to compute Moly HMAC GET signature.");
+  }
+  if (typeof secret !== "string" || !secret.trim()) {
+    throw new Error("hmacSecret is required to compute Moly HMAC GET signature.");
+  }
+  const canonicalInput = `${String(method || "GET").toUpperCase()}\n${String(originalUrl || "/")}`;
+  const digest = crypto
+    .createHmac("sha256", secret)
+    .update(Buffer.from(`${timestamp}.${canonicalInput}`, "utf8"))
     .digest("hex");
   return `sha256=${digest}`;
 }
@@ -351,6 +367,190 @@ function createCourseIntegrationClient({
     throw lastError || new CourseIntegrationClientError(502, "COURSE_LMS_REQUEST_FAILED", "Request failed.", { retryable: true });
   }
 
+  async function getSigned(
+    routePath,
+    queryParams = {},
+    {
+      apiVersion = "v2",
+      correlationId,
+      maxTransportAttempts,
+      timeoutMs,
+      validateData,
+    } = {},
+  ) {
+    const integrationLog = logger && logger !== console && typeof logger.info === "function"
+      ? logger
+      : createIntegrationLogger({ component: "course-client", env });
+    const reqCorr = resolveCorrelationId(correlationId);
+    if (isCatalogSyncKillSwitchActive(env)) {
+      recordMetric("moly.client.blocked_kill_switch");
+      integrationLog.warn("client_blocked_kill_switch", { routePath, method: "GET" }, reqCorr);
+      throw new CourseIntegrationClientError(
+        503,
+        "SYNC_KILL_SWITCH_ACTIVE",
+        "Catalog sync pull is disabled by kill switch.",
+        { retryable: true },
+      );
+    }
+    const callStartMs = Date.now();
+    const cfg = assertConfigured();
+
+    const search = new URLSearchParams();
+    for (const [k, v] of Object.entries(queryParams || {})) {
+      if (v !== undefined && v !== null && v !== "") {
+        search.set(k, String(v));
+      }
+    }
+    const qs = search.toString();
+    const basePath = `/api/integrations/${apiVersion}${routePath}${qs ? `?${qs}` : ""}`;
+    const parsedBase = new URL(cfg.baseUrl);
+    const originalUrl = `${parsedBase.pathname.replace(/\/+$/, "")}${basePath}`;
+    const url = `${parsedBase.origin}${originalUrl}`;
+
+    const attempts = parsePositiveInt(
+      maxTransportAttempts ?? cfg.maxTransportAttempts,
+      cfg.maxTransportAttempts,
+      { min: 1, max: 5 },
+    );
+    const requestTimeoutMs = parsePositiveInt(timeoutMs ?? cfg.timeoutMs, cfg.timeoutMs, {
+      min: MIN_TIMEOUT_MS,
+      max: MAX_TIMEOUT_MS,
+    });
+
+    let lastError = null;
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      const timestamp = new Date(now()).toISOString();
+      const signature = buildMolyGetSignature({
+        timestamp,
+        method: "GET",
+        originalUrl,
+        secret: cfg.hmacSecret,
+      });
+
+      let response;
+      try {
+        response = await fetchImpl(url, {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${cfg.serviceToken}`,
+            "X-Integration-Key": cfg.integrationKey,
+            "X-Event-Timestamp": timestamp,
+            "X-Correlation-ID": reqCorr,
+            "X-Signature": signature,
+            Accept: "application/json",
+          },
+          signal: AbortSignal.timeout(requestTimeoutMs),
+          redirect: "error",
+        });
+      } catch (err) {
+        const isTimeout = err?.name === "TimeoutError" || err?.name === "AbortError" || err?.code === "ETIMEDOUT";
+        lastError = new CourseIntegrationClientError(
+          isTimeout ? 504 : 503,
+          isTimeout ? "COURSE_LMS_TIMEOUT" : "COURSE_LMS_NETWORK_ERROR",
+          isTimeout ? "Timed out fetching catalog from CSCA-Course." : "Failed to reach CSCA-Course catalog endpoint.",
+          { retryable: true },
+        );
+        if (attempt < attempts) {
+          await sleep(cfg.retryBaseDelayMs * (2 ** (attempt - 1)));
+          continue;
+        }
+        throw lastError;
+      }
+
+      let parsedBody = null;
+      try {
+        parsedBody = await response.json();
+      } catch {
+        parsedBody = null;
+      }
+
+      if (!parsedBody || typeof parsedBody !== "object" || Array.isArray(parsedBody)) {
+        lastError = new CourseIntegrationClientError(
+          502,
+          "COURSE_LMS_INVALID_RESPONSE",
+          `Invalid JSON response received from CSCA-Course (${response.status}).`,
+          { retryable: response.status >= 500 || response.status === 429 },
+        );
+        if (lastError.retryable && attempt < attempts) {
+          await sleep(cfg.retryBaseDelayMs * (2 ** (attempt - 1)));
+          continue;
+        }
+        throw lastError;
+      }
+
+      if (response.status === 200 && parsedBody.success === true) {
+        if (typeof validateData === "function" && !validateData(parsedBody)) {
+          throw new CourseIntegrationClientError(
+            502,
+            "COURSE_LMS_INVALID_RESPONSE",
+            "CSCA-Course catalog response payload failed structural validation.",
+            { retryable: false },
+          );
+        }
+        observeMetricLatency("moly.client.http_ms", Date.now() - callStartMs);
+        recordMetric("moly.client.http_ok");
+        return {
+          httpStatus: response.status,
+          payload: parsedBody,
+          attemptCount: attempt,
+          requestTimestamp: timestamp,
+        };
+      }
+
+      const remoteCode = String(parsedBody.errorCode || parsedBody.code || `HTTP_${response.status}`);
+      const retryable = TRANSIENT_HTTP_STATUSES.has(response.status) || response.status >= 500;
+      lastError = new CourseIntegrationClientError(
+        response.status,
+        remoteCode,
+        String(parsedBody.message || `Course request failed (${response.status}).`),
+        { retryable, errorCode: remoteCode },
+      );
+      if (retryable && attempt < attempts) {
+        await sleep(cfg.retryBaseDelayMs * (2 ** (attempt - 1)));
+        continue;
+      }
+      throw lastError;
+    }
+
+    throw lastError || new CourseIntegrationClientError(502, "COURSE_LMS_REQUEST_FAILED", "Request failed.", { retryable: true });
+  }
+
+  function fetchCatalogCourses(
+    {
+      afterRevision = 0,
+      afterId = 0,
+      cursor = null,
+      snapshotAnchorRevision = null,
+      limit = 100,
+      includeTombstoned = true,
+      correlationId = null,
+    } = {},
+    opts = {},
+  ) {
+    return getSigned(
+      "/catalog/courses",
+      {
+        afterRevision,
+        afterId,
+        cursor,
+        snapshotAnchorRevision,
+        limit,
+        includeTombstoned,
+      },
+      {
+        ...opts,
+        apiVersion: "v2",
+        correlationId,
+        validateData: (resBody) => Boolean(
+          resBody.data
+          && Array.isArray(resBody.data.courses)
+          && resBody.data.pagination
+          && typeof resBody.data.pagination === "object",
+        ),
+      },
+    ).then((res) => res.payload.data);
+  }
+
   function provisionUser(payload, opts = {}) {
     return postSigned("/users/provision", payload, {
       ...opts,
@@ -488,6 +688,8 @@ function createCourseIntegrationClient({
     revokeEntitlement,
     queryOwnership,
     queryReconciliationSnapshot,
+    fetchCatalogCourses,
+    getSigned,
     getEventStatuses,
     exchangeSsoCode,
     bindSsoPeerIdentity,
@@ -497,5 +699,6 @@ function createCourseIntegrationClient({
 module.exports = {
   CourseIntegrationClientError,
   buildMolySignature,
+  buildMolyGetSignature,
   createCourseIntegrationClient,
 };
