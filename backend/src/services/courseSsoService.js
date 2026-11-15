@@ -16,6 +16,28 @@ const {
 const LINK_TOKEN_TTL_SECONDS = 600;
 const PRIVILEGED_ROLES = new Set(["admin", "teacher", "creator", "super_admin", "staff"]);
 
+async function assertMolyLearnerPolicy(runner, userId) {
+  const user = (await runner.query(
+    `SELECT u.role, u.is_active, u.device_limit_locked_at,
+            COALESCE((to_jsonb(u)->>'is_banned')::boolean, FALSE) AS is_banned
+     FROM users u WHERE u.id = $1`,
+    [userId],
+  )).rows[0];
+  if (!user || !user.is_active || user.is_banned || user.device_limit_locked_at) {
+    throw new SsoPolicyError(403, "SSO_USER_REVOKED", "Account is unavailable or blocked.");
+  }
+  const caps = (await runner.query(
+    "SELECT to_regclass('user_roles') IS NOT NULL AND to_regclass('roles') IS NOT NULL AS has_rbac",
+  )).rows[0];
+  const roles = caps?.has_rbac ? (await runner.query(
+    "SELECT r.code FROM user_roles ur JOIN roles r ON r.id=ur.role_id WHERE ur.user_id=$1",
+    [userId],
+  )).rows : [];
+  if (PRIVILEGED_ROLES.has(user.role) || roles.some((role) => !["student", "user"].includes(role.code))) {
+    throw new SsoPolicyError(403, "PRIVILEGED_ROLE_COLLISION", "Staff accounts must authenticate separately.");
+  }
+}
+
 function normalizeEmail(email) {
   return typeof email === "string" && email.trim() ? email.trim().toLowerCase() : null;
 }
@@ -46,7 +68,7 @@ function sanitizeUsernameSeed(rawSeed, fallbackId) {
   return base.length >= 3 ? base : `csca_${String(fallbackId).replace(/[^a-z0-9]/gi, "").slice(0, 12) || "user"}`;
 }
 
-async function withTransaction(db, work) {
+async function runSsoTransaction(db, work) {
   if (typeof db.transaction === "function") return db.transaction(work);
   if (db.pool && typeof db.pool.connect === "function") {
     const conn = await db.pool.connect();
@@ -62,10 +84,10 @@ async function withTransaction(db, work) {
       conn.release();
     }
   }
-  return work(db);
+  throw new SsoPolicyError(500, "TRANSACTION_REQUIRED", "SSO requires a transactional database adapter.");
 }
 
-async function createShadowStudentOnMoly(client, { externalUserId, email, displayName, username }) {
+async function createShadowStudentOnMoly(client, { externalUserId, email, emailVerified, displayName, username }) {
   const safeEmail = email || `${externalUserId.replace(/[^a-z0-9]/gi, "_")}@sso.csca.local`;
   const baseSeed = sanitizeUsernameSeed(username || displayName || safeEmail.split("@")[0], externalUserId);
 
@@ -80,11 +102,11 @@ async function createShadowStudentOnMoly(client, { externalUserId, email, displa
            email_verified, is_verified, is_active
          ) VALUES (
            $1, $2, NULL, $3, 'student', 'sso',
-           $4, TRUE, TRUE
+           $4, $4, TRUE
          )
          RETURNING id, username, email, full_name, avatar, avatar_url, role, is_active, is_verified,
                    is_vip, subscription_tier, vip_expires_at, vip_package_id, vip_allowed_subjects, created_at`,
-        [candidateUsername, safeEmail, displayName || candidateUsername, Boolean(email)],
+        [candidateUsername, safeEmail, displayName || candidateUsername, Boolean(email && emailVerified)],
       )).rows[0];
       await client.query(
         "INSERT INTO user_stats (user_id) VALUES ($1) ON CONFLICT DO NOTHING",
@@ -103,6 +125,20 @@ async function createShadowStudentOnMoly(client, { externalUserId, email, displa
   throw new SsoPolicyError(409, "SSO_PROVISION_CONFLICT", "Unable to provision shadow Moly learner.");
 }
 
+async function withTransaction(db, work) {
+  const conflicts = [];
+  try {
+    return await runSsoTransaction(db, (client) => work({
+      query: (sql, params) => client.query(sql, params),
+      ssoConflicts: conflicts,
+    }));
+  } catch (error) {
+    // Rejected account changes roll back, but their security review queue survives.
+    for (const { sql, params } of conflicts) await db.query(sql, params);
+    throw error;
+  }
+}
+
 async function recordMolyConflict(client, {
   conflictType,
   externalUserId,
@@ -113,7 +149,11 @@ async function recordMolyConflict(client, {
   reason,
   payload = {},
 }) {
-  await client.query(
+  const persist = async (sql, params) => {
+    await client.query(sql, params);
+    client.ssoConflicts?.push({ sql, params });
+  };
+  await persist(
     `INSERT INTO integration_conflicts (
        source_system, conflict_type, status, external_user_id,
        candidate_user_id, existing_user_id, email_hint, correlation_id,
@@ -194,6 +234,7 @@ function createCourseSsoService({
     }
 
     let resolvedCourseId = null;
+    await assertMolyLearnerPolicy(db, numericUserId);
     let resolvedOfferingId = null;
     let scopeType = "account";
     let computedTargetPath = targetPath || "/courses";
@@ -345,7 +386,8 @@ function createCourseSsoService({
          ORDER BY updated_at DESC, id DESC`,
         [user.id],
       )).rows;
-      if (identities.some((row) => ["revoked", "suspended"].includes(row.status))) {
+      await assertMolyLearnerPolicy(client, user.id);
+      if (identities.length && !identities.some((row) => row.status === "active")) {
         throw new SsoPolicyError(403, "SSO_IDENTITY_REVOKED", "Linked identity has been revoked.");
       }
 
@@ -406,6 +448,9 @@ function createCourseSsoService({
     const sourceRole = normalizeSourceRole(exchanged.role);
     const email = normalizeEmail(exchanged.email);
     const targetPath = validateSsoTargetPath(exchanged.target_path, { targetSystem: "moly" });
+    await client.query("SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))", [
+      "csca-course:identity", namespacedCourseId,
+    ]);
 
     const existingIdentity = (await client.query(
       `SELECT ei.id, ei.user_id, ei.status,
@@ -421,7 +466,7 @@ function createCourseSsoService({
     )).rows[0];
 
     if (existingIdentity) {
-      if (["revoked", "suspended"].includes(existingIdentity.status)) {
+      if (existingIdentity.status !== "active") {
         throw new SsoPolicyError(403, "SSO_IDENTITY_REVOKED", "Linked identity has been revoked or suspended.");
       }
       if (!existingIdentity.is_active || existingIdentity.device_limit_locked_at) {
@@ -551,6 +596,7 @@ function createCourseSsoService({
     const shadowUser = await createShadowStudentOnMoly(client, {
       externalUserId: namespacedCourseId,
       email,
+      emailVerified: exchanged.email_verified === true,
       displayName: exchanged.display_name || exchanged.username,
       username: exchanged.username,
     });
@@ -576,6 +622,7 @@ function createCourseSsoService({
   }
 
   async function issueAuthResult({ req, user, targetPath, externalUserId, syncPeer, nonce, corr }) {
+    await assertMolyLearnerPolicy(db, user.id);
     if (syncPeer && courseClient?.isConfigured?.()) {
       await courseClient.bindSsoPeerIdentity({
         externalUserId: `moly:${user.id}`,
@@ -583,7 +630,7 @@ function createCourseSsoService({
         email: user.email,
         nonce: nonce || "sso-bind",
         correlationId: corr,
-      }).catch(() => null);
+      });
     }
 
     if (ownership) {
@@ -619,6 +666,10 @@ function createCourseSsoService({
       consumeIp: ipAddress,
       correlationId: corr,
     });
+    if (exchanged?.source_system !== "csca-course" || !exchanged.source_user_id
+      || !constantTimeEqual(exchanged.nonce, state)) {
+      throw new SsoPolicyError(502, "SSO_INVALID_RESPONSE", "SSO issuer or nonce does not match this exchange.");
+    }
 
     const current = now();
     const resolved = await withTransaction(db, (client) =>
@@ -641,7 +692,7 @@ function createCourseSsoService({
       user: resolved.user,
       targetPath: resolved.targetPath,
       externalUserId: resolved.externalUserId,
-      syncPeer: Boolean(resolved.jitCreated),
+      syncPeer: true,
       nonce: exchanged.nonce || state,
       corr,
     });
@@ -676,6 +727,17 @@ function createCourseSsoService({
       if (new Date(linkRow.expires_at).getTime() <= current.getTime()) {
         throw new SsoPolicyError(401, "SSO_LINK_TOKEN_EXPIRED", "Verification challenge has expired.");
       }
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))", [
+        "csca-course:identity", linkRow.external_user_id,
+      ]);
+      const boundIdentity = (await client.query(
+        "SELECT user_id, status FROM external_identities WHERE source_system = $1 AND external_user_id = $2 FOR UPDATE",
+        ["csca-course", linkRow.external_user_id],
+      )).rows[0];
+      if (boundIdentity && (Number(boundIdentity.user_id) !== Number(linkRow.candidate_user_id)
+        || boundIdentity.status !== "active")) {
+        throw new SsoPolicyError(409, "IDENTITY_ALREADY_LINKED", "Identity was linked elsewhere or disabled after this challenge was issued.");
+      }
 
       const candidate = (await client.query(
         `SELECT id, username, email, password, full_name, avatar, avatar_url, role, is_active, is_verified,
@@ -693,6 +755,7 @@ function createCourseSsoService({
       if (PRIVILEGED_ROLES.has(String(candidate.role || "").toLowerCase())) {
         throw new SsoPolicyError(403, "PRIVILEGED_ROLE_COLLISION", "Privileged accounts cannot self-link via SSO.");
       }
+      await assertMolyLearnerPolicy(client, candidate.id);
 
       const verifiedBySession = Boolean(
         authenticatedUser
@@ -776,7 +839,7 @@ function createCourseSsoService({
     correlationId = null,
   }) {
     const namespacedCourseId = normalizeNamespacedCourseId(externalUserId);
-    const localMolyUserId = Number.parseInt(String(targetUserId || ""), 10);
+    const localMolyUserId = Number(targetUserId);
     if (!Number.isSafeInteger(localMolyUserId) || localMolyUserId <= 0) {
       throw new SsoPolicyError(422, "VALIDATION_ERROR", "Valid target_user_id is required.");
     }
@@ -784,11 +847,14 @@ function createCourseSsoService({
     const current = now();
 
     return withTransaction(db, async (client) => {
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))", [
+        "csca-course:identity", namespacedCourseId,
+      ]);
       const localUser = (await client.query(
         `SELECT id, email, role, is_active, device_limit_locked_at
          FROM users
          WHERE id = $1
-         LIMIT 1`,
+         FOR UPDATE`,
         [localMolyUserId],
       )).rows[0];
       if (!localUser || !localUser.is_active || localUser.device_limit_locked_at) {
@@ -797,15 +863,19 @@ function createCourseSsoService({
       if (PRIVILEGED_ROLES.has(String(localUser.role || "").toLowerCase())) {
         throw new SsoPolicyError(403, "PRIVILEGED_ROLE_COLLISION", "Cannot bind privileged accounts.");
       }
+      await assertMolyLearnerPolicy(client, localUser.id);
 
       const byExternal = (await client.query(
-        `SELECT id, user_id
+        `SELECT id, user_id, status
          FROM external_identities
          WHERE source_system = 'csca-course' AND external_user_id = $1
          FOR UPDATE`,
         [namespacedCourseId],
       )).rows[0];
       if (byExternal) {
+        if (byExternal.status !== "active") {
+          throw new SsoPolicyError(403, "SSO_IDENTITY_REVOKED", "Peer identity is not active.");
+        }
         if (Number(byExternal.user_id) !== localMolyUserId) {
           throw new SsoPolicyError(409, "IDENTITY_ALREADY_LINKED", "Course identity is bound to a different Moly user.");
         }

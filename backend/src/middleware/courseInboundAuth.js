@@ -56,9 +56,10 @@ function createCourseInboundAuth({ config = {}, env = process.env } = {}) {
       });
     }
 
-    const rawBodyBuf = Buffer.isBuffer(req.rawBody)
-      ? req.rawBody
-      : Buffer.from(JSON.stringify(req.body ?? {}), "utf8");
+    if (!Buffer.isBuffer(req.rawBody)) {
+      return res.status(400).json({ success: false, code: "RAW_BODY_REQUIRED", message: "Raw JSON bytes are required." });
+    }
+    const rawBodyBuf = req.rawBody;
     const expectedDigest = crypto
       .createHmac("sha256", cfg.hmacSecret)
       .update(Buffer.concat([Buffer.from(`${timestamp}.`, "utf8"), rawBodyBuf]))

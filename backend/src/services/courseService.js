@@ -26,9 +26,9 @@ function mergeCourseOwnershipView(base, ownershipInfo, localOwned = false) {
     ownershipStatus: status,
     ownershipLabel: label,
     owned: Boolean(ownershipInfo?.owned || localOwned),
-    canPurchase: ownershipInfo?.canPurchase ?? !localOwned,
+    canPurchase: !localOwned && (ownershipInfo?.canPurchase ?? true),
     blockCode: ownershipInfo?.blockCode || null,
-    canLaunchCourse: Boolean(ownershipInfo?.canLaunchCourse || (localOwned && ownershipInfo?.courseOfferingId)),
+    canLaunchCourse: Boolean(ownershipInfo?.canLaunchCourse),
     courseOfferingId: ownershipInfo?.courseOfferingId || null,
     ssoTargetPath: ownershipInfo?.ssoTargetPath || null,
   };

@@ -25,6 +25,77 @@ const {
   validateSsoTargetPath,
 } = require('../src/utils/ssoPathPolicy');
 
+
+test('Codex: exact identity state, safe-link drift, response nonce and unverified email', async (t) => {
+  const ctx = await setupDay4MolyEnv(t);
+  const assertion = {
+    source_system: 'csca-course', source_user_id: '9501', email: 'codex-unverified@test.local',
+    email_verified: false, role: 'student', target_path: '/khoa-hoc',
+  };
+  ctx.setSsoExchangeHandler(async ({ nonce }) => ({
+    status: 200, body: { success: true, data: { ...assertion, nonce } },
+  }));
+  const consume = () => ctx.ssoService.consumeCourseSso({ code: 'codex-code', state: 'codex-state' });
+  const login = await consume();
+  const userId = login.user.id;
+  const flags = (await ctx.db.query('SELECT email_verified,is_verified FROM users WHERE id=$1', [userId])).rows[0];
+  assert.equal(flags.email_verified, false);
+  assert.equal(flags.is_verified, false);
+  await ctx.db.query("UPDATE external_identities SET status='expired' WHERE user_id=$1", [userId]);
+  await assert.rejects(consume, (e) => e.code === 'SSO_IDENTITY_REVOKED');
+  ctx.setSsoExchangeHandler(async () => ({
+    status: 200, body: { success: true, data: { ...assertion, nonce: 'different-state' } },
+  }));
+  await assert.rejects(consume, (e) => e.code === 'SSO_INVALID_RESPONSE');
+  ctx.setSsoExchangeHandler(async ({ nonce }) => ({
+    status: 200, body: { success: true, data: { ...assertion, nonce } },
+  }));
+  assertion.source_user_id = '9502';
+  const challenge = await consume();
+  assert.equal(challenge.status, 'LINK_REQUIRED');
+  const other = (await ctx.db.query(
+    "INSERT INTO users(username,email,role,is_active) VALUES ('codex-other','codex-other@test.local','student',true) RETURNING id",
+  )).rows[0];
+  await ctx.db.query(
+    "INSERT INTO external_identities(source_system,external_user_id,user_id,status,source_updated_at) VALUES ('csca-course','csca-course:9502',$1,'active',NOW())",
+    [other.id],
+  );
+  await assert.rejects(() => ctx.ssoService.confirmMolySafeLink({
+    linkToken: challenge.linkToken, authenticatedUser: { id: userId, email: assertion.email },
+  }), (e) => e.code === 'IDENTITY_ALREADY_LINKED');
+  assert.equal((await ctx.db.query('SELECT completed_at FROM integration_sso_link_requests')).rows[0].completed_at, null);
+  await ctx.db.query("ALTER TABLE users ADD COLUMN is_banned BOOLEAN DEFAULT FALSE");
+  await ctx.db.query("UPDATE users SET is_banned=TRUE WHERE id=$1", [userId]);
+  await assert.rejects(() => ctx.ssoService.issueCourseLaunch({ userId }), (e) => e.code === 'SSO_USER_REVOKED');
+  await ctx.db.query("UPDATE users SET is_banned=FALSE WHERE id=$1", [userId]);
+  await ctx.db.query("CREATE TABLE roles(id INTEGER PRIMARY KEY, code TEXT)");
+  await ctx.db.query("CREATE TABLE user_roles(user_id INTEGER, role_id INTEGER)");
+  await ctx.db.query("INSERT INTO roles VALUES (1,'exam_admin')");
+  await ctx.db.query("INSERT INTO user_roles VALUES ($1,1)", [userId]);
+  await assert.rejects(() => ctx.ssoService.issueCourseLaunch({ userId }), (e) => e.code === 'PRIVILEGED_ROLE_COLLISION');
+});
+
+test('Codex: local ownership cannot advertise purchase or bypass a remote access block', () => {
+  const { mergeCourseOwnershipView } = require('../src/services/courseService');
+  const view = mergeCourseOwnershipView({}, {
+    status: 'grant_blocked', canPurchase: false, canLaunchCourse: false, courseOfferingId: 'moly:1',
+  }, true);
+  assert.equal(view.canLaunchCourse, false);
+  assert.equal(view.canPurchase, false);
+  assert.equal(mergeCourseOwnershipView({}, { status: 'not_owned', canPurchase: true }, true).canPurchase, false);
+});
+
+test('Codex: inbound HMAC fails closed without captured raw bytes', () => {
+  const body = { code: 'private-code', nonce: 'state' };
+  const signed = signInboundCourseRequest(body);
+  let response;
+  createCourseInboundAuth({ config: INBOUND_CFG })(
+    { body, get: (name) => signed.headers[name] },
+    { status: (status) => ({ json: (payload) => { response = { status, ...payload }; } }) },
+    () => assert.fail('Reconstructed JSON must not authenticate'),
+  );
+  assert.equal(response.code, 'RAW_BODY_REQUIRED');
+});
 const OUTBOUND_CFG = {
   serviceToken: 'moly-outbound-course-token',
   integrationKey: 'moly-studio-prod',
@@ -654,6 +725,9 @@ test('Case 3: Unlinked email collision never auto-merges, verifies via password/
     .send({ code: 'c-priv', state: 's-priv' });
   assert.equal(privRes.status, 403);
   assert.equal(privRes.body.code, 'PRIVILEGED_ROLE_COLLISION');
+  assert.equal((await ctx.db.query(
+    "SELECT COUNT(*)::int AS count FROM integration_conflicts WHERE external_user_id='csca-course:9001'",
+  )).rows[0].count, 1);
 
   // Student email collision returns LINK_REQUIRED without issuing JWT
   ctx.setSsoExchangeHandler(async ({ nonce }) => ({
