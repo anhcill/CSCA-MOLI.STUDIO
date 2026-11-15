@@ -193,6 +193,7 @@ async function setupDay5MolyEnv(t, { envOverrides = {} } = {}) {
           correlation_id: body.correlation_id,
           data: {
             checked_at: fakeNow.toISOString(),
+            complete: remoteState.complete !== false,
             course_mappings: remoteState.courseMappings,
             identities: remoteState.identities,
             open_conflicts: remoteState.openConflicts,
@@ -406,6 +407,50 @@ async function seedCourseAndPackage(db, { courseId, title, slug, packageId, offe
     );
   }
 }
+
+test('Codex: content managers cannot resolve identity conflicts', async () => {
+  let called = false;
+  const app = express();
+  app.use(express.json());
+  app.use(createCourseIntegrationAdminRoutes({
+    service: {},
+    authenticate: (_req, _res, next) => next(),
+    authorizeAnyPermission: (...permissions) => (_req, res, next) =>
+      permissions.includes('content.manage') ? next() : res.sendStatus(403),
+    reconciliation: { resolveIntegrationConflict: async () => { called = true; } },
+  }));
+  assert.equal((await request(app).post('/conflicts/1/resolve').send({ action: 'link_existing', targetUserId: 2 })).status, 403);
+  assert.equal(called, false);
+});
+
+test('Codex: reconciliation stays inside requested scope and rejects incomplete snapshots', async (t) => {
+  const ctx = await setupDay5MolyEnv(t);
+  await seedCourseAndPackage(ctx.db, {
+    courseId: 101, title: 'Scope', slug: 'scope', packageId: 101, offeringId: 'moly:course:101',
+  });
+  ctx.remoteState.courseMappings.push({ source_system: 'moly', external_course_id: 'moly:course:101', status: 'active' });
+  const users = (await ctx.db.query("INSERT INTO users (email) VALUES ('scope1@example.com'), ('scope2@example.com') RETURNING id")).rows;
+  for (const user of users) {
+    const ent = (await ctx.db.query(
+      "INSERT INTO user_video_entitlements (user_id, video_package_id, grant_key, source, status, allowed_subjects, starts_at, duration_mode) VALUES ($1, 101, $2, 'manual', 'active', ARRAY['MATH'], NOW(), 'lifetime') RETURNING id",
+      [user.id, `scope-${user.id}`],
+    )).rows[0];
+    await ctx.db.query('INSERT INTO video_entitlement_courses (entitlement_id, course_id) VALUES ($1, 101)', [ent.id]);
+  }
+  const scoped = await ctx.reconciliation.runReconciliation({ scopeFilter: { externalUserId: `moly:${users[0].id}` } });
+  const planned = scoped.actions.filter(a => a.actionTaken === 'planned_enqueue_grant');
+  assert.equal(planned.length, 1);
+  assert.equal(planned[0].externalUserId, `moly:${users[0].id}`);
+  const otherCourse = await ctx.reconciliation.runReconciliation({ scopeFilter: { externalCourseId: 'moly:other' } });
+  assert.equal(otherCourse.actions.filter(a => a.actionTaken === 'planned_enqueue_grant').length, 0);
+  ctx.remoteState.courseMappings.length = 0;
+  const unmapped = await ctx.reconciliation.runReconciliation({ dryRun: false, dispatchRepairs: false });
+  assert.equal(unmapped.repairedOutboxIds.length, 0);
+  ctx.remoteState.complete = false;
+  await assert.rejects(ctx.reconciliation.runReconciliation({ dryRun: false }),
+    error => error.code === 'RECONCILIATION_SNAPSHOT_INCOMPLETE' || error.errorCode === 'RECONCILIATION_SNAPSHOT_INCOMPLETE');
+  assert.equal((await ctx.db.query('SELECT COUNT(*)::int AS count FROM integration_outbox')).rows[0].count, 0);
+});
 
 test('Day 5: Reconcile repairs missing grant & revoked entitlement, preserves conflicts, flags unknown & unmapped, and is idempotent on rerun', async (t) => {
   const ctx = await setupDay5MolyEnv(t);
@@ -666,6 +711,14 @@ test('Day 5: Manual dead-letter retry, open conflict retry block, Admin Ops API,
     .send({ action: 'link_existing', targetUserId: u.id, resolutionNote: 'Verified identity' });
   assert.equal(resolveRes.status, 200);
   assert.equal(resolveRes.body.data.status, 'resolved');
+
+  const otherUser = (await ctx.db.query("INSERT INTO users (email) VALUES ('other-link@example.com') RETURNING id")).rows[0];
+  const reassignment = await request(ctx.app)
+    .post(`/api/admin/course-integrations/conflicts/${conflict.id}/resolve`)
+    .send({ action: 'link_existing', targetUserId: otherUser.id });
+  assert.equal(reassignment.status, 409);
+  assert.equal(reassignment.body.code, 'IDENTITY_ALREADY_LINKED');
+  assert.equal(Number((await ctx.db.query('SELECT user_id FROM external_identities WHERE external_user_id = $1', [`moly:${u.id}`])).rows[0].user_id), Number(u.id));
 
   const retryRes = await request(ctx.app)
     .post(`/api/admin/course-integrations/outbox/${dlqRow.id}/retry`)

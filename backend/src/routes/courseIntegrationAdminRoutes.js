@@ -179,6 +179,7 @@ function createCourseIntegrationAdminRoutes({
 
     router.post(
       "/conflicts/:id/resolve",
+      authorizeAnyPermission("users.manage"),
       handle((req) =>
         reconciliation.resolveIntegrationConflict({
           conflictId: req.params.id,

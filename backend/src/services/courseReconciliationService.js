@@ -395,6 +395,16 @@ function createCourseReconciliationService({
     }
 
     const remote = snapshotRes.payload.data || {};
+    // Absence from a partial snapshot is not evidence of a missing grant.
+    if (remote.complete !== true) {
+      await finalizeRun(runRow?.id, {
+        status: "failed",
+        errorCode: "RECONCILIATION_SNAPSHOT_INCOMPLETE",
+        errorMessage: "A complete snapshot is required. Narrow the reconciliation scope.",
+      });
+      throw new CourseApiError(409, "RECONCILIATION_SNAPSHOT_INCOMPLETE",
+        "A complete snapshot is required. Narrow the reconciliation scope.");
+    }
     const remoteIdentities = Array.isArray(remote.identities) ? remote.identities : [];
     const remoteConflicts = Array.isArray(remote.open_conflicts) ? remote.open_conflicts : [];
     const remoteEntitlements = Array.isArray(remote.entitlements) ? remote.entitlements : [];
@@ -434,8 +444,9 @@ function createCourseReconciliationService({
          JOIN video_entitlement_courses ec ON ec.entitlement_id = e.id
          JOIN users u ON u.id = e.user_id
          WHERE ($1::int IS NULL OR e.user_id = $1)
+           AND ($2::text IS NULL OR 'moly:' || e.user_id::text = $2)
          ORDER BY e.id DESC, ec.course_id ASC`,
-        [Number.isSafeInteger(parsedUserFilter) ? parsedUserFilter : null],
+        [Number.isSafeInteger(parsedUserFilter) ? parsedUserFilter : null, extUserFilter],
       )).rows
       : [];
     const localExtEntitlements = caps.has_ext_entitlements
@@ -612,6 +623,7 @@ function createCourseReconciliationService({
       const extUserId = `moly:${uid}`;
       const localCourseId = Number(ent.local_course_id);
       const mapping = activeMappingByLocalCourse.get(localCourseId) || null;
+      if (extCourseFilter && mapping?.offeringId !== extCourseFilter) continue;
       const expectedGrantId = buildExpectedGrantId({
         transactionId: ent.transaction_id,
         entitlementId: ent.entitlement_id,
@@ -646,8 +658,7 @@ function createCourseReconciliationService({
         continue;
       }
 
-      const hasRemoteMapping = remoteActiveMappingOfferings.size === 0
-        || remoteActiveMappingOfferings.has(mapping.offeringId);
+      const hasRemoteMapping = remoteActiveMappingOfferings.has(mapping.offeringId);
       if (!hasRemoteMapping && isLocalActive) {
         summaryCounts.missing_course_mapping += 1;
         actions.push({
@@ -1076,7 +1087,7 @@ function createCourseReconciliationService({
         }
         nextUserId = chosenUserId;
         if (conflict.external_user_id) {
-          await txClient.query(
+          const linked = await txClient.query(
             `INSERT INTO external_identities (
                source_system, external_user_id, user_id, status, link_method,
                source_updated_at, correlation_id, linked_by
@@ -1087,7 +1098,9 @@ function createCourseReconciliationService({
                link_method = 'manual',
                source_updated_at = GREATEST(external_identities.source_updated_at + INTERVAL '1 millisecond', EXCLUDED.source_updated_at),
                correlation_id = EXCLUDED.correlation_id,
-               linked_by = EXCLUDED.linked_by`,
+               linked_by = EXCLUDED.linked_by
+             WHERE external_identities.user_id = EXCLUDED.user_id
+             RETURNING user_id`,
             [
               conflict.source_system || "csca-course",
               conflict.external_user_id,
@@ -1097,6 +1110,10 @@ function createCourseReconciliationService({
               actorId ?? null,
             ],
           );
+          if (!linked.rows.length) {
+            throw new CourseApiError(409, "IDENTITY_ALREADY_LINKED",
+              "This external identity already belongs to another user.");
+          }
         }
       }
       const nextStatus = normalizedAction === "dismiss" || normalizedAction === "dismissed"
