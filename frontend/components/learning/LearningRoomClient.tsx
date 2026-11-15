@@ -48,7 +48,9 @@ function updateCompletedLesson(room: LearningRoomDto, lessonId: number): Learnin
     enrollment: {
       ...room.enrollment,
       progress: {
-        ...room.enrollment.progress,
+        lastLessonId: room.enrollment.progress?.lastLessonId ?? null,
+        lastLessonTitle: room.enrollment.progress?.lastLessonTitle ?? null,
+        lastPositionSeconds: room.enrollment.progress?.lastPositionSeconds ?? 0,
         completedLessons,
         totalLessons,
         completionPct: totalLessons ? (completedLessons / totalLessons) * 100 : 0,
@@ -252,7 +254,7 @@ export function LearningRoomClient({ courseSlug, lessonId }: { courseSlug: strin
 
   return (
     <div className="min-h-screen bg-[#f5efe8] text-[#18243a] transition-colors duration-300 dark:bg-[#050d1d] dark:text-[#f1e5d3]">
-      <LearningHeader courseSlug={courseSlug} courseTitle={room.course.title} progressPct={room.enrollment.progress.completionPct} onNotesClick={openNotes} />
+      <LearningHeader courseSlug={courseSlug} courseTitle={room.course.title} progressPct={room.enrollment.progress?.completionPct ?? 0} onNotesClick={openNotes} />
 
       <div className={`relative mx-auto grid max-w-[1600px] gap-5 px-4 py-5 sm:px-6 lg:items-start lg:px-8 ${theaterMode ? 'lg:grid-cols-1' : 'lg:grid-cols-[minmax(0,1fr)_430px]'}`}>
         <main className="min-w-0 space-y-5">
@@ -465,7 +467,7 @@ export function LearningRoomClient({ courseSlug, lessonId }: { courseSlug: strin
             courseSlug={courseSlug}
             sections={room.curriculum}
             activeLessonId={lessonId}
-            progressPct={room.enrollment.progress.completionPct}
+            progressPct={room.enrollment.progress?.completionPct ?? 0}
           />
         ) : null}
       </div>

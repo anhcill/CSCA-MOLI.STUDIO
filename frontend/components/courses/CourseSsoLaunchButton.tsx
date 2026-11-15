@@ -35,11 +35,11 @@ export function CourseSsoLaunchButton({
     setLaunching(true);
     setError('');
     try {
-      const result = await ssoApi.launchCourseSso({
+      const result = await ssoApi.intentCourseSso({
         courseId: courseId ?? undefined,
         targetPath: targetPath ?? undefined,
       });
-      const urlStr = result?.launchUrl || '';
+      const urlStr = result?.destinationStartUrl || '';
       if (!urlStr) {
         setError('Chưa có đường dẫn học tập cho khóa học này.');
         setLaunching(false);

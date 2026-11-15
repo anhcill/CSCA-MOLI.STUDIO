@@ -2,18 +2,29 @@ const crypto = require("crypto");
 const bcrypt = require("bcrypt");
 const defaultDb = require("../config/database");
 const {
+  DEFAULT_BROWSER_TX_TTL_SECONDS,
   DEFAULT_SSO_TTL_SECONDS,
   SsoPolicyError,
+  buildSsoAuthorizeUrl,
   buildSsoCallbackUrl,
+  buildSsoStartUrl,
+  computePkceChallengeS256,
   constantTimeEqual,
   generateOpaqueSsoCode,
+  generatePkceVerifier,
   generateSsoNonce,
   hashSsoToken,
+  readSsoCookie,
   resolveSsoTtlSeconds,
+  validatePkceChallenge,
+  validateSsoStateParam,
   validateSsoTargetPath,
+  verifyPkceVerifierS256,
 } = require("../utils/ssoPathPolicy");
 
 const LINK_TOKEN_TTL_SECONDS = 600;
+const MOLY_SSO_TX_COOKIE = "moly_sso_tx";
+const MOLY_SSO_LINK_COOKIE = "moly_sso_link";
 const PRIVILEGED_ROLES = new Set(["admin", "teacher", "creator", "super_admin", "staff"]);
 
 async function assertMolyLearnerPolicy(runner, userId) {
@@ -203,13 +214,27 @@ function createCourseSsoService({
     return offeringId ? { ...row, offering_id: String(offeringId).trim() } : null;
   }
 
-  async function issueCourseLaunch({
-    userId,
-    courseId = null,
-    targetPath = null,
-    correlationId = null,
-    courseWebBaseUrl = null,
-  }) {
+  async function resolveCourseMappingByOfferingId(runner, offeringId) {
+    const cleanOffering = typeof offeringId === "string" ? offeringId.trim() : "";
+    if (!cleanOffering) return null;
+    const rows = (await runner.query(
+      `SELECT id, source_system, external_course_id, local_course_id, status, metadata
+       FROM external_course_mappings
+       WHERE status = 'active'
+         AND (
+           (source_system = 'moly' AND external_course_id = $1)
+           OR (source_system = 'csca-course' AND metadata->>'moly_external_course_id' = $1)
+         )
+       ORDER BY id ASC
+       LIMIT 1`,
+      [cleanOffering],
+    )).rows;
+    const row = rows[0];
+    if (!row) return null;
+    return { ...row, offering_id: cleanOffering };
+  }
+
+  async function assertCourseLaunchEligible({ userId, courseId = null, offeringId = null, targetPath = null }) {
     const numericUserId = Number(userId);
     if (!Number.isSafeInteger(numericUserId) || numericUserId <= 0) {
       throw new SsoPolicyError(401, "AUTH_REQUIRED", "Authentication required.");
@@ -233,21 +258,32 @@ function createCourseSsoService({
       throw new SsoPolicyError(403, "PRIVILEGED_ROLE_SSO_BLOCKED", "Privileged accounts must sign in separately on CSCA-Course.");
     }
 
-    let resolvedCourseId = null;
     await assertMolyLearnerPolicy(db, numericUserId);
+
+    let resolvedCourseId = null;
     let resolvedOfferingId = null;
     let scopeType = "account";
     let computedTargetPath = targetPath || "/courses";
 
+    let mapping = null;
     if (courseId !== null && courseId !== undefined && courseId !== "") {
       resolvedCourseId = Number(courseId);
       if (!Number.isSafeInteger(resolvedCourseId) || resolvedCourseId <= 0) {
         throw new SsoPolicyError(400, "INVALID_COURSE_ID", "courseId must be a positive integer.");
       }
-      const mapping = await resolveCourseMappingByLocalId(db, resolvedCourseId);
+      mapping = await resolveCourseMappingByLocalId(db, resolvedCourseId);
       if (!mapping) {
         throw new SsoPolicyError(404, "COURSE_MAPPING_MISSING", "Course does not have an active CSCA-Course offering mapping.");
       }
+    } else if (typeof offeringId === "string" && offeringId.trim()) {
+      mapping = await resolveCourseMappingByOfferingId(db, offeringId.trim());
+      if (!mapping) {
+        throw new SsoPolicyError(404, "COURSE_MAPPING_MISSING", "Course offering does not have an active local mapping.");
+      }
+      resolvedCourseId = Number(mapping.local_course_id);
+    }
+
+    if (mapping && resolvedCourseId) {
       resolvedOfferingId = mapping.offering_id;
       scopeType = "course";
 
@@ -274,61 +310,137 @@ function createCourseSsoService({
     }
 
     const safeTargetPath = validateSsoTargetPath(computedTargetPath, { targetSystem: "csca-course" });
+    return {
+      user,
+      resolvedCourseId,
+      resolvedOfferingId,
+      scopeType,
+      safeTargetPath,
+    };
+  }
+
+  async function checkCourseLaunchIntent({
+    userId,
+    courseId = null,
+    offeringId = null,
+    targetPath = null,
+    correlationId = null,
+    courseWebBaseUrl = null,
+  }) {
+    const eligible = await assertCourseLaunchEligible({ userId, courseId, offeringId, targetPath });
+    const corr = correlationId || crypto.randomUUID();
+    const webBase = courseWebBaseUrl || courseClient?.getConfig?.().courseWebBaseUrl || env.COURSE_WEB_BASE_URL || "";
+    const destinationStartUrl = webBase
+      ? buildSsoStartUrl({
+          webBaseUrl: webBase,
+          targetPath: eligible.safeTargetPath,
+          courseId: eligible.resolvedCourseId,
+          offeringId: eligible.resolvedOfferingId,
+        })
+      : null;
+
+    return {
+      targetSystem: "csca-course",
+      targetPath: eligible.safeTargetPath,
+      scopeType: eligible.scopeType,
+      courseId: eligible.resolvedCourseId,
+      offeringId: eligible.resolvedOfferingId,
+      destinationStartUrl,
+      correlationId: corr,
+    };
+  }
+
+  async function authorizeCourseSsoRequest({
+    userId,
+    state,
+    codeChallenge,
+    codeChallengeMethod = "S256",
+    courseId = null,
+    offeringId = null,
+    targetPath = null,
+    correlationId = null,
+    courseWebBaseUrl = null,
+  }) {
+    const validatedState = validateSsoStateParam(state);
+    const validatedChallenge = validatePkceChallenge(codeChallenge, codeChallengeMethod);
+    const eligible = await assertCourseLaunchEligible({ userId, courseId, offeringId, targetPath });
+
     const ttlSeconds = resolveSsoTtlSeconds(env.COURSE_SSO_TTL_SECONDS, DEFAULT_SSO_TTL_SECONDS);
     const issuedAt = now();
     const expiresAt = new Date(issuedAt.getTime() + ttlSeconds * 1000);
     const code = generateOpaqueSsoCode();
-    const state = generateSsoNonce();
     const codeHash = hashSsoToken(code);
     const corr = correlationId || crypto.randomUUID();
 
     await db.query(
       `INSERT INTO integration_sso_codes (
          code_hash, source_system, source_user_id, local_user_id,
-         target_system, target_path, nonce, scope_type,
-         scoped_local_course_id, scoped_external_course_id, correlation_id,
-         expires_at
+         target_system, target_path, nonce, pkce_challenge, pkce_method,
+         scope_type, scoped_local_course_id, scoped_external_course_id,
+         correlation_id, expires_at
        ) VALUES (
          $1, 'moly', $2, $3,
-         'csca-course', $4, $5, $6,
+         'csca-course', $4, $5, $6, 'S256',
          $7, $8, $9,
-         $10
+         $10, $11
        )`,
       [
         codeHash,
-        String(user.id),
-        user.id,
-        safeTargetPath,
-        state,
-        scopeType,
-        resolvedCourseId,
-        resolvedOfferingId,
+        String(eligible.user.id),
+        eligible.user.id,
+        eligible.safeTargetPath,
+        validatedState,
+        validatedChallenge,
+        eligible.scopeType,
+        eligible.resolvedCourseId,
+        eligible.resolvedOfferingId,
         corr,
         expiresAt.toISOString(),
       ],
     );
 
     const webBase = courseWebBaseUrl || courseClient?.getConfig?.().courseWebBaseUrl || env.COURSE_WEB_BASE_URL || "";
-    const launchUrl = webBase ? buildSsoCallbackUrl({ webBaseUrl: webBase, code, state }) : null;
+    const callbackUrl = webBase
+      ? buildSsoCallbackUrl({ webBaseUrl: webBase, code, state: validatedState })
+      : null;
 
     return {
       code,
-      state,
+      state: validatedState,
       targetSystem: "csca-course",
-      targetPath: safeTargetPath,
-      scopeType,
-      courseId: resolvedCourseId,
-      offeringId: resolvedOfferingId,
+      targetPath: eligible.safeTargetPath,
+      scopeType: eligible.scopeType,
+      courseId: eligible.resolvedCourseId,
+      offeringId: eligible.resolvedOfferingId,
       expiresAt: expiresAt.toISOString(),
       expiresInSeconds: ttlSeconds,
       correlationId: corr,
-      launchUrl,
+      redirectUrl: callbackUrl,
+      launchUrl: callbackUrl,
     };
   }
 
-  async function exchangeMolySsoCode({ code, nonce, consumerSystem = "csca-course", consumeIp = null, correlationId = null }) {
+  async function issueCourseLaunch() {
+    throw new SsoPolicyError(
+      400,
+      "SSO_PKCE_REQUIRED",
+      "Legacy non-PKCE SSO launch is disabled. Use destination-initiated PKCE browser transaction flow.",
+    );
+  }
+
+  async function exchangeMolySsoCode({
+    code,
+    nonce,
+    codeVerifier = null,
+    consumerSystem = "csca-course",
+    consumeIp = null,
+    correlationId = null,
+  }) {
     if (!code || !nonce) {
       throw new SsoPolicyError(400, "SSO_INVALID_REQUEST", "SSO code and nonce are required.");
+    }
+    if (!codeVerifier) {
+      throw new SsoPolicyError(401, "SSO_PKCE_VERIFIER_REQUIRED", "PKCE code_verifier is required.");
     }
     if (consumerSystem !== "csca-course") {
       throw new SsoPolicyError(403, "SSO_CONSUMER_MISMATCH", "Consumer system mismatch.");
@@ -361,6 +473,12 @@ function createCourseSsoService({
       }
       if (!constantTimeEqual(ssoRow.nonce, nonce)) {
         throw new SsoPolicyError(401, "SSO_STATE_MISMATCH", "SSO state/nonce verification failed.");
+      }
+      if (!ssoRow.pkce_challenge || String(ssoRow.pkce_method || "").toUpperCase() !== "S256") {
+        throw new SsoPolicyError(400, "SSO_PKCE_REQUIRED", "Legacy non-PKCE SSO codes cannot be exchanged.");
+      }
+      if (!verifyPkceVerifierS256(codeVerifier, ssoRow.pkce_challenge)) {
+        throw new SsoPolicyError(403, "SSO_PKCE_MISMATCH", "PKCE code_verifier verification failed.");
       }
 
       const user = (await client.query(
@@ -549,6 +667,8 @@ function createCourseSsoService({
 
         const linkToken = generateOpaqueSsoCode(32);
         const linkTokenHash = hashSsoToken(linkToken);
+        const linkBrowserTxToken = generateOpaqueSsoCode(32);
+        const linkBrowserTxHash = hashSsoToken(linkBrowserTxToken);
         const expiresAt = new Date(current.getTime() + LINK_TOKEN_TTL_SECONDS * 1000);
 
         await recordMolyConflict(client, {
@@ -562,14 +682,15 @@ function createCourseSsoService({
 
         await client.query(
           `INSERT INTO integration_sso_link_requests (
-             link_token_hash, source_system, external_user_id, candidate_user_id,
+             link_token_hash, browser_tx_hash, source_system, external_user_id, candidate_user_id,
              email, source_role, target_path, sso_nonce, correlation_id, expires_at
            ) VALUES (
-             $1, 'csca-course', $2, $3,
-             $4, $5, $6, $7, $8, $9
+             $1, $2, 'csca-course', $3, $4,
+             $5, $6, $7, $8, $9, $10
            )`,
           [
             linkTokenHash,
+            linkBrowserTxHash,
             namespacedCourseId,
             candidate.id,
             email,
@@ -584,6 +705,7 @@ function createCourseSsoService({
         return {
           outcome: "LINK_REQUIRED",
           linkToken,
+          linkBrowserTxToken,
           email,
           hasPassword: Boolean(candidate.password),
           targetPath,
@@ -651,7 +773,65 @@ function createCourseSsoService({
     };
   }
 
-  async function consumeCourseSso({ code, state, req = null, ipAddress = null, correlationId = null }) {
+  async function startIncomingCourseSsoTransaction({
+    targetPath = null,
+    correlationId = null,
+    courseWebBaseUrl = null,
+  } = {}) {
+    const safeTargetPath = validateSsoTargetPath(targetPath || "/hoc", { targetSystem: "moly" });
+    const browserTxToken = generateOpaqueSsoCode(32);
+    const txTokenHash = hashSsoToken(browserTxToken);
+    const state = generateSsoNonce();
+    const codeVerifier = generatePkceVerifier();
+    const codeChallenge = computePkceChallengeS256(codeVerifier);
+    const ttlSeconds = resolveSsoTtlSeconds(env.SSO_BROWSER_TX_TTL_SECONDS, DEFAULT_BROWSER_TX_TTL_SECONDS);
+    const issuedAt = now();
+    const expiresAt = new Date(issuedAt.getTime() + ttlSeconds * 1000);
+    const corr = correlationId || crypto.randomUUID();
+
+    await db.query(
+      `INSERT INTO integration_sso_browser_txs (
+         tx_token_hash, direction, purpose, state,
+         code_verifier, code_challenge, code_challenge_method, target_path, correlation_id, expires_at
+       ) VALUES (
+         $1, 'csca_course_to_moly', 'sso_login', $2,
+         $3, $4, 'S256', $5, $6, $7
+       )`,
+      [txTokenHash, state, codeVerifier, codeChallenge, safeTargetPath, corr, expiresAt.toISOString()],
+    );
+
+    const webBase = courseWebBaseUrl || courseClient?.getConfig?.().courseWebBaseUrl || env.COURSE_WEB_BASE_URL || "";
+    const authorizeUrl = webBase
+      ? buildSsoAuthorizeUrl({
+          webBaseUrl: webBase,
+          targetSystem: "moly",
+          state,
+          codeChallenge,
+          codeChallengeMethod: "S256",
+          targetPath: safeTargetPath,
+        })
+      : null;
+
+    return {
+      cookieName: MOLY_SSO_TX_COOKIE,
+      browserTxToken,
+      ttlSeconds,
+      state,
+      targetPath: safeTargetPath,
+      authorizeUrl,
+      expiresAt: expiresAt.toISOString(),
+      correlationId: corr,
+    };
+  }
+
+  async function consumeCourseSso({
+    code,
+    state,
+    req = null,
+    browserTxToken = null,
+    ipAddress = null,
+    correlationId = null,
+  }) {
     if (!code || !state) {
       throw new SsoPolicyError(400, "SSO_INVALID_REQUEST", "SSO code and state are required.");
     }
@@ -659,10 +839,61 @@ function createCourseSsoService({
       throw new SsoPolicyError(503, "COURSE_SSO_NOT_CONFIGURED", "CSCA-Course SSO client is unavailable.");
     }
 
+    const rawTxToken = browserTxToken || readSsoCookie(req, MOLY_SSO_TX_COOKIE);
+    if (!rawTxToken) {
+      throw new SsoPolicyError(
+        403,
+        "SSO_BROWSER_BINDING_REQUIRED",
+        "SSO login must finish in the browser session that initiated it.",
+      );
+    }
+
     const corr = correlationId || crypto.randomUUID();
+    const current = now();
+    const txHash = hashSsoToken(rawTxToken);
+
+    const boundTx = await withTransaction(db, async (client) => {
+      const txRow = (await client.query(
+        `SELECT *
+         FROM integration_sso_browser_txs
+         WHERE tx_token_hash = $1
+         FOR UPDATE`,
+        [txHash],
+      )).rows[0];
+
+      if (!txRow || txRow.direction !== "csca_course_to_moly" || txRow.purpose !== "sso_login") {
+        throw new SsoPolicyError(403, "SSO_BROWSER_BINDING_INVALID", "Invalid SSO browser transaction cookie.");
+      }
+      if (txRow.revoked_at) {
+        throw new SsoPolicyError(403, "SSO_BROWSER_TX_REVOKED", "SSO browser transaction was revoked.");
+      }
+      if (txRow.consumed_at) {
+        throw new SsoPolicyError(409, "SSO_BROWSER_TX_ALREADY_USED", "SSO browser transaction was already consumed.");
+      }
+      if (new Date(txRow.expires_at).getTime() <= current.getTime()) {
+        throw new SsoPolicyError(401, "SSO_BROWSER_TX_EXPIRED", "SSO browser transaction has expired. Please try again.");
+      }
+      if (!constantTimeEqual(txRow.state, state)) {
+        throw new SsoPolicyError(403, "SSO_BROWSER_STATE_MISMATCH", "SSO state does not match this browser transaction.");
+      }
+
+      await client.query(
+        `UPDATE integration_sso_browser_txs
+         SET consumed_at = $2
+         WHERE id = $1 AND consumed_at IS NULL`,
+        [txRow.id, current.toISOString()],
+      );
+
+      return {
+        codeVerifier: txRow.code_verifier,
+        targetPath: txRow.target_path,
+      };
+    });
+
     const exchanged = await courseClient.exchangeSsoCode({
       code,
       nonce: state,
+      codeVerifier: boundTx.codeVerifier,
       consumeIp: ipAddress,
       correlationId: corr,
     });
@@ -671,7 +902,6 @@ function createCourseSsoService({
       throw new SsoPolicyError(502, "SSO_INVALID_RESPONSE", "SSO issuer or nonce does not match this exchange.");
     }
 
-    const current = now();
     const resolved = await withTransaction(db, (client) =>
       resolveConsumeOutcome(client, exchanged, { current, corr }),
     );
@@ -680,6 +910,9 @@ function createCourseSsoService({
       return {
         status: "LINK_REQUIRED",
         linkToken: resolved.linkToken,
+        linkBrowserTxToken: resolved.linkBrowserTxToken,
+        linkCookieName: MOLY_SSO_LINK_COOKIE,
+        linkCookieTtlSeconds: LINK_TOKEN_TTL_SECONDS,
         email: resolved.email,
         hasPassword: resolved.hasPassword,
         targetPath: resolved.targetPath,
@@ -698,34 +931,94 @@ function createCourseSsoService({
     });
   }
 
+  async function getMolySafeLinkStatus({ req = null, linkBrowserTxToken = null } = {}) {
+    const rawLinkCookie = linkBrowserTxToken || readSsoCookie(req, MOLY_SSO_LINK_COOKIE);
+    if (!rawLinkCookie) {
+      throw new SsoPolicyError(404, "SSO_LINK_SESSION_NOT_FOUND", "No pending link verification in this browser.");
+    }
+    const cookieHash = hashSsoToken(rawLinkCookie);
+    const current = now();
+    const row = (await db.query(
+      `SELECT l.id, l.email, l.target_path, l.expires_at, l.completed_at, (u.password IS NOT NULL) AS has_password
+       FROM integration_sso_link_requests l
+       JOIN users u ON u.id = l.candidate_user_id
+       WHERE l.browser_tx_hash = $1
+         AND l.source_system = 'csca-course'
+       ORDER BY l.id DESC
+       LIMIT 1`,
+      [cookieHash],
+    )).rows[0];
+
+    if (!row || row.completed_at) {
+      throw new SsoPolicyError(404, "SSO_LINK_SESSION_NOT_FOUND", "Link verification session has already completed or is invalid.");
+    }
+    if (new Date(row.expires_at).getTime() <= current.getTime()) {
+      throw new SsoPolicyError(401, "SSO_LINK_TOKEN_EXPIRED", "Verification challenge has expired.");
+    }
+
+    return {
+      status: "LINK_REQUIRED",
+      email: row.email,
+      hasPassword: Boolean(row.has_password),
+      targetPath: row.target_path,
+      expiresAt: new Date(row.expires_at).toISOString(),
+    };
+  }
+
   async function confirmMolySafeLink({
-    linkToken,
+    linkToken = "",
     password = null,
     authenticatedUser = null,
     req = null,
+    linkBrowserTxToken = null,
     correlationId = null,
   }) {
-    if (!linkToken) {
-      throw new SsoPolicyError(400, "SSO_LINK_TOKEN_REQUIRED", "Verification link token is required.");
+    const rawLinkCookie = linkBrowserTxToken || readSsoCookie(req, MOLY_SSO_LINK_COOKIE);
+    if (!rawLinkCookie) {
+      throw new SsoPolicyError(
+        403,
+        "SSO_BROWSER_BINDING_REQUIRED",
+        "Account link verification must be completed in the same browser session.",
+      );
     }
-    const tokenHash = hashSsoToken(linkToken);
+    const trimmedLinkToken = typeof linkToken === "string" ? linkToken.trim() : "";
+    const tokenHash = trimmedLinkToken ? hashSsoToken(trimmedLinkToken) : null;
+    const browserTxHash = hashSsoToken(rawLinkCookie);
     const current = now();
     const corr = correlationId || crypto.randomUUID();
 
     const verified = await withTransaction(db, async (client) => {
-      const linkRow = (await client.query(
-        `SELECT *
-         FROM integration_sso_link_requests
-         WHERE link_token_hash = $1
-         FOR UPDATE`,
-        [tokenHash],
-      )).rows[0];
+      const linkRow = tokenHash
+        ? (await client.query(
+            `SELECT *
+             FROM integration_sso_link_requests
+             WHERE link_token_hash = $1
+             FOR UPDATE`,
+            [tokenHash],
+          )).rows[0]
+        : (await client.query(
+            `SELECT *
+             FROM integration_sso_link_requests
+             WHERE browser_tx_hash = $1
+               AND source_system = 'csca-course'
+             ORDER BY id DESC
+             LIMIT 1
+             FOR UPDATE`,
+            [browserTxHash],
+          )).rows[0];
 
       if (!linkRow || linkRow.completed_at) {
         throw new SsoPolicyError(400, "SSO_LINK_TOKEN_INVALID", "Verification challenge is invalid or already used.");
       }
       if (new Date(linkRow.expires_at).getTime() <= current.getTime()) {
         throw new SsoPolicyError(401, "SSO_LINK_TOKEN_EXPIRED", "Verification challenge has expired.");
+      }
+      if (!linkRow.browser_tx_hash || !constantTimeEqual(linkRow.browser_tx_hash, browserTxHash)) {
+        throw new SsoPolicyError(
+          403,
+          "SSO_BROWSER_BINDING_MISMATCH",
+          "Verification challenge belongs to a different browser session.",
+        );
       }
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))", [
         "csca-course:identity", linkRow.external_user_id,
@@ -909,9 +1202,15 @@ function createCourseSsoService({
   }
 
   return {
+    MOLY_SSO_TX_COOKIE,
+    MOLY_SSO_LINK_COOKIE,
+    checkCourseLaunchIntent,
+    authorizeCourseSsoRequest,
     issueCourseLaunch,
     exchangeMolySsoCode,
+    startIncomingCourseSsoTransaction,
     consumeCourseSso,
+    getMolySafeLinkStatus,
     confirmMolySafeLink,
     bindPeerIdentityFromCourse,
   };

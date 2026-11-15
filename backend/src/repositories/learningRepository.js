@@ -168,7 +168,103 @@ async function getCourseProgress(userId, courseId) {
   return result.rows[0] || null;
 }
 
+async function listExternalOnlyCourses(userId) {
+  const caps = (await db.query(
+    `SELECT
+       to_regclass('external_entitlements') IS NOT NULL AS has_ext_entitlements,
+       to_regclass('external_course_mappings') IS NOT NULL AS has_mappings`,
+  )).rows[0];
+  if (!caps?.has_ext_entitlements || !caps?.has_mappings) {
+    return [];
+  }
+
+  const result = await db.query(
+    `SELECT DISTINCT ON (c.id)
+       ee.id AS external_entitlement_id,
+       ee.source_system AS external_source_system,
+       ee.external_grant_id,
+       ee.external_course_id,
+       ee.valid_from,
+       ee.valid_until,
+       ee.source_updated_at,
+       ee.created_at AS external_created_at,
+       c.id AS catalog_course_id,
+       c.id,
+       c.status AS course_status,
+       c.external_key,
+       c.slug,
+       c.title,
+       c.short_description,
+       c.description,
+       c.subject_code,
+       c.level,
+       c.thumbnail_url,
+       c.access_type,
+       c.price_vnd,
+       c.compare_at_price_vnd,
+       c.is_featured,
+       c.is_new,
+       c.is_hot,
+       c.rating_avg,
+       c.rating_count,
+       c.enrolled_count,
+       c.total_sections,
+       c.total_lessons,
+       c.total_duration_seconds,
+       c.published_at,
+       c.content_updated_at
+     FROM external_entitlements ee
+     JOIN courses c
+       ON c.id = ee.local_course_id
+      AND c.status = 'published'
+     WHERE ee.user_id = $1
+       AND ee.status = 'active'
+       AND COALESCE(ee.effective_owned, TRUE) = TRUE
+       AND (ee.valid_from IS NULL OR ee.valid_from <= NOW())
+       AND (ee.valid_until IS NULL OR ee.valid_until > NOW())
+       AND EXISTS (
+         SELECT 1
+         FROM external_course_mappings ecm
+         WHERE ecm.local_course_id = c.id
+           AND ecm.status = 'active'
+           AND (
+             ecm.source_system = 'moly'
+             OR (ecm.source_system = 'csca-course' AND (ecm.metadata ? 'moly_external_course_id'))
+           )
+       )
+       AND NOT EXISTS (
+         SELECT 1
+         FROM integration_conflicts ic
+         WHERE ic.status = 'open'
+           AND (
+             ic.candidate_user_id = $1
+             OR (ee.external_user_id IS NOT NULL AND ic.external_user_id = ee.external_user_id)
+           )
+       )
+       AND NOT EXISTS (
+         SELECT 1
+         FROM external_identities ei
+         WHERE ei.user_id = $1
+           AND ei.source_system = ee.source_system
+           AND ei.status <> 'active'
+       )
+       AND NOT EXISTS (
+         SELECT 1
+         FROM course_enrollments e
+         WHERE e.user_id = $1
+           AND e.course_id = c.id
+           AND (
+             e.status = 'revoked'
+             OR (e.status IN ('active', 'completed') AND (e.expires_at IS NULL OR e.expires_at > NOW()))
+           )
+       )
+     ORDER BY c.id, ee.source_updated_at DESC NULLS LAST, ee.id DESC`,
+    [userId],
+  );
+  return result.rows;
+}
+
 module.exports = {
-  listUserEnrollments, findPublishedLesson, listLessonResources,
+  listUserEnrollments, listExternalOnlyCourses, findPublishedLesson, listLessonResources,
   getLessonNavigation, findProgress, upsertProgress, getCourseProgress,
 };

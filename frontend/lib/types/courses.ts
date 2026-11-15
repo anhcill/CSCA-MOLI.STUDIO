@@ -83,6 +83,8 @@ export interface CourseCatalogItemDto {
   canLaunchCourse?: boolean;
   courseOfferingId?: string | null;
   ssoTargetPath?: string | null;
+  isExternalOnly?: boolean;
+  learningDestination?: string;
   enrolledCount: number;
   totalSections: number;
   totalLessons: number;
@@ -127,6 +129,8 @@ export interface CourseAccessDto {
   canLaunchCourse?: boolean;
   courseOfferingId?: string | null;
   ssoTargetPath?: string | null;
+  isExternalOnly?: boolean;
+  learningDestination?: string;
 }
 
 export interface CurriculumLessonDto {
@@ -174,11 +178,13 @@ export interface EnrollmentDto {
   courseId: number;
   courseSlug: string;
   status: EnrollmentStatus;
-  source: 'free' | 'package' | 'vip' | 'premium' | 'admin' | 'coupon';
+  source: 'free' | 'package' | 'vip' | 'premium' | 'admin' | 'coupon' | 'external';
   startsAt: string;
   expiresAt: string | null;
   completedAt: string | null;
-  progress: CourseProgressSummaryDto;
+  isExternalOnly?: boolean;
+  learningDestination?: string;
+  progress: CourseProgressSummaryDto | null;
 }
 
 export interface MyLearningItemDto {

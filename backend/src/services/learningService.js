@@ -110,7 +110,7 @@ async function listMyEnrollments(user) {
     user.id,
     baseItems.map((item) => item.course.id),
   );
-  return baseItems.map((item) => ({
+  const localItems = baseItems.map((item) => ({
     ...item,
     course: courseService.mergeCourseOwnershipView(
       item.course,
@@ -118,6 +118,50 @@ async function listMyEnrollments(user) {
       true,
     ),
   }));
+
+  const localCourseIdSet = new Set(localItems.map((item) => Number(item.course.id)));
+  const externalRows = (await learningRepository.listExternalOnlyCourses(user.id))
+    .filter((row) => !localCourseIdSet.has(Number(row.id)));
+  if (!externalRows.length) {
+    return localItems;
+  }
+
+  const extOwnershipMap = await courseService.loadCourseOwnershipMap(
+    user.id,
+    externalRows.map((row) => Number(row.id)),
+  );
+  const externalItems = [];
+  for (const row of externalRows) {
+    const courseId = Number(row.id);
+    const ownershipInfo = extOwnershipMap.get(courseId);
+    if (!ownershipInfo || ownershipInfo.owned !== true || !ownershipInfo.canLaunchCourse) {
+      continue;
+    }
+    const baseCourse = catalogCourse(row, null);
+    const mergedCourse = courseService.mergeCourseOwnershipView(baseCourse, ownershipInfo, false);
+    externalItems.push({
+      enrollment: {
+        id: -Math.abs(Number(row.external_entitlement_id || courseId)),
+        courseId,
+        courseSlug: row.slug,
+        status: "active",
+        source: "external",
+        startsAt: row.valid_from || row.external_created_at || new Date().toISOString(),
+        expiresAt: row.valid_until || null,
+        completedAt: null,
+        isExternalOnly: true,
+        learningDestination: "csca-course",
+        progress: null,
+      },
+      course: {
+        ...mergedCourse,
+        isExternalOnly: true,
+        learningDestination: "csca-course",
+      },
+    });
+  }
+
+  return [...localItems, ...externalItems];
 }
 
 async function getLearningCourse(courseIdValue, user) {

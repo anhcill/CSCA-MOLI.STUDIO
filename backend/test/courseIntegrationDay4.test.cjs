@@ -21,13 +21,28 @@ const { createCourseSsoService } = require('../src/services/courseSsoService');
 const { createMolySsoRouters } = require('../src/routes/ssoRoutes');
 const {
   buildSsoCallbackUrl,
+  computePkceChallengeS256,
+  generatePkceVerifier,
   resolveSsoTtlSeconds,
   validateSsoTargetPath,
 } = require('../src/utils/ssoPathPolicy');
 
+async function startMolyBrowserSso(agent, { targetPath = '/khoa-hoc' } = {}) {
+  const res = await agent.post('/api/sso/csca-course/start').send({ targetPath });
+  assert.equal(res.status, 200);
+  const authUrl = new URL(res.body.data.authorizeUrl);
+  return {
+    state: authUrl.searchParams.get('state'),
+    codeChallenge: authUrl.searchParams.get('code_challenge'),
+    codeChallengeMethod: authUrl.searchParams.get('code_challenge_method'),
+    targetPath: res.body.data.targetPath,
+    authorizeUrl: res.body.data.authorizeUrl,
+  };
+}
 
 test('Codex: exact identity state, safe-link drift, response nonce and unverified email', async (t) => {
   const ctx = await setupDay4MolyEnv(t);
+  const agent = request.agent(ctx.app);
   const assertion = {
     source_system: 'csca-course', source_user_id: '9501', email: 'codex-unverified@test.local',
     email_verified: false, role: 'student', target_path: '/khoa-hoc',
@@ -35,24 +50,32 @@ test('Codex: exact identity state, safe-link drift, response nonce and unverifie
   ctx.setSsoExchangeHandler(async ({ nonce }) => ({
     status: 200, body: { success: true, data: { ...assertion, nonce } },
   }));
-  const consume = () => ctx.ssoService.consumeCourseSso({ code: 'codex-code', state: 'codex-state' });
-  const login = await consume();
-  const userId = login.user.id;
+  const consumeWithBrowserTx = async (code = 'codex-code') => {
+    const tx = await startMolyBrowserSso(agent, { targetPath: '/khoa-hoc' });
+    return agent.post('/api/sso/consume').send({ code, state: tx.state });
+  };
+  const loginRes = await consumeWithBrowserTx('codex-code-1');
+  assert.equal(loginRes.status, 200);
+  const userId = loginRes.body.data.user.id;
   const flags = (await ctx.db.query('SELECT email_verified,is_verified FROM users WHERE id=$1', [userId])).rows[0];
   assert.equal(flags.email_verified, false);
   assert.equal(flags.is_verified, false);
   await ctx.db.query("UPDATE external_identities SET status='expired' WHERE user_id=$1", [userId]);
-  await assert.rejects(consume, (e) => e.code === 'SSO_IDENTITY_REVOKED');
+  const revokedRes = await consumeWithBrowserTx('codex-code-2');
+  assert.equal(revokedRes.status, 403);
+  assert.equal(revokedRes.body.code, 'SSO_IDENTITY_REVOKED');
   ctx.setSsoExchangeHandler(async () => ({
     status: 200, body: { success: true, data: { ...assertion, nonce: 'different-state' } },
   }));
-  await assert.rejects(consume, (e) => e.code === 'SSO_INVALID_RESPONSE');
+  const mismatchRes = await consumeWithBrowserTx('codex-code-3');
+  assert.equal(mismatchRes.body.code, 'SSO_INVALID_RESPONSE');
   ctx.setSsoExchangeHandler(async ({ nonce }) => ({
     status: 200, body: { success: true, data: { ...assertion, nonce } },
   }));
   assertion.source_user_id = '9502';
-  const challenge = await consume();
-  assert.equal(challenge.status, 'LINK_REQUIRED');
+  const challengeRes = await consumeWithBrowserTx('codex-code-4');
+  assert.equal(challengeRes.status, 200);
+  assert.equal(challengeRes.body.data.status, 'LINK_REQUIRED');
   const other = (await ctx.db.query(
     "INSERT INTO users(username,email,role,is_active) VALUES ('codex-other','codex-other@test.local','student',true) RETURNING id",
   )).rows[0];
@@ -60,19 +83,38 @@ test('Codex: exact identity state, safe-link drift, response nonce and unverifie
     "INSERT INTO external_identities(source_system,external_user_id,user_id,status,source_updated_at) VALUES ('csca-course','csca-course:9502',$1,'active',NOW())",
     [other.id],
   );
-  await assert.rejects(() => ctx.ssoService.confirmMolySafeLink({
-    linkToken: challenge.linkToken, authenticatedUser: { id: userId, email: assertion.email },
-  }), (e) => e.code === 'IDENTITY_ALREADY_LINKED');
+  const driftRes = await agent
+    .post('/api/sso/link/confirm')
+    .set('x-test-user-id', String(userId))
+    .send({ linkToken: challengeRes.body.data.linkToken });
+  assert.equal(driftRes.status, 409);
+  assert.equal(driftRes.body.code, 'IDENTITY_ALREADY_LINKED');
   assert.equal((await ctx.db.query('SELECT completed_at FROM integration_sso_link_requests')).rows[0].completed_at, null);
   await ctx.db.query("ALTER TABLE users ADD COLUMN is_banned BOOLEAN DEFAULT FALSE");
   await ctx.db.query("UPDATE users SET is_banned=TRUE WHERE id=$1", [userId]);
-  await assert.rejects(() => ctx.ssoService.issueCourseLaunch({ userId }), (e) => e.code === 'SSO_USER_REVOKED');
+  const bannedVerifier = generatePkceVerifier();
+  const bannedIntent = await request(ctx.app).post('/api/sso/course/intent').set('x-test-user-id', String(userId)).send({});
+  assert.equal(bannedIntent.status, 403);
+  assert.equal(bannedIntent.body.code, 'SSO_USER_REVOKED');
+  const bannedAuth = await request(ctx.app).post('/api/sso/course/authorize').set('x-test-user-id', String(userId)).send({
+    state: 'banned-state-valid-001',
+    codeChallenge: computePkceChallengeS256(bannedVerifier),
+    codeChallengeMethod: 'S256',
+  });
+  assert.equal(bannedAuth.status, 403);
+  assert.equal(bannedAuth.body.code, 'SSO_USER_REVOKED');
   await ctx.db.query("UPDATE users SET is_banned=FALSE WHERE id=$1", [userId]);
   await ctx.db.query("CREATE TABLE roles(id INTEGER PRIMARY KEY, code TEXT)");
   await ctx.db.query("CREATE TABLE user_roles(user_id INTEGER, role_id INTEGER)");
   await ctx.db.query("INSERT INTO roles VALUES (1,'exam_admin')");
   await ctx.db.query("INSERT INTO user_roles VALUES ($1,1)", [userId]);
-  await assert.rejects(() => ctx.ssoService.issueCourseLaunch({ userId }), (e) => e.code === 'PRIVILEGED_ROLE_COLLISION');
+  const privAuth = await request(ctx.app).post('/api/sso/course/authorize').set('x-test-user-id', String(userId)).send({
+    state: 'priv-role-state-valid-001',
+    codeChallenge: computePkceChallengeS256(generatePkceVerifier()),
+    codeChallengeMethod: 'S256',
+  });
+  assert.equal(privAuth.status, 403);
+  assert.equal(privAuth.body.code, 'PRIVILEGED_ROLE_COLLISION');
 });
 
 test('Codex: local ownership cannot advertise purchase or bypass a remote access block', () => {
@@ -496,9 +538,11 @@ test('Case 1 & Happy Path: Course-only learner SSO -> Moly JIT account, buys cou
   assert.equal(cbRes.headers['referrer-policy'], 'no-referrer');
   assert.match(cbRes.headers['cache-control'] || '', /no-store/);
 
-  // 1) Course-only user consumes Course -> Moly SSO code
+  // 1) Course-only user starts browser-bound PKCE SSO and consumes Course -> Moly SSO code
   const used = new Set();
-  ctx.setSsoExchangeHandler(async ({ code, nonce }) => {
+  const seenExchangePayloads = [];
+  ctx.setSsoExchangeHandler(async ({ code, nonce, code_verifier }) => {
+    seenExchangePayloads.push({ code, nonce, code_verifier });
     if (used.has(code)) {
       return { status: 409, body: { success: false, errorCode: 'SSO_CODE_ALREADY_USED', message: 'Replayed' } };
     }
@@ -522,13 +566,20 @@ test('Case 1 & Happy Path: Course-only learner SSO -> Moly JIT account, buys cou
     };
   });
 
-  const consumeRes = await request(ctx.app)
+  const agentA = request.agent(ctx.app);
+  const tx1 = await startMolyBrowserSso(agentA, { targetPath: '/khoa-hoc/toan-101' });
+  assert.equal(tx1.codeChallengeMethod, 'S256');
+  assert.ok(tx1.codeChallenge && tx1.state);
+
+  const consumeRes = await agentA
     .post('/api/sso/consume')
-    .send({ code: 'course-code-501', state: 'course-state-501' });
+    .send({ code: 'course-code-501', state: tx1.state });
   assert.equal(consumeRes.status, 200);
   assert.equal(consumeRes.body.data.status, 'AUTHENTICATED');
   assert.equal(consumeRes.body.data.redirectPath, '/khoa-hoc/toan-101');
   assert.ok(consumeRes.body.data.token.startsWith('moly-jwt-'));
+  assert.equal(seenExchangePayloads[0].nonce, tx1.state);
+  assert.ok(seenExchangePayloads[0].code_verifier && seenExchangePayloads[0].code_verifier.length >= 43);
 
   const molyUser = (await ctx.db.query("SELECT * FROM users WHERE email = 'course.only@example.com'")).rows[0];
   assert.equal(molyUser.password, null);
@@ -546,22 +597,46 @@ test('Case 1 & Happy Path: Course-only learner SSO -> Moly JIT account, buys cou
   assert.equal(ctx.boundPeerIdentities[0].external_user_id, `moly:${molyUser.id}`);
   assert.equal(ctx.boundPeerIdentities[0].target_user_id, '501');
 
-  // Sequential replay rejected with 409 SSO_CODE_ALREADY_USED
-  const replay = await request(ctx.app)
+  // Same-browser replay fails on cleared/consumed tx cookie; fresh browser tx still hits 409 SSO_CODE_ALREADY_USED
+  const sameTxReplay = await agentA
     .post('/api/sso/consume')
-    .send({ code: 'course-code-501', state: 'course-state-501' });
+    .send({ code: 'course-code-501', state: tx1.state });
+  assert.equal(sameTxReplay.status, 403);
+  assert.equal(sameTxReplay.body.code, 'SSO_BROWSER_BINDING_REQUIRED');
+
+  const txReplay = await startMolyBrowserSso(agentA, { targetPath: '/khoa-hoc/toan-101' });
+  const replay = await agentA
+    .post('/api/sso/consume')
+    .send({ code: 'course-code-501', state: txReplay.state });
   assert.equal(replay.status, 409);
   assert.equal(replay.body.code, 'SSO_CODE_ALREADY_USED');
 
-  // 2) Before owning course 101, launching scoped course 101 is blocked
-  const blockedLaunch = await request(ctx.app)
+  // Legacy non-PKCE /launch fails closed
+  const legacyLaunch = await request(ctx.app)
     .post('/api/sso/course/launch')
     .set('x-test-user-id', String(molyUser.id))
     .send({ courseId: 101 });
-  assert.equal(blockedLaunch.status, 403);
-  assert.equal(blockedLaunch.body.code, 'COURSE_OWNERSHIP_REQUIRED');
+  assert.equal(legacyLaunch.status, 400);
+  assert.equal(legacyLaunch.body.code, 'SSO_PKCE_REQUIRED');
 
-  // 3) Grant course ownership on Moly (simulating purchase), then launch Moly -> Course SSO
+  // 2) Before owning course 101, launching scoped course 101 is blocked on intent & authorize
+  const verifier101 = generatePkceVerifier();
+  const challenge101 = computePkceChallengeS256(verifier101);
+  const blockedIntent = await request(ctx.app)
+    .post('/api/sso/course/intent')
+    .set('x-test-user-id', String(molyUser.id))
+    .send({ courseId: 101 });
+  assert.equal(blockedIntent.status, 403);
+  assert.equal(blockedIntent.body.code, 'COURSE_OWNERSHIP_REQUIRED');
+
+  const blockedAuth = await request(ctx.app)
+    .post('/api/sso/course/authorize')
+    .set('x-test-user-id', String(molyUser.id))
+    .send({ state: 'course-state-blocked', codeChallenge: challenge101, codeChallengeMethod: 'S256', courseId: 101 });
+  assert.equal(blockedAuth.status, 403);
+  assert.equal(blockedAuth.body.code, 'COURSE_OWNERSHIP_REQUIRED');
+
+  // 3) Grant course ownership on Moly (simulating purchase), then authorize PKCE Moly -> Course SSO
   await ctx.db.query(
     `INSERT INTO video_packages (id, name, description, status, price_vnd, duration_mode, duration_days, allowed_subjects)
      VALUES (101, 'Goi 101', 'Mo ta', 'active', 500000, 'lifetime', NULL, ARRAY['MATH'])`,
@@ -578,10 +653,22 @@ test('Case 1 & Happy Path: Course-only learner SSO -> Moly JIT account, buys cou
     `INSERT INTO video_entitlement_courses (entitlement_id, course_id) VALUES ($1, 101)`,
     [ent101.id],
   );
-  const okLaunch = await request(ctx.app)
-    .post('/api/sso/course/launch')
+  const intentRes = await request(ctx.app)
+    .post('/api/sso/course/intent')
     .set('x-test-user-id', String(molyUser.id))
     .send({ courseId: 101 });
+  assert.equal(intentRes.status, 200);
+  assert.match(intentRes.body.data.destinationStartUrl, /\/sso\/start/);
+
+  const okLaunch = await request(ctx.app)
+    .post('/api/sso/course/authorize')
+    .set('x-test-user-id', String(molyUser.id))
+    .send({
+      state: 'course-state-101',
+      codeChallenge: challenge101,
+      codeChallengeMethod: 'S256',
+      courseId: 101,
+    });
   assert.equal(okLaunch.status, 200);
   const launchUrl = new URL(okLaunch.body.data.launchUrl);
   assert.equal(launchUrl.pathname, '/sso/callback');
@@ -589,14 +676,21 @@ test('Case 1 & Happy Path: Course-only learner SSO -> Moly JIT account, buys cou
   const frag = new URLSearchParams(launchUrl.hash.slice(1));
   const rawCode = frag.get('code');
   const rawState = frag.get('state');
-  assert.ok(rawCode && rawState);
+  assert.ok(rawCode && rawState === 'course-state-101');
 
-  // Verify DB holds SHA-256 code_hash only, never raw code
-  const codeRow = (await ctx.db.query('SELECT code_hash FROM integration_sso_codes ORDER BY id DESC LIMIT 1')).rows[0];
+  // Verify DB holds SHA-256 code_hash & PKCE challenge only, never raw code
+  const codeRow = (await ctx.db.query(
+    'SELECT code_hash, pkce_challenge, pkce_method FROM integration_sso_codes ORDER BY id DESC LIMIT 1',
+  )).rows[0];
   assert.equal(codeRow.code_hash, crypto.createHash('sha256').update(rawCode).digest('hex'));
+  assert.equal(codeRow.pkce_challenge, challenge101);
+  assert.equal(codeRow.pkce_method, 'S256');
 
   // Inbound S2S HMAC check rejects outbound secret or bad signature
-  const wrongSigned = signInboundCourseRequest({ code: rawCode, nonce: rawState, consumer_system: 'csca-course' }, { secret: OUTBOUND_CFG.hmacSecret });
+  const wrongSigned = signInboundCourseRequest(
+    { code: rawCode, nonce: rawState, code_verifier: verifier101, consumer_system: 'csca-course' },
+    { secret: OUTBOUND_CFG.hmacSecret },
+  );
   const badHmacRes = await request(ctx.app)
     .post('/api/integrations/v1/sso/exchange')
     .set(wrongSigned.headers)
@@ -604,7 +698,12 @@ test('Case 1 & Happy Path: Course-only learner SSO -> Moly JIT account, buys cou
   assert.equal(badHmacRes.status, 401);
 
   // Concurrent 5x S2S exchange replay: strictly 1 succeeds, 4 fail 409 SSO_CODE_ALREADY_USED
-  const validSigned = signInboundCourseRequest({ code: rawCode, nonce: rawState, consumer_system: 'csca-course' });
+  const validSigned = signInboundCourseRequest({
+    code: rawCode,
+    nonce: rawState,
+    code_verifier: verifier101,
+    consumer_system: 'csca-course',
+  });
   const exchangeResults = await Promise.all(
     Array.from({ length: 5 }, () =>
       request(ctx.app)
@@ -649,18 +748,36 @@ test('Expired code, open redirect launch, and revocation at exchange time fail c
     [ent102.id],
   );
 
-  // Open redirect rejected at HTTP launch
+  // Open redirect rejected at HTTP authorize
+  const vBad = generatePkceVerifier();
   const badRedirect = await request(ctx.app)
-    .post('/api/sso/course/launch')
+    .post('/api/sso/course/authorize')
     .set('x-test-user-id', String(u.id))
-    .send({ targetPath: '//evil.com' });
+    .send({
+      state: 'open-redir-state',
+      codeChallenge: computePkceChallengeS256(vBad),
+      codeChallengeMethod: 'S256',
+      targetPath: '//evil.com',
+    });
   assert.equal(badRedirect.status, 400);
   assert.equal(badRedirect.body.code, 'INVALID_SSO_TARGET_PATH');
 
-  // Issue scoped code, then revoke entitlement before Course exchanges it -> 403 SSO_ENTITLEMENT_REVOKED
-  const issued = await ctx.ssoService.issueCourseLaunch({ userId: u.id, courseId: 102 });
+  // Issue scoped PKCE code, then revoke entitlement before Course exchanges it -> 403 SSO_ENTITLEMENT_REVOKED
+  const vRev = generatePkceVerifier();
+  const issued = await ctx.ssoService.authorizeCourseSsoRequest({
+    userId: u.id,
+    courseId: 102,
+    state: 'rev-state-102-valid',
+    codeChallenge: computePkceChallengeS256(vRev),
+    codeChallengeMethod: 'S256',
+  });
   await ctx.db.query("UPDATE user_video_entitlements SET status = 'revoked', revoked_at = NOW() WHERE id = $1", [ent102.id]);
-  const revExchange = signInboundCourseRequest({ code: issued.code, nonce: issued.state, consumer_system: 'csca-course' });
+  const revExchange = signInboundCourseRequest({
+    code: issued.code,
+    nonce: issued.state,
+    code_verifier: vRev,
+    consumer_system: 'csca-course',
+  });
   const revRes = await request(ctx.app)
     .post('/api/integrations/v1/sso/exchange')
     .set(revExchange.headers)
@@ -670,9 +787,21 @@ test('Expired code, open redirect launch, and revocation at exchange time fail c
 
   // Re-activate entitlement, issue another code, advance clock beyond 90s -> 401 SSO_CODE_EXPIRED
   await ctx.db.query("UPDATE user_video_entitlements SET status = 'active', revoked_at = NULL WHERE id = $1", [ent102.id]);
-  const issuedExp = await ctx.ssoService.issueCourseLaunch({ userId: u.id, courseId: 102 });
+  const vExp = generatePkceVerifier();
+  const issuedExp = await ctx.ssoService.authorizeCourseSsoRequest({
+    userId: u.id,
+    courseId: 102,
+    state: 'exp-state-102-valid',
+    codeChallenge: computePkceChallengeS256(vExp),
+    codeChallengeMethod: 'S256',
+  });
   ctx.setNow(new Date('2026-11-15T10:02:30.000Z')); // +150s > 90s
-  const expReq = signInboundCourseRequest({ code: issuedExp.code, nonce: issuedExp.state, consumer_system: 'csca-course' });
+  const expReq = signInboundCourseRequest({
+    code: issuedExp.code,
+    nonce: issuedExp.state,
+    code_verifier: vExp,
+    consumer_system: 'csca-course',
+  });
   const expRes = await request(ctx.app)
     .post('/api/integrations/v1/sso/exchange')
     .set(expReq.headers)
@@ -698,10 +827,15 @@ test('Case 3: Unlinked email collision never auto-merges, verifies via password/
 
   // Privileged role cannot launch Course SSO
   const adminLaunch = await request(ctx.app)
-    .post('/api/sso/course/launch')
+    .post('/api/sso/course/authorize')
     .set('x-test-user-id', String(admin.id))
     .set('x-test-user-role', 'admin')
-    .send({ targetPath: '/courses' });
+    .send({
+      state: 'admin-state-valid-001',
+      codeChallenge: computePkceChallengeS256(generatePkceVerifier()),
+      codeChallengeMethod: 'S256',
+      targetPath: '/courses',
+    });
   assert.equal(adminLaunch.status, 403);
   assert.equal(adminLaunch.body.code, 'PRIVILEGED_ROLE_SSO_BLOCKED');
 
@@ -720,16 +854,18 @@ test('Case 3: Unlinked email collision never auto-merges, verifies via password/
       },
     },
   }));
-  const privRes = await request(ctx.app)
+  const privAgent = request.agent(ctx.app);
+  const privTx = await startMolyBrowserSso(privAgent, { targetPath: '/khoa-hoc' });
+  const privRes = await privAgent
     .post('/api/sso/consume')
-    .send({ code: 'c-priv', state: 's-priv' });
+    .send({ code: 'c-priv', state: privTx.state });
   assert.equal(privRes.status, 403);
   assert.equal(privRes.body.code, 'PRIVILEGED_ROLE_COLLISION');
   assert.equal((await ctx.db.query(
     "SELECT COUNT(*)::int AS count FROM integration_conflicts WHERE external_user_id='csca-course:9001'",
   )).rows[0].count, 1);
 
-  // Student email collision returns LINK_REQUIRED without issuing JWT
+  // Student email collision returns LINK_REQUIRED without issuing JWT, and binds link cookie to initiator browser
   ctx.setSsoExchangeHandler(async ({ nonce }) => ({
     status: 200,
     body: {
@@ -745,13 +881,22 @@ test('Case 3: Unlinked email collision never auto-merges, verifies via password/
       },
     },
   }));
-  const colRes = await request(ctx.app)
+  const agentA = request.agent(ctx.app);
+  const colTx = await startMolyBrowserSso(agentA, { targetPath: '/khoa-hoc' });
+  const colRes = await agentA
     .post('/api/sso/consume')
-    .send({ code: 'c-col-1', state: 's-col-1' });
+    .send({ code: 'c-col-1', state: colTx.state });
   assert.equal(colRes.status, 200);
   assert.equal(colRes.body.data.status, 'LINK_REQUIRED');
   assert.ok(colRes.body.data.linkToken);
   assert.equal(colRes.body.data.token, undefined);
+
+  // Status endpoint allows initiating browser to resume Safe-Link after refresh
+  const statusRes = await agentA.get('/api/sso/link/status');
+  assert.equal(statusRes.status, 200);
+  assert.equal(statusRes.body.data.status, 'LINK_REQUIRED');
+  assert.equal(statusRes.body.data.email, 'dual.learner@example.com');
+  assert.equal(statusRes.body.data.hasPassword, true);
 
   // Ownership projection shows 'Cần xác minh tài khoản' while conflict is open
   await ctx.db.query(
@@ -764,13 +909,13 @@ test('Case 3: Unlinked email collision never auto-merges, verifies via password/
   assert.equal(verifyEval.canPurchase, false);
 
   // Wrong password fails
-  const wrongConfirm = await request(ctx.app)
+  const wrongConfirm = await agentA
     .post('/api/sso/link/confirm')
     .send({ linkToken: colRes.body.data.linkToken, password: 'WrongPassword!' });
   assert.equal(wrongConfirm.status, 401);
 
   // Correct password links, resolves conflict, issues JWT, and binds peer
-  const okConfirm = await request(ctx.app)
+  const okConfirm = await agentA
     .post('/api/sso/link/confirm')
     .send({ linkToken: colRes.body.data.linkToken, password: 'MolyPass123!' });
   assert.equal(okConfirm.status, 200);
@@ -785,11 +930,14 @@ test('Case 3: Unlinked email collision never auto-merges, verifies via password/
   assert.equal(conflictAfter.status, 'resolved');
   assert.equal(ctx.boundPeerIdentities[0].target_user_id, '601');
 
-  // Reusing linkToken fails
-  const reuseConfirm = await request(ctx.app)
+  // Reusing linkToken fails after link cookie is cleared & row completed
+  const reuseConfirm = await agentA
     .post('/api/sso/link/confirm')
     .send({ linkToken: colRes.body.data.linkToken, password: 'MolyPass123!' });
-  assert.equal(reuseConfirm.status, 400);
+  assert.equal(reuseConfirm.status, 403);
+  assert.equal(reuseConfirm.body.code, 'SSO_BROWSER_BINDING_REQUIRED');
+  const linkRow = (await ctx.db.query('SELECT completed_at FROM integration_sso_link_requests ORDER BY id DESC LIMIT 1')).rows[0];
+  assert.ok(linkRow.completed_at);
 });
 
 test('Moly ownership projection exposes all 6 Day 4 UI states and videoAdminService SSO launch metadata', async (t) => {
@@ -904,4 +1052,339 @@ test('Moly ownership projection exposes all 6 Day 4 UI states and videoAdminServ
   assert.equal(pkg.ownershipLabel, 'Đã sở hữu');
   assert.equal(pkg.canLaunchCourse, true);
   assert.equal(pkg.ssoTargetPath, '/video-courses/moly:off_202');
+});
+
+test('P1 Security: 2-browser-context Login-CSRF & Safe-Link cookie isolation, passwordless candidate refresh, wrong PKCE verifier, tx replay/expiry', async (t) => {
+  const ctx = await setupDay4MolyEnv(t);
+
+  // Create victim B already logged in on Context B, and attacker-controlled external identity A on Context A
+  const victimB = (await ctx.db.query(
+    `INSERT INTO users (email, username, password, role, is_active, is_verified)
+     VALUES ('victim.b@example.com', 'victim_b', NULL, 'student', true, true) RETURNING *`,
+  )).rows[0];
+  const passwordlessLocal = (await ctx.db.query(
+    `INSERT INTO users (email, username, password, role, is_active, is_verified)
+     VALUES ('pwless.local@example.com', 'pwless_local', NULL, 'student', true, true) RETURNING *`,
+  )).rows[0];
+
+  const exchangeCalls = [];
+  ctx.setSsoExchangeHandler(async ({ code, nonce, code_verifier }) => {
+    exchangeCalls.push({ code, nonce, code_verifier });
+    return {
+      status: 200,
+      body: {
+        success: true,
+        data: {
+          source_system: 'csca-course',
+          source_user_id: code === 'code-pwless' ? '7702' : '7701',
+          email: code === 'code-pwless' ? 'pwless.local@example.com' : 'attacker.a@example.com',
+          email_verified: true,
+          role: 'student',
+          target_path: '/khoa-hoc',
+          nonce,
+        },
+      },
+    };
+  });
+
+  // 1) Context A initiates SSO -> gets stateA + HttpOnly moly_sso_tx cookie
+  const contextA = request.agent(ctx.app);
+  const startA = await startMolyBrowserSso(contextA, { targetPath: '/khoa-hoc' });
+
+  // Context B (separate cookie jar, logged in as Victim B) tries to consume Attacker A's { code, stateA }
+  const contextB = request.agent(ctx.app);
+  const csrfNoCookie = await contextB
+    .post('/api/sso/consume')
+    .set('x-test-user-id', String(victimB.id))
+    .send({ code: 'code-attacker', state: startA.state });
+  assert.equal(csrfNoCookie.status, 403);
+  assert.equal(csrfNoCookie.body.code, 'SSO_BROWSER_BINDING_REQUIRED');
+  assert.equal(exchangeCalls.length, 0);
+
+  // Even if Context B starts its own txB, injecting Context A's state fails with 403 SSO_BROWSER_STATE_MISMATCH
+  const startB = await startMolyBrowserSso(contextB, { targetPath: '/khoa-hoc' });
+  assert.notEqual(startB.state, startA.state);
+  const csrfWrongState = await contextB
+    .post('/api/sso/consume')
+    .set('x-test-user-id', String(victimB.id))
+    .send({ code: 'code-attacker', state: startA.state });
+  assert.equal(csrfWrongState.status, 403);
+  assert.equal(csrfWrongState.body.code, 'SSO_BROWSER_STATE_MISMATCH');
+  assert.equal(exchangeCalls.length, 0);
+
+  // Expired browser tx fails closed before contacting peer
+  const contextExpired = request.agent(ctx.app);
+  const startExp = await startMolyBrowserSso(contextExpired, { targetPath: '/khoa-hoc' });
+  ctx.setNow(new Date('2026-11-15T10:04:00.000Z')); // +240s > 180s
+  const expTxRes = await contextExpired
+    .post('/api/sso/consume')
+    .send({ code: 'code-exp', state: startExp.state });
+  assert.equal(expTxRes.status, 401);
+  assert.equal(expTxRes.body.code, 'SSO_BROWSER_TX_EXPIRED');
+  assert.equal(exchangeCalls.length, 0);
+  ctx.setNow(new Date('2026-11-15T10:00:00.000Z'));
+
+  // 2) Safe-Linking on passwordless local user: Context A initiates -> LINK_REQUIRED
+  const startLink = await startMolyBrowserSso(contextA, { targetPath: '/khoa-hoc' });
+  const linkConsume = await contextA
+    .post('/api/sso/consume')
+    .send({ code: 'code-pwless', state: startLink.state });
+  assert.equal(linkConsume.status, 200);
+  assert.equal(linkConsume.body.data.status, 'LINK_REQUIRED');
+  assert.equal(linkConsume.body.data.hasPassword, false);
+  const leakedLinkToken = linkConsume.body.data.linkToken;
+  assert.ok(leakedLinkToken);
+
+  // Simulated browser refresh recovers status from HttpOnly moly_sso_link cookie cleanly
+  const refreshStatus = await contextA.get('/api/sso/link/status');
+  assert.equal(refreshStatus.status, 200);
+  assert.equal(refreshStatus.body.data.status, 'LINK_REQUIRED');
+  assert.equal(refreshStatus.body.data.email, 'pwless.local@example.com');
+  assert.equal(refreshStatus.body.data.hasPassword, false);
+
+  // Victim B in Context B cannot check status or steal leaked linkToken even with matching session/cookie injection attempt
+  const contextBStatus = await contextB.get('/api/sso/link/status');
+  assert.equal(contextBStatus.status, 404);
+  assert.equal(contextBStatus.body.code, 'SSO_LINK_SESSION_NOT_FOUND');
+
+  const victimStealConfirm = await contextB
+    .post('/api/sso/link/confirm')
+    .set('x-test-user-id', String(passwordlessLocal.id))
+    .send({ linkToken: leakedLinkToken });
+  assert.equal(victimStealConfirm.status, 403);
+  assert.equal(victimStealConfirm.body.code, 'SSO_BROWSER_BINDING_REQUIRED');
+
+  // Even if Context A confirms WITHOUT authenticating as passwordlessLocal (or as Victim B), it fails closed
+  const mismatchUserConfirm = await contextA
+    .post('/api/sso/link/confirm')
+    .set('x-test-user-id', String(victimB.id))
+    .set('x-test-user-email', 'victim.b@example.com')
+    .send({ linkToken: leakedLinkToken });
+  assert.equal(mismatchUserConfirm.status, 401);
+  assert.equal(mismatchUserConfirm.body.code, 'SSO_LINK_VERIFICATION_REQUIRED');
+
+  // Passwordless local user signs in in Context A and confirms Safe-Link without linkToken in body (cookie-bound refresh recovery!)
+  const okPwlessConfirm = await contextA
+    .post('/api/sso/link/confirm')
+    .set('x-test-user-id', String(passwordlessLocal.id))
+    .set('x-test-user-email', 'pwless.local@example.com')
+    .send({});
+  assert.equal(okPwlessConfirm.status, 200);
+  assert.equal(okPwlessConfirm.body.data.status, 'AUTHENTICATED');
+  assert.equal(Number(okPwlessConfirm.body.data.user.id), Number(passwordlessLocal.id));
+
+  // 3) Outbound PKCE S256 verification: wrong code_verifier must fail closed
+  await ctx.db.query(
+    `INSERT INTO courses (id, external_key, slug, title, subject_code, level, access_type, status)
+     VALUES (301, 'toan-301', 'toan-301', 'Toan 301', 'MATH', 'basic', 'package', 'published')`,
+  );
+  await ctx.db.query(
+    `INSERT INTO external_course_mappings (source_system, external_course_id, local_course_id, status)
+     VALUES ('moly', 'moly:off_301', 301, 'active')`,
+  );
+  await ctx.db.query(
+    `INSERT INTO video_packages (id, name, description, status, price_vnd, duration_mode, duration_days, allowed_subjects)
+     VALUES (301, 'Goi 301', 'Mo ta', 'active', 300000, 'lifetime', NULL, ARRAY['MATH'])`,
+  );
+  await ctx.db.query(`INSERT INTO video_package_courses (video_package_id, course_id) VALUES (301, 301)`);
+  const ent301 = (await ctx.db.query(
+    `INSERT INTO user_video_entitlements (user_id, video_package_id, grant_key, source, status, allowed_subjects, starts_at, expires_at, duration_mode)
+     VALUES ($1, 301, 'grant-301', 'manual', 'active', ARRAY['MATH'], NOW(), NULL, 'lifetime') RETURNING id`,
+    [passwordlessLocal.id],
+  )).rows[0];
+  await ctx.db.query(`INSERT INTO video_entitlement_courses (entitlement_id, course_id) VALUES ($1, 301)`, [ent301.id]);
+
+  const goodVerifier = generatePkceVerifier();
+  const wrongVerifier = generatePkceVerifier();
+  const authRes = await request(ctx.app)
+    .post('/api/sso/course/authorize')
+    .set('x-test-user-id', String(passwordlessLocal.id))
+    .send({
+      state: 'pkce-verify-state',
+      codeChallenge: computePkceChallengeS256(goodVerifier),
+      codeChallengeMethod: 'S256',
+      courseId: 301,
+    });
+  assert.equal(authRes.status, 200);
+  const rawPkceCode = new URLSearchParams(new URL(authRes.body.data.launchUrl).hash.slice(1)).get('code');
+
+  const wrongVerifierSigned = signInboundCourseRequest({
+    code: rawPkceCode,
+    nonce: 'pkce-verify-state',
+    code_verifier: wrongVerifier,
+    consumer_system: 'csca-course',
+  });
+  const badPkceRes = await request(ctx.app)
+    .post('/api/integrations/v1/sso/exchange')
+    .set(wrongVerifierSigned.headers)
+    .send(wrongVerifierSigned.rawBody);
+  assert.equal(badPkceRes.status, 403);
+  assert.equal(badPkceRes.body.code, 'SSO_PKCE_MISMATCH');
+});
+
+test('P2 /hoc external-only courses surface verified mapped grants without creating course_enrollments or lesson_progress', async (t) => {
+  const ctx = await setupDay4MolyEnv(t);
+  const learner = (await ctx.db.query(
+    `INSERT INTO users (email, username, role, is_active, is_verified)
+     VALUES ('hoc.ext@example.com', 'hoc_ext', 'student', true, true) RETURNING *`,
+  )).rows[0];
+
+  // Published mapped courses: 401 owned externally & verified, 402 revoked/unowned, 403 unmapped external grant
+  await ctx.db.query(`
+    INSERT INTO courses (id, external_key, slug, title, subject_code, level, access_type, status) VALUES
+      (401, 'toan-401', 'toan-401', 'Toan External Verified', 'MATH', 'basic', 'package', 'published'),
+      (402, 'ly-402', 'ly-402', 'Ly Revoked External', 'PHYSICS', 'basic', 'package', 'published'),
+      (403, 'hoa-403', 'hoa-403', 'Hoa Unmapped Local', 'CHEMISTRY', 'basic', 'package', 'published')
+  `);
+  await ctx.db.query(`
+    INSERT INTO external_course_mappings (source_system, external_course_id, local_course_id, status) VALUES
+      ('moly', 'moly:off_401', 401, 'active'),
+      ('moly', 'moly:off_402', 402, 'active')
+  `);
+  await ctx.db.query(
+    `INSERT INTO external_entitlements (
+       source_system, external_grant_id, external_user_id, external_course_id,
+       user_id, local_course_id, status, effective_owned, valid_from, valid_until, revoked_at, source_updated_at
+     ) VALUES
+       ('csca-course', 'g-ext-401', 'csca-course:4010', 'moly:off_401', $1, 401, 'active', TRUE, '2026-01-01T00:00:00Z', NULL, NULL, NOW()),
+       ('csca-course', 'g-ext-402', 'csca-course:4010', 'moly:off_402', $1, 402, 'revoked', FALSE, '2026-01-01T00:00:00Z', NULL, NOW(), NOW()),
+       ('csca-course', 'g-ext-403', 'csca-course:4010', 'course:unmapped', $1, 403, 'active', TRUE, '2026-01-01T00:00:00Z', NULL, NULL, NOW())`,
+    [learner.id],
+  );
+
+  // Add remaining columns/tables queried by learningRepository.listUserEnrollments in PGlite
+  await ctx.pg.exec(`
+    ALTER TABLE courses ADD COLUMN IF NOT EXISTS short_description TEXT;
+    ALTER TABLE courses ADD COLUMN IF NOT EXISTS thumbnail_url TEXT;
+    ALTER TABLE courses ADD COLUMN IF NOT EXISTS price_vnd INTEGER;
+    ALTER TABLE courses ADD COLUMN IF NOT EXISTS compare_at_price_vnd INTEGER;
+    ALTER TABLE courses ADD COLUMN IF NOT EXISTS is_featured BOOLEAN DEFAULT FALSE;
+    ALTER TABLE courses ADD COLUMN IF NOT EXISTS is_new BOOLEAN DEFAULT FALSE;
+    ALTER TABLE courses ADD COLUMN IF NOT EXISTS is_hot BOOLEAN DEFAULT FALSE;
+    ALTER TABLE courses ADD COLUMN IF NOT EXISTS rating_avg NUMERIC DEFAULT 0;
+    ALTER TABLE courses ADD COLUMN IF NOT EXISTS rating_count INTEGER DEFAULT 0;
+    ALTER TABLE courses ADD COLUMN IF NOT EXISTS enrolled_count INTEGER DEFAULT 0;
+    ALTER TABLE courses ADD COLUMN IF NOT EXISTS total_sections INTEGER DEFAULT 0;
+    ALTER TABLE courses ADD COLUMN IF NOT EXISTS total_lessons INTEGER DEFAULT 0;
+    ALTER TABLE courses ADD COLUMN IF NOT EXISTS total_duration_seconds INTEGER DEFAULT 0;
+    ALTER TABLE courses ADD COLUMN IF NOT EXISTS published_at TIMESTAMPTZ;
+    ALTER TABLE courses ADD COLUMN IF NOT EXISTS content_updated_at TIMESTAMPTZ;
+    CREATE TABLE IF NOT EXISTS course_enrollments (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      course_id INTEGER NOT NULL,
+      status VARCHAR(32) NOT NULL DEFAULT 'active',
+      source VARCHAR(32) NOT NULL DEFAULT 'purchase',
+      starts_at TIMESTAMPTZ DEFAULT NOW(),
+      expires_at TIMESTAMPTZ,
+      completed_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE (user_id, course_id)
+    );
+    CREATE TABLE IF NOT EXISTS course_sections (
+      id SERIAL PRIMARY KEY,
+      course_id INTEGER NOT NULL,
+      title TEXT,
+      description TEXT,
+      sort_order INTEGER DEFAULT 0,
+      is_published BOOLEAN DEFAULT TRUE
+    );
+    CREATE TABLE IF NOT EXISTS course_lessons (
+      id SERIAL PRIMARY KEY,
+      course_id INTEGER NOT NULL,
+      section_id INTEGER NOT NULL,
+      external_key TEXT,
+      slug TEXT,
+      title TEXT,
+      summary TEXT,
+      lesson_type VARCHAR(32) DEFAULT 'video',
+      sort_order INTEGER DEFAULT 0,
+      estimated_duration_seconds INTEGER DEFAULT 0,
+      effective_duration_seconds INTEGER DEFAULT 0,
+      is_free_preview BOOLEAN DEFAULT FALSE,
+      is_required BOOLEAN DEFAULT TRUE,
+      is_published BOOLEAN DEFAULT TRUE
+    );
+    CREATE TABLE IF NOT EXISTS lesson_progress (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      course_id INTEGER NOT NULL,
+      lesson_id INTEGER NOT NULL,
+      status VARCHAR(32) DEFAULT 'not_started',
+      watched_seconds INTEGER DEFAULT 0,
+      max_position_seconds INTEGER DEFAULT 0,
+      last_position_seconds INTEGER DEFAULT 0,
+      completion_pct NUMERIC DEFAULT 0,
+      attempt_count INTEGER DEFAULT 0,
+      started_at TIMESTAMPTZ,
+      completed_at TIMESTAMPTZ,
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE (user_id, lesson_id)
+    );
+  `);
+
+  const dbPath = require.resolve('../src/config/database');
+  const runtimePath = require.resolve('../src/services/courseIntegrationRuntime');
+  const reloadPaths = [
+    require.resolve('../src/repositories/learningRepository'),
+    require.resolve('../src/repositories/courseRepository'),
+    require.resolve('../src/services/videoLearningAccess'),
+    require.resolve('../src/services/courseAssignmentService'),
+    require.resolve('../src/services/courseService'),
+    require.resolve('../src/services/learningService'),
+  ];
+  const prevDbMod = require.cache[dbPath];
+  const prevRuntimeMod = require.cache[runtimePath];
+  const prevReloadMods = new Map(reloadPaths.map((p) => [p, require.cache[p]]));
+
+  t.after(() => {
+    if (prevDbMod) require.cache[dbPath] = prevDbMod; else delete require.cache[dbPath];
+    if (prevRuntimeMod) require.cache[runtimePath] = prevRuntimeMod; else delete require.cache[runtimePath];
+    for (const [p, mod] of prevReloadMods.entries()) {
+      if (mod) require.cache[p] = mod; else delete require.cache[p];
+    }
+  });
+
+  require.cache[dbPath] = {
+    id: dbPath,
+    filename: dbPath,
+    loaded: true,
+    exports: { query: (...args) => ctx.db.query(...args), pool: ctx.db.pool },
+  };
+  require.cache[runtimePath] = {
+    id: runtimePath,
+    filename: runtimePath,
+    loaded: true,
+    exports: { client: { isConfigured: () => false }, outbox: ctx.outbox, ownership: ctx.ownership },
+  };
+  for (const p of reloadPaths) delete require.cache[p];
+
+  const learningService = require('../src/services/learningService');
+  const enrollments = await learningService.listMyEnrollments({ id: learner.id, role: 'student' });
+
+  // Only verified mapped active course 401 surfaces as external-only
+  assert.equal(enrollments.length, 1);
+  assert.equal(enrollments[0].course.id, 401);
+  assert.equal(enrollments[0].enrollment.source, 'external');
+  assert.equal(enrollments[0].enrollment.isExternalOnly, true);
+  assert.equal(enrollments[0].enrollment.learningDestination, 'csca-course');
+  assert.equal(enrollments[0].enrollment.progress, null);
+  assert.equal(enrollments[0].course.isExternalOnly, true);
+  assert.equal(enrollments[0].course.learningDestination, 'csca-course');
+  assert.equal(enrollments[0].course.canLaunchCourse, true);
+  assert.equal(enrollments[0].course.ssoTargetPath, '/video-courses/moly:off_401');
+
+  // Verify zero local enrollment or progress rows were fabricated
+  assert.equal((await ctx.db.query('SELECT COUNT(*)::int AS count FROM course_enrollments')).rows[0].count, 0);
+  assert.equal((await ctx.db.query('SELECT COUNT(*)::int AS count FROM lesson_progress')).rows[0].count, 0);
+
+  // Open identity conflict hides unverified external courses from /hoc
+  await ctx.db.query(
+    `INSERT INTO integration_conflicts (source_system, conflict_type, candidate_user_id, external_user_id, email_hint, reason, status)
+     VALUES ('csca-course', 'IDENTITY_EMAIL_COLLISION', $1, 'csca-course:4010', 'hoc.ext@example.com', 'Pending verify', 'open')`,
+    [learner.id],
+  );
+  const blockedEnrollments = await learningService.listMyEnrollments({ id: learner.id, role: 'student' });
+  assert.equal(blockedEnrollments.length, 0);
 });

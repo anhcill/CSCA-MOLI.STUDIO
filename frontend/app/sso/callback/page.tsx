@@ -4,7 +4,15 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { FiAlertTriangle, FiArrowRight, FiCheckCircle, FiLoader, FiShield } from 'react-icons/fi';
-import { extractAndStripSsoParams, isSafeRelativeRedirectPath, ssoApi, type SsoConsumeResult } from '@/lib/api/sso';
+import {
+  clearPendingSafeLink,
+  extractAndStripSsoParams,
+  isSafeRelativeRedirectPath,
+  loadPendingSafeLink,
+  savePendingSafeLink,
+  ssoApi,
+  type SsoConsumeResult,
+} from '@/lib/api/sso';
 import type { User } from '@/lib/api/auth';
 import { useAuthStore } from '@/lib/store/authStore';
 
@@ -14,8 +22,22 @@ function getErrorInfo(err: unknown): { code: string; message: string } {
   const e = err as { response?: { data?: { code?: string; errorCode?: string; message?: string } }; message?: string };
   const code = e?.response?.data?.code || e?.response?.data?.errorCode || 'SSO_ERROR';
   const rawMessage = e?.response?.data?.message || '';
-  if (code === 'SSO_CODE_EXPIRED') return { code, message: 'Mã đăng nhập SSO đã hết hạn (60-120s). Vui lòng bấm đăng nhập lại từ CSCA-Course.' };
-  if (code === 'SSO_CODE_ALREADY_USED') return { code, message: 'Mã đăng nhập SSO này đã được sử dụng. Vui lòng tạo phiên mới từ trang trước.' };
+  if (code === 'SSO_CODE_EXPIRED' || code === 'SSO_BROWSER_TX_EXPIRED') {
+    return { code, message: 'Phiên đăng nhập SSO đã hết hạn. Vui lòng bấm đăng nhập lại từ CSCA-Course.' };
+  }
+  if (code === 'SSO_CODE_ALREADY_USED' || code === 'SSO_BROWSER_TX_ALREADY_USED') {
+    return { code, message: 'Phiên đăng nhập SSO này đã được sử dụng. Vui lòng tạo phiên mới từ trang trước.' };
+  }
+  if (
+    code === 'SSO_BROWSER_BINDING_REQUIRED'
+    || code === 'SSO_BROWSER_BINDING_INVALID'
+    || code === 'SSO_BROWSER_BINDING_MISMATCH'
+    || code === 'SSO_BROWSER_STATE_MISMATCH'
+    || code === 'SSO_PKCE_MISMATCH'
+    || code === 'SSO_PKCE_REQUIRED'
+  ) {
+    return { code, message: 'Phiên đăng nhập phải hoàn tất trên chính trình duyệt đã khởi tạo SSO. Vui lòng thử lại từ đầu.' };
+  }
   if (code === 'PRIVILEGED_ROLE_COLLISION') return { code, message: 'Tài khoản quản trị hoặc giáo viên không thể liên kết tự động qua SSO. Vui lòng đăng nhập riêng bằng tài khoản Moly.' };
   if (code === 'DEVICE_LIMIT_REACHED' || code === 'DEVICE_LIMIT_LOCKED') {
     return { code, message: rawMessage || 'Tài khoản đã đạt giới hạn thiết bị tin cậy.' };
@@ -42,10 +64,39 @@ export default function MolySsoCallbackPage() {
   useEffect(() => {
     const params = extractAndStripSsoParams();
     if (!params) {
-      setPhase('error');
-      setErrorCode('SSO_PARAMS_MISSING');
-      setErrorMsg('Thiếu mã xác thực SSO hợp lệ. Vui lòng thử mở lại từ CSCA-Course.');
-      return;
+      const pending = loadPendingSafeLink();
+      if (!pending) {
+        setPhase('error');
+        setErrorCode('SSO_PARAMS_MISSING');
+        setErrorMsg('Thiếu mã xác thực SSO hợp lệ. Vui lòng thử mở lại từ CSCA-Course.');
+        return;
+      }
+
+      let cancelled = false;
+      ssoApi.getSafeLinkStatus()
+        .then((statusData) => {
+          if (cancelled) return;
+          const restored = {
+            linkToken: pending.linkToken,
+            email: statusData.email || pending.email,
+            hasPassword: Boolean(statusData.hasPassword),
+            targetPath: isSafeRelativeRedirectPath(statusData.targetPath) ? statusData.targetPath : pending.targetPath,
+          };
+          savePendingSafeLink(restored);
+          setLinkState(restored);
+          setPhase('link_required');
+        })
+        .catch(() => {
+          if (cancelled) return;
+          clearPendingSafeLink();
+          setPhase('error');
+          setErrorCode('SSO_PARAMS_MISSING');
+          setErrorMsg('Phiên xác minh liên kết không còn hiệu lực trên trình duyệt này. Vui lòng mở lại từ CSCA-Course.');
+        });
+
+      return () => {
+        cancelled = true;
+      };
     }
 
     const dedupeKey = `${params.code}:${params.state}`;
@@ -60,16 +111,19 @@ export default function MolySsoCallbackPage() {
       .then((result) => {
         if (cancelled) return;
         if (result.status === 'LINK_REQUIRED' && result.linkToken) {
-          setLinkState({
+          const nextLinkState = {
             linkToken: result.linkToken,
             email: result.email || '',
             hasPassword: Boolean(result.hasPassword),
             targetPath: isSafeRelativeRedirectPath(result.targetPath) ? result.targetPath : '/khoa-hoc',
-          });
+          };
+          savePendingSafeLink(nextLinkState);
+          setLinkState(nextLinkState);
           setPhase('link_required');
           return;
         }
         if (result.status === 'AUTHENTICATED' && result.token && result.user) {
+          clearPendingSafeLink();
           setUser(result.user as unknown as User);
           setTokens(result.token, result.refreshToken || '');
           setLoading(false);
@@ -106,6 +160,7 @@ export default function MolySsoCallbackPage() {
         password: useSessionOnly ? null : password,
       });
       if (result.status === 'AUTHENTICATED' && result.token && result.user) {
+        clearPendingSafeLink();
         setUser(result.user as unknown as User);
         setTokens(result.token, result.refreshToken || '');
         setLoading(false);
@@ -114,6 +169,9 @@ export default function MolySsoCallbackPage() {
       }
     } catch (err) {
       const info = getErrorInfo(err);
+      if (['SSO_LINK_TOKEN_INVALID', 'SSO_LINK_TOKEN_EXPIRED', 'SSO_BROWSER_BINDING_REQUIRED', 'SSO_BROWSER_BINDING_MISMATCH'].includes(info.code)) {
+        clearPendingSafeLink();
+      }
       setErrorCode(info.code);
       setErrorMsg(info.message);
     } finally {

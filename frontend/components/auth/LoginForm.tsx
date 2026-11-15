@@ -227,6 +227,18 @@ export default function LoginForm() {
     } catch {
       // Keep fallback
     }
+    const rawRedirect = typeof window !== 'undefined'
+      ? new URLSearchParams(window.location.search).get('redirect') || ''
+      : '';
+    if (
+      rawRedirect.startsWith('/sso/authorize')
+      && !rawRedirect.startsWith('//')
+      && !rawRedirect.includes('\\')
+      && !/[\u0000-\u0020\u007f]/.test(rawRedirect)
+    ) {
+      router.push(rawRedirect);
+      return;
+    }
     router.push(getDefaultAdminRoute(effectiveUser));
   };
 

@@ -117,10 +117,16 @@ export function MyLearningClient() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         {items.map(({ course, enrollment }) => {
-          const progress = Math.min(100, Math.max(0, enrollment.progress.completionPct));
+          const isExternalOnly = Boolean(
+            enrollment.isExternalOnly
+            || course.isExternalOnly
+            || enrollment.source === 'external'
+            || !enrollment.progress,
+          );
+          const progress = isExternalOnly ? 0 : Math.min(100, Math.max(0, enrollment.progress?.completionPct ?? 0));
           const roundedProgress = Math.round(progress);
-          const lessonId = enrollment.progress.lastLessonId;
-          const started = Boolean(lessonId) || progress > 0;
+          const lessonId = isExternalOnly ? null : enrollment.progress?.lastLessonId ?? null;
+          const started = !isExternalOnly && (Boolean(lessonId) || progress > 0);
           const target = lessonId
             ? `/hoc/${course.slug}/bai-hoc/${lessonId}`
             : `/khoa-hoc/${course.slug}`;
@@ -142,53 +148,89 @@ export function MyLearningClient() {
                         {course.subjectCode}
                       </span>
                       <CourseOwnershipBadge status={course.ownershipStatus || 'owned'} label={course.ownershipLabel} className="bg-white/95" />
+                      {isExternalOnly ? (
+                        <span className="inline-flex rounded-full border border-emerald-300/40 bg-emerald-500/20 px-3 py-1 text-[11px] font-bold text-emerald-100 backdrop-blur">
+                          CSCA-Course
+                        </span>
+                      ) : null}
                     </div>
                     <h2 className="mt-4 max-w-xl text-2xl font-black leading-tight">{course.title}</h2>
                   </div>
-                  <div className="grid h-20 w-20 shrink-0 place-items-center rounded-full p-1 shadow-lg" style={{ background: `conic-gradient(#67e8f9 ${progress * 3.6}deg, rgba(255,255,255,.18) 0)` }}>
-                    <div className="grid h-full w-full place-items-center rounded-full bg-slate-950/90 text-lg font-black">{roundedProgress}%</div>
-                  </div>
+                  {!isExternalOnly ? (
+                    <div className="grid h-20 w-20 shrink-0 place-items-center rounded-full p-1 shadow-lg" style={{ background: `conic-gradient(#67e8f9 ${progress * 3.6}deg, rgba(255,255,255,.18) 0)` }}>
+                      <div className="grid h-full w-full place-items-center rounded-full bg-slate-950/90 text-lg font-black">{roundedProgress}%</div>
+                    </div>
+                  ) : null}
                 </div>
               </div>
 
               <div className="p-6">
-                <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm font-semibold text-slate-500 dark:text-slate-400">
-                  <span className="inline-flex items-center gap-2"><FiBookOpen /> {enrollment.progress.completedLessons}/{enrollment.progress.totalLessons} bài hoàn thành</span>
-                  <span className="inline-flex items-center gap-2"><FiClock /> {formatDuration(course.totalDurationSeconds)}</span>
-                  <span className="inline-flex items-center gap-2 text-emerald-700 dark:text-emerald-300"><FiMonitor /> Đồng bộ đa thiết bị</span>
-                </div>
+                {isExternalOnly ? (
+                  <>
+                    <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm font-semibold text-slate-500 dark:text-slate-400">
+                      <span className="inline-flex items-center gap-2 text-emerald-700 dark:text-emerald-300"><FiMonitor /> Đã cấp quyền từ CSCA-Course</span>
+                      {course.totalDurationSeconds > 0 ? (
+                        <span className="inline-flex items-center gap-2"><FiClock /> {formatDuration(course.totalDurationSeconds)}</span>
+                      ) : null}
+                    </div>
 
-                <div className="mt-5">
-                  <div className="mb-2 flex items-center justify-between gap-3 text-sm">
-                    <span className="font-black text-slate-800 dark:text-slate-100">
-                      {progress >= 100 ? 'Đã hoàn thành' : started ? 'Đang học' : 'Chưa bắt đầu'}
-                    </span>
-                    <span className="font-bold text-indigo-600 dark:text-indigo-300">{roundedProgress}%</span>
-                  </div>
-                  <div className="h-2.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800" role="progressbar" aria-label={`Tiến độ ${course.title}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={roundedProgress}>
-                    <div className="h-full rounded-full bg-gradient-to-r from-indigo-600 via-violet-500 to-cyan-400 transition-[width] duration-500" style={{ width: `${progress}%` }} />
-                  </div>
-                </div>
-
-                <div className="mt-5 flex flex-col gap-4 rounded-2xl bg-slate-50 p-4 dark:bg-slate-950/60 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="min-w-0">
-                    <p className="text-xs font-black uppercase tracking-wider text-slate-400">{started ? 'Học gần nhất' : 'Sẵn sàng bắt đầu'}</p>
-                    <p className="mt-1 truncate font-bold text-slate-800 dark:text-slate-100">
-                      {enrollment.progress.lastLessonTitle || 'Bắt đầu bài học đầu tiên'}
-                    </p>
-                    {enrollment.progress.lastPositionSeconds > 0 ? <p className="mt-1 text-xs text-slate-500">Tiếp tục tại {formatPosition(enrollment.progress.lastPositionSeconds)}</p> : null}
-                  </div>
-                  <div className="flex shrink-0 flex-wrap items-center gap-2">
-                    {course.canLaunchCourse ? (
-                      <div className="w-full sm:w-auto">
-                        <CourseSsoLaunchButton courseId={course.id} targetPath={course.ssoTargetPath} label="Vào học" />
+                    <div className="mt-5 flex flex-col gap-4 rounded-2xl bg-emerald-50/70 p-4 dark:bg-emerald-950/30 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0">
+                        <p className="text-xs font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-300">Khóa học đồng bộ</p>
+                        <p className="mt-1 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                          Truy cập bài giảng video trực tiếp trên nền tảng CSCA-Course.
+                        </p>
                       </div>
-                    ) : null}
-                    <Link href={target} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 font-black text-white shadow-lg shadow-indigo-600/20 transition hover:bg-indigo-700">
-                      {progress >= 100 ? <><FiCheckCircle /> Xem lại</> : started ? <><FiPlay /> Tiếp tục học</> : <>Bắt đầu học <FiArrowRight /></>}
-                    </Link>
-                  </div>
-                </div>
+                      <div className="flex shrink-0 flex-wrap items-center gap-2">
+                        {course.canLaunchCourse ? (
+                          <div className="w-full sm:w-auto">
+                            <CourseSsoLaunchButton courseId={course.id} targetPath={course.ssoTargetPath} label="Vào học trên CSCA-Course" />
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm font-semibold text-slate-500 dark:text-slate-400">
+                      <span className="inline-flex items-center gap-2"><FiBookOpen /> {enrollment.progress?.completedLessons ?? 0}/{enrollment.progress?.totalLessons ?? 0} bài hoàn thành</span>
+                      <span className="inline-flex items-center gap-2"><FiClock /> {formatDuration(course.totalDurationSeconds)}</span>
+                      <span className="inline-flex items-center gap-2 text-emerald-700 dark:text-emerald-300"><FiMonitor /> Đồng bộ đa thiết bị</span>
+                    </div>
+
+                    <div className="mt-5">
+                      <div className="mb-2 flex items-center justify-between gap-3 text-sm">
+                        <span className="font-black text-slate-800 dark:text-slate-100">
+                          {progress >= 100 ? 'Đã hoàn thành' : started ? 'Đang học' : 'Chưa bắt đầu'}
+                        </span>
+                        <span className="font-bold text-indigo-600 dark:text-indigo-300">{roundedProgress}%</span>
+                      </div>
+                      <div className="h-2.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800" role="progressbar" aria-label={`Tiến độ ${course.title}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={roundedProgress}>
+                        <div className="h-full rounded-full bg-gradient-to-r from-indigo-600 via-violet-500 to-cyan-400 transition-[width] duration-500" style={{ width: `${progress}%` }} />
+                      </div>
+                    </div>
+
+                    <div className="mt-5 flex flex-col gap-4 rounded-2xl bg-slate-50 p-4 dark:bg-slate-950/60 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0">
+                        <p className="text-xs font-black uppercase tracking-wider text-slate-400">{started ? 'Học gần nhất' : 'Sẵn sàng bắt đầu'}</p>
+                        <p className="mt-1 truncate font-bold text-slate-800 dark:text-slate-100">
+                          {enrollment.progress?.lastLessonTitle || 'Bắt đầu bài học đầu tiên'}
+                        </p>
+                        {(enrollment.progress?.lastPositionSeconds ?? 0) > 0 ? <p className="mt-1 text-xs text-slate-500">Tiếp tục tại {formatPosition(enrollment.progress?.lastPositionSeconds ?? 0)}</p> : null}
+                      </div>
+                      <div className="flex shrink-0 flex-wrap items-center gap-2">
+                        {course.canLaunchCourse ? (
+                          <div className="w-full sm:w-auto">
+                            <CourseSsoLaunchButton courseId={course.id} targetPath={course.ssoTargetPath} label="Vào học" />
+                          </div>
+                        ) : null}
+                        <Link href={target} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 font-black text-white shadow-lg shadow-indigo-600/20 transition hover:bg-indigo-700">
+                          {progress >= 100 ? <><FiCheckCircle /> Xem lại</> : started ? <><FiPlay /> Tiếp tục học</> : <>Bắt đầu học <FiArrowRight /></>}
+                        </Link>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             </article>
           );

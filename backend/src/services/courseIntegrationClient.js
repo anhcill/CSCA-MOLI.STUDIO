@@ -372,13 +372,14 @@ function createCourseIntegrationClient({
     });
   }
 
-  function exchangeSsoCode({ code, nonce, consumerSystem = "moly", consumeIp = null, correlationId = null }, opts = {}) {
+  function exchangeSsoCode({ code, nonce, codeVerifier = null, consumerSystem = "moly", consumeIp = null, correlationId = null }, opts = {}) {
     if (!code || !nonce) {
       throw new CourseIntegrationClientError(422, "VALIDATION_ERROR", "code and nonce are required.");
     }
     const body = {
       code,
       nonce,
+      code_verifier: codeVerifier,
       consumer_system: consumerSystem,
       consume_ip: consumeIp,
       correlation_id: correlationId,
