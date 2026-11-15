@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import { FiArrowLeft, FiArrowRight, FiBookOpen, FiGrid, FiRefreshCw } from 'react-icons/fi';
 import coursesApi from '@/lib/api/courses';
 import type { CourseCatalogDto, CourseCatalogQuery } from '@/lib/types/courses';
-import { CourseFilters } from './CourseFilters';
 import { CourseGrid, CourseGridSkeleton } from './CourseGrid';
 
 const INITIAL_QUERY: CourseCatalogQuery = { page: 1, pageSize: 12, sort: 'newest' };
@@ -43,8 +42,6 @@ export function CourseCatalogClient() {
           <FiGrid /> {loading ? 'Đang cập nhật...' : `${catalog?.totalItems ?? 0} khóa học`}
         </div>
       </div>
-
-      <CourseFilters value={query} onChange={setQuery} />
 
       {error ? (
         <div role="alert" className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-8 text-center text-red-700 dark:border-red-900/70 dark:bg-red-950/35 dark:text-red-300">

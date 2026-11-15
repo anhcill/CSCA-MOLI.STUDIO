@@ -10,7 +10,6 @@ import {
   FiTrendingUp,
 } from 'react-icons/fi';
 import { CourseCatalogClient } from '@/components/courses/CourseCatalogClient';
-import { CourseTutorShowcase } from '@/components/courses/CourseTutorShowcase';
 import ThemeToggle from '@/components/layout/ThemeToggle';
 
 export const metadata: Metadata = {
@@ -106,8 +105,6 @@ export default function CoursesPage() {
             </div>
           </div>
         </section>
-
-        <CourseTutorShowcase courseTitle="các khóa học online của MOLY" />
 
         <div className="mt-8">
           <CourseCatalogClient />
