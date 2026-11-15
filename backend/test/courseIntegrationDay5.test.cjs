@@ -656,6 +656,129 @@ test('Day 5: Reconcile repairs missing grant & revoked entitlement, preserves co
   const runs = await ctx.reconciliation.listReconciliationRuns({ limit: 10 });
   assert.equal(runs.length, 3);
   assert.ok(runs.every((r) => r.status === 'completed' && Array.isArray(r.actions)));
+
+  // Drift recurs after a successful repair. Two runs observe the same snapshot.
+  const savedPayloads = (await ctx.db.query("SELECT id, payload FROM integration_outbox WHERE external_grant_id IS NOT NULL ORDER BY id")).rows;
+  ctx.remoteState.entitlements = ctx.remoteState.entitlements.filter(e => e.external_grant_id !== remoteMissingGrant.external_grant_id);
+  const revokedAgain = ctx.remoteState.entitlements.find(e => e.external_grant_id === remoteRevokedGrant.external_grant_id);
+  revokedAgain.status = 'active';
+  revokedAgain.effective_active = true;
+  const originalSnapshot = ctx.client.queryReconciliationSnapshot.bind(ctx.client);
+  let arrivals = 0;
+  let release;
+  const barrier = new Promise(resolve => { release = resolve; });
+  ctx.client.queryReconciliationSnapshot = async (...args) => {
+    const result = await originalSnapshot(...args);
+    if (++arrivals === 2) release();
+    await barrier;
+    return result;
+  };
+  const concurrent = await Promise.all([1, 2].map(() => ctx.reconciliation.runReconciliation({ dryRun: false, dispatchRepairs: false })));
+  ctx.client.queryReconciliationSnapshot = originalSnapshot;
+  assert.equal(concurrent.reduce((n, r) => n + r.summary.repaired_grant, 0), 1);
+  assert.equal(concurrent.reduce((n, r) => n + r.summary.repaired_revoke, 0), 1);
+  for (const saved of savedPayloads) {
+    assert.deepEqual((await ctx.db.query('SELECT payload FROM integration_outbox WHERE id = $1', [saved.id])).rows[0].payload, saved.payload);
+  }
+  const queued = await ctx.reconciliation.runReconciliation({ dryRun: false, dispatchRepairs: false });
+  assert.equal(queued.repairedOutboxIds.length, 0);
+  const newIds = concurrent.flatMap(r => r.repairedOutboxIds);
+  // Completion during snapshot fetch does not prove the snapshot includes that event.
+  ctx.client.queryReconciliationSnapshot = async (...args) => {
+    await ctx.db.query("UPDATE integration_outbox SET status = 'sent', remote_status = 'processed' WHERE id = ANY($1::bigint[])", [newIds]);
+    return originalSnapshot(...args);
+  };
+  const completing = await ctx.reconciliation.runReconciliation({ dryRun: false, dispatchRepairs: false });
+  ctx.client.queryReconciliationSnapshot = originalSnapshot;
+  assert.equal(completing.repairedOutboxIds.length, 0);
+  await ctx.db.query("UPDATE integration_outbox SET status = 'dead_letter' WHERE id = ANY($1::bigint[])", [newIds]);
+  const deadLetter = await ctx.reconciliation.runReconciliation({ dryRun: false, dispatchRepairs: false });
+  assert.equal(deadLetter.repairedOutboxIds.length, 0);
+  for (const id of newIds) await ctx.outbox.retryOutboxItem({ outboxId: id, dispatchNow: false });
+  await ctx.outbox.processAvailableOutboxJobs({ limit: 100 });
+  const repairedAgain = await ctx.reconciliation.runReconciliation({ dryRun: false, dispatchRepairs: false });
+  assert.equal(repairedAgain.repairedOutboxIds.length, 0);
+  assert.equal(ctx.remoteState.entitlements.find(e => e.external_grant_id === remoteMissingGrant.external_grant_id).effective_active, true);
+  assert.equal(ctx.remoteState.entitlements.find(e => e.external_grant_id === remoteRevokedGrant.external_grant_id).effective_active, false);
+  assert.equal(ctx.remoteState.entitlements.find(e => e.external_grant_id === remoteGhost.external_grant_id).effective_active, true);
+});
+
+test('Codex: revocation committed after local scan cannot be overwritten by reconciliation', async (t) => {
+  const ctx = await setupDay5MolyEnv(t);
+  await seedCourseAndPackage(ctx.db, { courseId: 101, title: 'Race', slug: 'race', packageId: 101, offeringId: 'moly:course:101' });
+  ctx.remoteState.courseMappings.push({ source_system: 'moly', external_course_id: 'moly:course:101', status: 'active' });
+  const user = (await ctx.db.query("INSERT INTO users (email) VALUES ('race@example.com') RETURNING *")).rows[0];
+  const ent = (await ctx.db.query(
+    "INSERT INTO user_video_entitlements (user_id, video_package_id, grant_key, source, status, allowed_subjects, starts_at, duration_mode) VALUES ($1, 101, 'race', 'manual', 'active', ARRAY['MATH'], NOW(), 'lifetime') RETURNING *", [user.id],
+  )).rows[0];
+  await ctx.db.query('INSERT INTO video_entitlement_courses (entitlement_id, course_id) VALUES ($1, 101)', [ent.id]);
+  const originalTransaction = ctx.db.transaction.bind(ctx.db);
+  let intervened = false;
+  ctx.db.transaction = async work => {
+    if (!intervened) {
+      intervened = true;
+      await originalTransaction(async tx => {
+        await tx.query('SELECT id FROM users WHERE id = $1 FOR UPDATE', [user.id]);
+        await tx.query("UPDATE user_video_entitlements SET status = 'revoked', revoked_at = NOW() WHERE id = $1", [ent.id]);
+        await ctx.outbox.enqueueEntitlementRevokeTx(tx, { userId: user.id, entitlementId: ent.id, courseIds: [101] });
+      });
+    }
+    return originalTransaction(work);
+  };
+  const result = await ctx.reconciliation.runReconciliation({ dryRun: false, dispatchRepairs: false });
+  assert.equal(intervened, true);
+  assert.equal(result.summary.repaired_grant, 0);
+  assert.ok(result.actions.some(a => a.actionTaken === 'local_state_changed'));
+  assert.equal((await ctx.db.query("SELECT COUNT(*)::int AS count FROM integration_outbox WHERE event_type = 'entitlement.granted'")).rows[0].count, 0);
+  assert.equal((await ctx.db.query("SELECT COUNT(*)::int AS count FROM integration_outbox WHERE event_type = 'entitlement.revoked'")).rows[0].count, 1);
+});
+
+test('Codex: repair rechecks expiry, reactivation and mapping inside its transaction', async (t) => {
+  for (const change of ['expiry', 'reactivation', 'mapping', 'conflict', 'grant_then_revoke']) {
+    await t.test(change, async t => {
+      const ctx = await setupDay5MolyEnv(t);
+      await seedCourseAndPackage(ctx.db, { courseId: 101, title: 'Change', slug: 'change', packageId: 101, offeringId: 'moly:course:101' });
+      ctx.remoteState.courseMappings.push({ source_system: 'moly', external_course_id: 'moly:course:101', status: 'active' });
+      const user = (await ctx.db.query("INSERT INTO users (email) VALUES ('change@example.com') RETURNING id")).rows[0];
+      const ent = (await ctx.db.query(
+        "INSERT INTO user_video_entitlements (user_id, video_package_id, grant_key, source, status, allowed_subjects, starts_at, duration_mode, revoked_at) VALUES ($1, 101, 'change', 'manual', $2::varchar, ARRAY['MATH'], '2026-11-01', 'lifetime', CASE WHEN $2::varchar = 'revoked' THEN NOW() ELSE NULL END) RETURNING *",
+        [user.id, change === 'reactivation' ? 'revoked' : 'active'],
+      )).rows[0];
+      await ctx.db.query('INSERT INTO video_entitlement_courses (entitlement_id, course_id) VALUES ($1, 101)', [ent.id]);
+      if (change === 'reactivation') ctx.remoteState.entitlements.push({
+        external_user_id: `moly:${user.id}`, external_grant_id: `moly:grant:ent_${ent.id}:course_101`, effective_active: true,
+      });
+      const originalTransaction = ctx.db.transaction.bind(ctx.db);
+      let intervened = false;
+      ctx.db.transaction = async work => {
+        if (!intervened) {
+          intervened = true;
+          if (change === 'expiry') await ctx.db.query("UPDATE user_video_entitlements SET duration_mode = 'days', expires_at = '2026-11-02' WHERE id = $1", [ent.id]);
+          if (change === 'reactivation') await ctx.db.query("UPDATE user_video_entitlements SET status = 'active' WHERE id = $1", [ent.id]);
+          if (change === 'mapping') await ctx.db.query("UPDATE external_course_mappings SET status = 'inactive'");
+          if (change === 'conflict') await ctx.db.query(
+            "INSERT INTO integration_conflicts (source_system, conflict_type, status, candidate_user_id, reason) VALUES ('csca-course', 'IDENTITY_EMAIL_COLLISION', 'open', $1, 'Needs verification')", [user.id],
+          );
+        }
+        return originalTransaction(work);
+      };
+      const result = await ctx.reconciliation.runReconciliation({ dryRun: false, dispatchRepairs: false });
+      if (change !== 'grant_then_revoke') {
+        assert.equal(result.repairedOutboxIds.length, 0);
+        assert.ok(result.actions.some(a => ['local_state_changed', 'mapping_changed', 'open_conflict'].includes(a.actionTaken)));
+      } else {
+        assert.equal(result.summary.repaired_grant, 1);
+        await originalTransaction(async tx => {
+          await tx.query('SELECT id FROM users WHERE id = $1 FOR UPDATE', [user.id]);
+          await tx.query("UPDATE user_video_entitlements SET status = 'revoked', revoked_at = NOW() WHERE id = $1", [ent.id]);
+          await ctx.outbox.enqueueEntitlementRevokeTx(tx, { userId: user.id, entitlementId: ent.id, courseIds: [101] });
+        });
+        const events = (await ctx.db.query("SELECT event_type, source_updated_at FROM integration_outbox WHERE external_grant_id IS NOT NULL ORDER BY id")).rows;
+        assert.deepEqual(events.map(e => e.event_type), ['entitlement.granted', 'entitlement.revoked']);
+        assert.ok(new Date(events[1].source_updated_at) > new Date(events[0].source_updated_at));
+      }
+    });
+  }
 });
 
 test('Day 5: Manual dead-letter retry, open conflict retry block, Admin Ops API, Kill Switch, and redacted logging', async (t) => {

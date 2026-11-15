@@ -181,31 +181,63 @@ function createCourseReconciliationService({
     entitlementRow,
     localCourseId,
     correlationId,
+    observedOutbox = null,
     reason = "reconciliation_repair",
   }) {
-    const idempotencyKey = eventType === "entitlement.granted"
-      ? `moly:recon:grant:${externalGrantId}:v1`
-      : `moly:recon:revoke:${externalGrantId}:v1`;
-    const eventId = eventType === "entitlement.granted"
-      ? `moly:evt:recon:grant:${externalGrantId}:v1`
-      : `moly:evt:recon:revoke:${externalGrantId}:v1`;
+    // Match payment refund/admin revocation lock order; hold through outbox insertion.
+    const freshUser = (await txClient.query('SELECT * FROM users WHERE id = $1 FOR UPDATE', [userRow.id])).rows[0];
+    const fresh = (await txClient.query('SELECT * FROM user_video_entitlements WHERE id = $1 FOR UPDATE', [entitlementRow.id])).rows[0];
+    const skip = (reason) => ({ enqueued: false, idempotentReuse: false, skippedReason: reason });
+    if (!freshUser || !fresh || Number(fresh.user_id) !== Number(userRow.id)) return skip('local_state_changed');
+    const activeNow = fresh.status === 'active' && freshUser.is_active !== false && freshUser.is_banned !== true
+      && (!fresh.starts_at || new Date(fresh.starts_at) <= now())
+      && (!fresh.expires_at || new Date(fresh.expires_at) > now());
+    const revokedNow = fresh.status === 'revoked' || (fresh.expires_at && new Date(fresh.expires_at) <= now());
+    if ((eventType === 'entitlement.granted' && !activeNow)
+      || (eventType === 'entitlement.revoked' && !revokedNow)
+      || buildExpectedGrantId({ transactionId: fresh.transaction_id, entitlementId: fresh.id, localCourseId }) !== externalGrantId) {
+      return skip('local_state_changed');
+    }
+    const coursePair = (await txClient.query(
+      'SELECT course_id FROM video_entitlement_courses WHERE entitlement_id = $1 AND course_id = $2 FOR SHARE',
+      [fresh.id, localCourseId],
+    )).rows[0];
+    const mappings = (await txClient.query(
+      "SELECT * FROM external_course_mappings WHERE local_course_id = $1 AND status = 'active' FOR SHARE", [localCourseId],
+    )).rows;
+    if (!coursePair || !mappings.some(row => normalizeMolyOfferingId(row) === externalCourseId)) return skip('mapping_changed');
+    const conflicts = (await txClient.query(
+      `SELECT id FROM integration_conflicts WHERE status IN ('open', 'in_review')
+       AND (candidate_user_id = $1 OR existing_user_id = $1 OR external_user_id = $2) LIMIT 1`,
+      [userRow.id, `moly:${userRow.id}`],
+    )).rows;
+    if (conflicts.length) return skip('open_conflict');
+    userRow = freshUser;
+    entitlementRow = fresh;
 
-    // Do not duplicate an in-flight/already-created repair event or active pending outbox event.
+    // A snapshot may only supersede the terminal event observed BEFORE fetching it.
+    // A concurrent run or a pending/failed event must be reconciled/retried first.
+    await txClient.query(
+      "SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))",
+      ["moly:recon-repair", externalGrantId],
+    );
     const existing = (await txClient.query(
       `SELECT id, status, remote_status, idempotency_key
        FROM integration_outbox
-       WHERE idempotency_key = $1
-          OR (external_grant_id = $2
-              AND event_type = $3
-              AND (status IN ('pending', 'processing')
-                   OR (status = 'sent' AND remote_status IN ('queued', 'pending', 'processing'))))
+       WHERE external_grant_id = $1 AND event_type = $2
        ORDER BY id DESC
        LIMIT 1`,
-      [idempotencyKey, externalGrantId, eventType],
+      [externalGrantId, eventType],
     )).rows[0];
-    if (existing) {
+    const isComplete = row => row?.status === 'sent' && ['processed', 'stale', 'ignored'].includes(row.remote_status);
+    if (existing && (String(existing.id) !== String(observedOutbox?.id)
+      || !isComplete(existing) || !isComplete(observedOutbox))) {
       return { enqueued: false, outbox: existing, idempotentReuse: true };
     }
+    const kind = eventType === 'entitlement.granted' ? 'grant' : 'revoke';
+    const generation = `v2:after_${existing?.id || 0}`;
+    const idempotencyKey = `moly:recon:${kind}:${externalGrantId}:${generation}`;
+    const eventId = `moly:evt:recon:${kind}:${externalGrantId}:${generation}`;
 
     if (eventType === "entitlement.granted" && outbox && typeof outbox.enqueueProvisionEventTx === "function") {
       await outbox.enqueueProvisionEventTx(txClient, {
@@ -218,11 +250,6 @@ function createCourseReconciliationService({
         },
       });
     }
-
-    await txClient.query(
-      "SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))",
-      ["moly:recon-repair", externalGrantId],
-    );
 
     const preferredTs = eventType === "entitlement.revoked"
       ? (entitlementRow.revoked_at || entitlementRow.expires_at || now())
@@ -378,7 +405,14 @@ function createCourseReconciliationService({
     }
 
     let snapshotRes;
+    const observedOutboxes = new Map();
     try {
+      const observed = await db.query(
+        `SELECT DISTINCT ON (external_grant_id, event_type) id, external_grant_id, event_type, status, remote_status
+         FROM integration_outbox WHERE external_grant_id IS NOT NULL
+         ORDER BY external_grant_id, event_type, id DESC`,
+      );
+      for (const row of observed.rows) observedOutboxes.set(`${row.external_grant_id}:${row.event_type}`, row);
       snapshotRes = await client.queryReconciliationSnapshot({
         correlationId: corr,
         externalUserId: extUserFilter,
@@ -718,6 +752,7 @@ function createCourseReconciliationService({
         const repairRes = await withTx((txClient) =>
           enqueueRepairOutboxEvent(txClient, {
             eventType: "entitlement.granted",
+            observedOutbox: observedOutboxes.get(`${expectedGrantId}:entitlement.granted`),
             externalGrantId: expectedGrantId,
             externalCourseId: mapping.offeringId,
             userRow: {
@@ -747,7 +782,7 @@ function createCourseReconciliationService({
         actions.push({
           correlationId: corr,
           category: "local_active_remote_missing",
-          actionTaken: repairRes.enqueued ? "enqueued_grant_repair" : "already_queued_idempotent",
+          actionTaken: repairRes.enqueued ? "enqueued_grant_repair" : (repairRes.skippedReason || "already_queued_idempotent"),
           sourceSystem: SOURCE_SYSTEM,
           userId: uid,
           localCourseId,
@@ -797,6 +832,7 @@ function createCourseReconciliationService({
         const repairRes = await withTx((txClient) =>
           enqueueRepairOutboxEvent(txClient, {
             eventType: "entitlement.revoked",
+            observedOutbox: observedOutboxes.get(`${expectedGrantId}:entitlement.revoked`),
             externalGrantId: expectedGrantId,
             externalCourseId: mapping.offeringId,
             userRow: { id: uid },
@@ -822,7 +858,7 @@ function createCourseReconciliationService({
         actions.push({
           correlationId: corr,
           category: "local_revoked_remote_active",
-          actionTaken: repairRes.enqueued ? "enqueued_revoke_repair" : "already_queued_idempotent",
+          actionTaken: repairRes.enqueued ? "enqueued_revoke_repair" : (repairRes.skippedReason || "already_queued_idempotent"),
           sourceSystem: SOURCE_SYSTEM,
           userId: uid,
           localCourseId,
