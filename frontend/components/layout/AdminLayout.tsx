@@ -96,6 +96,13 @@ const NAV_SECTIONS: AdminNavSection[] = [
         roles: [],
       },
       {
+        label: 'Đồng bộ CSCA-Course',
+        icon: FiActivity,
+        href: '/admin/course-integration',
+        permission: 'users.manage',
+        roles: [],
+      },
+      {
         label: 'Hiệu suất Admin',
         icon: FiBarChart2,
         href: '/admin/analytics',

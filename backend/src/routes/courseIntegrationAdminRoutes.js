@@ -1,13 +1,15 @@
 const express = require("express");
 const { sendData, sendCourseError, CourseApiError } = require("../utils/courseResponses");
+const { getIntegrationMetricsSnapshot } = require("../utils/integrationLogger");
 
 /**
- * Creates admin router for manual external course mappings in Moly Studio.
+ * Creates admin router for manual external course mappings and Day 5 operations in Moly Studio.
  */
 function createCourseIntegrationAdminRoutes({
   service,
   outbox = null,
   ownership = null,
+  reconciliation = null,
   db = null,
   authenticate,
   authorizeAnyPermission,
@@ -131,6 +133,20 @@ function createCourseIntegrationAdminRoutes({
         }),
       ),
     );
+
+    if (typeof outbox.retryOutboxItem === "function") {
+      router.post(
+        "/outbox/:id/retry",
+        handle((req) =>
+          outbox.retryOutboxItem({
+            outboxId: req.params.id,
+            actorId: req.user?.id ?? null,
+            correlationId: req.headers["x-correlation-id"] || req.body?.correlationId || null,
+            dispatchNow: Boolean(req.body?.dispatchNow),
+          }),
+        ),
+      );
+    }
   }
 
   if (ownership) {
@@ -145,6 +161,63 @@ function createCourseIntegrationAdminRoutes({
       ),
     );
   }
+
+  if (reconciliation) {
+    router.get(
+      "/ops/overview",
+      handle(async (req) => {
+        const [overview, mappings] = await Promise.all([
+          reconciliation.listAdminOperationsOverview({ limit: req.query.limit }),
+          service.listCourseMappings({ limit: 200 }),
+        ]);
+        return {
+          ...overview,
+          courseMappings: mappings,
+        };
+      }),
+    );
+
+    router.post(
+      "/conflicts/:id/resolve",
+      handle((req) =>
+        reconciliation.resolveIntegrationConflict({
+          conflictId: req.params.id,
+          action: req.body?.action || "resolved",
+          targetUserId: req.body?.targetUserId ?? null,
+          resolutionNote: req.body?.resolutionNote ?? null,
+          actorId: req.user?.id ?? null,
+          correlationId: req.headers["x-correlation-id"] || req.body?.correlationId || null,
+        }),
+      ),
+    );
+
+    router.post(
+      "/reconcile",
+      handle((req) =>
+        reconciliation.runReconciliation({
+          dryRun: req.body?.dryRun !== false,
+          triggerMode: "api",
+          triggeredBy: req.user?.id ?? null,
+          scopeFilter: req.body?.scopeFilter || {},
+          correlationId: req.headers["x-correlation-id"] || req.body?.correlationId || null,
+          dispatchRepairs: req.body?.dispatchRepairs !== false,
+          staleMinutes: req.body?.staleMinutes,
+        }),
+      ),
+    );
+
+    router.get(
+      "/reconcile/runs",
+      handle((req) =>
+        reconciliation.listReconciliationRuns({
+          limit: req.query.limit,
+          includeActions: req.query.includeActions !== "false",
+        }),
+      ),
+    );
+  }
+
+  router.get("/metrics", handle(() => getIntegrationMetricsSnapshot()));
 
   return router;
 }

@@ -10,6 +10,8 @@ const {
 const { createCourseInboundAuth } = require("../middleware/courseInboundAuth");
 const courseIntegrationRuntime = require("../services/courseIntegrationRuntime");
 const { createCourseSsoService } = require("../services/courseSsoService");
+const { createIntegrationLogger } = require("../utils/integrationLogger");
+const ssoLog = createIntegrationLogger({ component: "moly-sso-route" });
 const {
   SsoPolicyError,
   clearSsoBrowserCookie,
@@ -40,7 +42,7 @@ function sendSsoError(res, error) {
       ...(error.details ? { details: error.details } : {}),
     });
   }
-  console.error("[moly-sso] Unexpected error:", error?.message || error);
+  ssoLog.error("sso_unexpected_error", { message: error?.message || "Unexpected error", code: error?.code });
   return res.status(500).json({
     success: false,
     code: "INTERNAL_ERROR",

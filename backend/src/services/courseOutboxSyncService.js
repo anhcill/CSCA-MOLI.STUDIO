@@ -1,6 +1,13 @@
 const crypto = require("crypto");
 const { CourseApiError } = require("../utils/courseResponses");
 const { CourseIntegrationClientError } = require("./courseIntegrationClient");
+const {
+  createIntegrationLogger,
+  isIntegrationKillSwitchActive,
+  observeMetricLatency,
+  recordMetric,
+  resolveCorrelationId,
+} = require("../utils/integrationLogger");
 
 const SOURCE_SYSTEM = "moly";
 const TARGET_SYSTEM = "csca-course";
@@ -49,7 +56,11 @@ function createCourseOutboxSyncService({
   retryBaseSeconds = 30,
   maxBackoffSeconds = 1800,
   logger = console,
+  env = process.env,
 } = {}) {
+  const integrationLog = logger && logger !== console && typeof logger.info === "function"
+    ? logger
+    : createIntegrationLogger({ component: "course-outbox", env });
   async function withTx(work, existingClient = null) {
     if (existingClient) return work(existingClient);
     if (typeof db.transaction === "function") return db.transaction(work);
@@ -683,6 +694,11 @@ function createCourseOutboxSyncService({
    * Claims and dispatches one ready outbox job (FOR UPDATE SKIP LOCKED + expired-lease recovery).
    */
   async function dispatchNextOutboxJob({ workerId = "moly-outbox-worker", leaseSeconds = 120 } = {}) {
+    if (isIntegrationKillSwitchActive(env)) {
+      recordMetric("moly.outbox.dispatch_halted_kill_switch");
+      integrationLog.warn("outbox_dispatch_halted_kill_switch", { workerId });
+      return null;
+    }
     if (!client || typeof client.provisionUser !== "function") {
       return null;
     }
@@ -875,6 +891,11 @@ function createCourseOutboxSyncService({
    * HTTP 202 (`queued`/`pending`/`processing`) so final sync status is authoritative.
    */
   async function reconcileSentOutboxEvents({ limit = 25 } = {}) {
+    if (isIntegrationKillSwitchActive(env)) {
+      recordMetric("moly.outbox.reconcile_sent_halted_kill_switch");
+      integrationLog.warn("outbox_reconcile_sent_halted_kill_switch", { limit });
+      return [];
+    }
     if (!client || typeof client.getEventStatuses !== "function") {
       return [];
     }
@@ -988,6 +1009,16 @@ function createCourseOutboxSyncService({
     reconcileBefore = true,
     reconcileAfter = false,
   } = {}) {
+    if (isIntegrationKillSwitchActive(env)) {
+      recordMetric("moly.outbox.batch_halted_kill_switch");
+      integrationLog.warn("outbox_batch_halted_kill_switch", { workerId, limit });
+      return {
+        dispatched: [],
+        reconciledBefore: [],
+        reconciledAfter: [],
+        haltedByKillSwitch: true,
+      };
+    }
     if (!(await hasIntegrationTables(db))) {
       return { reconciledBefore: [], dispatched: [], reconciledAfter: [] };
     }
@@ -1003,7 +1034,111 @@ function createCourseOutboxSyncService({
     return { reconciledBefore, dispatched, reconciledAfter };
   }
 
+  async function retryOutboxItem({ outboxId, actorId = null, correlationId = null, dispatchNow = false } = {}) {
+    if (isIntegrationKillSwitchActive(env)) {
+      recordMetric("moly.outbox.manual_retry_blocked_kill_switch");
+      throw new CourseApiError(
+        503,
+        "INTEGRATION_KILL_SWITCH_ACTIVE",
+        "Course integration sync is disabled by emergency kill switch.",
+      );
+    }
+    const id = Number(outboxId);
+    if (!Number.isSafeInteger(id) || id <= 0) {
+      throw new CourseApiError(422, "VALIDATION_ERROR", "Valid outboxId is required.");
+    }
+    const corr = resolveCorrelationId(correlationId);
+
+    const updated = await withTx(async (txClient) => {
+      const row = (await txClient.query(
+        "SELECT * FROM integration_outbox WHERE id = $1 FOR UPDATE",
+        [id],
+      )).rows[0];
+      if (!row) {
+        throw new CourseApiError(404, "NOT_FOUND", `Outbox event ${id} not found.`);
+      }
+      if (row.status === "sent" && row.remote_status === "processed") {
+        return { retried: false, alreadyProcessed: true, outbox: row };
+      }
+      if (!["failed", "dead_letter", "pending", "sent"].includes(row.status)) {
+        throw new CourseApiError(
+          409,
+          "OUTBOX_RETRY_NOT_ALLOWED",
+          `Cannot manually retry outbox event while status is '${row.status}'.`,
+        );
+      }
+
+      if (row.user_id) {
+        const openIdentityConflicts = (await txClient.query(
+          `SELECT id, conflict_type
+           FROM integration_conflicts
+           WHERE status = 'open'
+             AND conflict_type LIKE 'IDENTITY_%'
+             AND (candidate_user_id = $1 OR external_user_id = $2)
+           LIMIT 1`,
+          [row.user_id, `moly:${row.user_id}`],
+        )).rows;
+        if (openIdentityConflicts.length > 0) {
+          throw new CourseApiError(
+            409,
+            "OPEN_IDENTITY_CONFLICT",
+            "Resolve open identity conflict manually before retrying this outbox event.",
+            { conflictId: Number(openIdentityConflicts[0].id), conflictType: openIdentityConflicts[0].conflict_type },
+          );
+        }
+      }
+
+      const resetRow = (await txClient.query(
+        `UPDATE integration_outbox
+         SET status = 'pending',
+             remote_status = NULL,
+             max_attempts = GREATEST(max_attempts, attempt_count + 3),
+             next_retry_at = $2,
+             locked_until = NULL,
+             locked_by = NULL,
+             last_error_code = NULL,
+             last_error_message = NULL,
+             updated_at = $2
+         WHERE id = $1
+         RETURNING id, event_id, idempotency_key, correlation_id, event_type, aggregate_id,
+                   status, remote_status, attempt_count, max_attempts, next_retry_at,
+                   user_id, entitlement_id, external_grant_id, external_course_id,
+                   created_at, updated_at`,
+        [id, now().toISOString()],
+      )).rows[0];
+
+      recordMetric("moly.outbox.manual_retry");
+      integrationLog.info(
+        "outbox_manual_retry",
+        {
+          outboxId: id,
+          eventId: row.event_id,
+          eventType: row.event_type,
+          previousStatus: row.status,
+          actorId: actorId ?? null,
+        },
+        corr,
+      );
+      return { retried: true, outbox: resetRow };
+    });
+
+    if (dispatchNow && updated.retried && client && typeof client.provisionUser === "function") {
+      const batch = await processAvailableOutboxJobs({
+        workerId: `admin-retry:${actorId ?? "system"}`,
+        limit: 10,
+        reconcileBefore: false,
+        reconcileAfter: true,
+      });
+      return { ...updated, batch };
+    }
+    return updated;
+  }
+
   function kickSync() {
+    if (isIntegrationKillSwitchActive(env)) {
+      recordMetric("moly.outbox.kick_halted_kill_switch");
+      return Promise.resolve(null);
+    }
     if (!client?.isConfigured?.()) return Promise.resolve(null);
     return processAvailableOutboxJobs({
       workerId: `moly-kick-${process.pid}`,
@@ -1011,7 +1146,7 @@ function createCourseOutboxSyncService({
       reconcileBefore: true,
       reconcileAfter: true,
     }).catch((error) => {
-      logger?.warn?.("[course-outbox] Async sync kick deferred", {
+      integrationLog.warn("outbox_async_sync_deferred", {
         code: error?.code || "SYNC_DEFERRED",
       });
       return null;
@@ -1026,6 +1161,7 @@ function createCourseOutboxSyncService({
     dispatchNextOutboxJob,
     reconcileSentOutboxEvents,
     processAvailableOutboxJobs,
+    retryOutboxItem,
     kickSync,
   };
 }

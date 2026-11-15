@@ -321,6 +321,7 @@ if (coursesEnabled) {
       service: createCourseIntegrationMappingService(db),
       outbox: courseIntegrationRuntime.outbox,
       ownership: courseIntegrationRuntime.ownership,
+      reconciliation: courseIntegrationRuntime.reconciliation,
       db,
       authenticate,
       authorizeAnyPermission,

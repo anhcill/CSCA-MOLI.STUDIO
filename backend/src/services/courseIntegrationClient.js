@@ -1,5 +1,12 @@
 const crypto = require("crypto");
 const { CourseApiError } = require("../utils/courseResponses");
+const {
+  createIntegrationLogger,
+  isIntegrationKillSwitchActive,
+  observeMetricLatency,
+  recordMetric,
+  resolveCorrelationId,
+} = require("../utils/integrationLogger");
 
 const DEFAULT_TIMEOUT_MS = 10000;
 const MIN_TIMEOUT_MS = 100;
@@ -162,6 +169,21 @@ function createCourseIntegrationClient({
       validateData,
     } = {},
   ) {
+    const integrationLog = logger && logger !== console && typeof logger.info === "function"
+      ? logger
+      : createIntegrationLogger({ component: "course-client", env });
+    const reqCorr = resolveCorrelationId(correlationId ?? payload?.correlation_id);
+    if (isIntegrationKillSwitchActive(env)) {
+      recordMetric("moly.client.blocked_kill_switch");
+      integrationLog.warn("client_blocked_kill_switch", { routePath }, reqCorr);
+      throw new CourseIntegrationClientError(
+        503,
+        "INTEGRATION_KILL_SWITCH_ACTIVE",
+        "Course integration sync is disabled by emergency kill switch.",
+        { retryable: true },
+      );
+    }
+    const callStartMs = Date.now();
     const cfg = assertConfigured();
     if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
       throw new CourseIntegrationClientError(422, "VALIDATION_ERROR", "Integration payload must be an object.");
@@ -276,6 +298,15 @@ function createCourseIntegrationClient({
             { retryable: false },
           );
         }
+        const durationMs = Date.now() - callStartMs;
+        observeMetricLatency("moly.client.http_ms", durationMs);
+        recordMetric("moly.client.http_ok");
+        integrationLog.info("client_http_ok", {
+          routePath,
+          httpStatus: response.status,
+          attempt,
+          durationMs,
+        }, reqCorr);
         return {
           httpStatus: response.status,
           payload: parsedBody,
@@ -296,16 +327,24 @@ function createCourseIntegrationClient({
       });
 
       if (retryable && attempt < attempts) {
-        logger?.warn?.("[course-integration] Retryable HTTP failure", {
+        integrationLog.warn("client_retryable_http_failure", {
           routePath,
-          correlationId: corr,
           httpStatus: response.status,
           code: remoteCode,
           attempt,
-        });
+        }, reqCorr);
         await sleep(cfg.retryBaseDelayMs * (2 ** (attempt - 1)));
         continue;
       }
+      observeMetricLatency("moly.client.http_ms", Date.now() - callStartMs);
+      recordMetric("moly.client.http_error");
+      integrationLog.warn("client_http_error", {
+        routePath,
+        httpStatus: response.status,
+        code: remoteCode,
+        attempt,
+        durationMs: Date.now() - callStartMs,
+      }, reqCorr);
       throw lastError;
     }
 
@@ -410,6 +449,36 @@ function createCourseIntegrationClient({
     }).then((res) => res.payload.data);
   }
 
+  function queryReconciliationSnapshot(
+    {
+      correlationId,
+      externalUserId = null,
+      externalCourseId = null,
+      limit = 500,
+    } = {},
+    opts = {},
+  ) {
+    const startMs = Date.now();
+    const corr = resolveCorrelationId(correlationId);
+    const body = {
+      correlation_id: corr,
+      limit,
+      ...(externalUserId ? { external_user_id: externalUserId } : {}),
+      ...(externalCourseId ? { external_course_id: externalCourseId } : {}),
+    };
+    return postSigned("/moly/reconciliation/snapshot", body, {
+      ...opts,
+      correlationId: corr,
+      idempotencyKey: null,
+      requireIdempotencyKey: false,
+      validateData: (resBody) => Boolean(resBody.data && Array.isArray(resBody.data.entitlements)),
+    }).then((res) => {
+      observeMetricLatency("moly.client.reconcile_snapshot_ms", Date.now() - startMs);
+      recordMetric("moly.client.reconcile_snapshot_ok");
+      return res;
+    });
+  }
+
   return {
     isConfigured,
     assertConfigured,
@@ -418,6 +487,7 @@ function createCourseIntegrationClient({
     grantEntitlement,
     revokeEntitlement,
     queryOwnership,
+    queryReconciliationSnapshot,
     getEventStatuses,
     exchangeSsoCode,
     bindSsoPeerIdentity,

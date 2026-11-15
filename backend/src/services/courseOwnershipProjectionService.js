@@ -1,4 +1,10 @@
 const { CourseApiError } = require("../utils/courseResponses");
+const {
+  createIntegrationLogger,
+  isIntegrationKillSwitchActive,
+  observeMetricLatency,
+  recordMetric,
+} = require("../utils/integrationLogger");
 
 function isWithinValidityWindow(row, currentNow) {
   const nowMs = currentNow.getTime();
@@ -36,6 +42,7 @@ function createCourseOwnershipProjectionService({
   outbox = null,
   now = () => new Date(),
   logger = console,
+  env = process.env,
 } = {}) {
   async function withTx(work) {
     if (typeof db.transaction === "function") return db.transaction(work);
@@ -97,6 +104,18 @@ function createCourseOwnershipProjectionService({
     if (!Number.isSafeInteger(userId) || userId <= 0) {
       throw new CourseApiError(422, "VALIDATION_ERROR", "Valid userId is required.");
     }
+    const syncStartMs = Date.now();
+    if (isIntegrationKillSwitchActive(env)) {
+      recordMetric("moly.ownership.sync_halted_kill_switch");
+      if (throwOnError) {
+        throw new CourseApiError(
+          503,
+          "INTEGRATION_KILL_SWITCH_ACTIVE",
+          "Course integration sync is disabled by emergency kill switch.",
+        );
+      }
+      return { synced: false, reason: "INTEGRATION_KILL_SWITCH_ACTIVE", items: [] };
+    }
     if (!client || !client.isConfigured()) {
       return { synced: false, reason: "CLIENT_NOT_CONFIGURED", items: [] };
     }
@@ -113,6 +132,9 @@ function createCourseOwnershipProjectionService({
     }
 
     const corr = correlationId || `corr_own_${userId}_${now().getTime()}`;
+    const integrationLog = logger && logger !== console && typeof logger.info === "function"
+      ? logger
+      : createIntegrationLogger({ component: "course-ownership", env });
     let response;
     try {
       response = await client.queryOwnership({
@@ -120,12 +142,16 @@ function createCourseOwnershipProjectionService({
         externalUserId: `moly:${userId}`,
         externalCourseIds,
       });
+      observeMetricLatency("moly.ownership.query_ms", Date.now() - syncStartMs);
+      recordMetric("moly.ownership.query_ok");
     } catch (error) {
+      observeMetricLatency("moly.ownership.query_ms", Date.now() - syncStartMs);
+      recordMetric("moly.ownership.query_error");
       if (throwOnError) throw error;
-      logger?.warn?.("[course-ownership] Ownership query failed; using local cache", {
+      integrationLog.warn("ownership_query_failed_using_cache", {
         userId,
         code: error?.code || "OWNERSHIP_QUERY_FAILED",
-      });
+      }, corr);
       return { synced: false, reason: error?.code || "OWNERSHIP_QUERY_FAILED", items: [] };
     }
 

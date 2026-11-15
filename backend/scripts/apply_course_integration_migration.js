@@ -11,6 +11,7 @@ const MIGRATION_FILES = [
   path.join(__dirname, "../../database/migrations/077_moly_payment_outbox_sync.sql"),
   path.join(__dirname, "../../database/migrations/078_moly_course_sso.sql"),
   path.join(__dirname, "../../database/migrations/079_moly_sso_browser_transactions.sql"),
+  path.join(__dirname, "../../database/migrations/080_moly_integration_day5_ops.sql"),
 ];
 
 const TABLES = [
@@ -23,6 +24,8 @@ const TABLES = [
   "integration_sso_codes",
   "integration_sso_link_requests",
   "integration_sso_browser_txs",
+  "integration_reconciliation_runs",
+  "integration_reconciliation_actions",
 ];
 
 async function applyMigration(client) {
