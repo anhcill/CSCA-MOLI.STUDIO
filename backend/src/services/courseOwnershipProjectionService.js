@@ -22,14 +22,13 @@ function classifyOriginSystem(externalGrantId) {
   return "csca-course";
 }
 
+const {
+  queryOfferingMappings,
+  resolveOfferingIdFromMapping,
+} = require("../utils/courseMappingResolver");
+
 function normalizeOfferingId(mappingRow) {
-  if (!mappingRow) return null;
-  const raw = mappingRow.source_system === "moly"
-    ? mappingRow.external_course_id
-    : mappingRow.metadata?.moly_external_course_id;
-  if (typeof raw !== "string") return null;
-  const trimmed = raw.trim();
-  return trimmed.startsWith("moly:") && trimmed.length > 5 ? trimmed : null;
+  return resolveOfferingIdFromMapping(mappingRow);
 }
 
 /**
@@ -76,20 +75,10 @@ function createCourseOwnershipProjectionService({
   }
 
   async function loadMappedOfferings(runner, localCourseIds = null) {
-    const hasFilter = Array.isArray(localCourseIds) && localCourseIds.length > 0;
-    const rows = (await runner.query(
-      `SELECT id, source_system, external_course_id, local_course_id, local_video_package_id, status, metadata
-       FROM external_course_mappings
-       WHERE status = 'active'
-         AND (source_system = 'moly' OR (source_system = 'csca-course' AND (metadata ? 'moly_external_course_id')))
-         AND ($1::boolean = FALSE OR local_course_id = ANY($2::bigint[]))
-       ORDER BY id ASC`,
-      [hasFilter, hasFilter ? localCourseIds.map(Number) : []],
-    )).rows;
-
-    return rows
-      .map((row) => ({ ...row, offering_id: normalizeOfferingId(row) }))
-      .filter((row) => Boolean(row.offering_id));
+    return queryOfferingMappings(runner, {
+      localCourseIds,
+      activeOnly: true,
+    });
   }
 
   /**
@@ -415,23 +404,34 @@ function createCourseOwnershipProjectionService({
       }
     }
 
+    const mappingOfferings = caps.has_mappings ? await loadMappedOfferings(runner, uniqueCourseIds) : [];
+    const offeringToCourseId = new Map(mappingOfferings.map((m) => [m.offering_id, Number(m.local_course_id)]));
+
     // 2) Projected external entitlements (csca-course / internal-management / external mirrors).
     const externalOwnedSet = new Set();
     const blockedCourseSet = new Set();
     const externalRows = [];
     if (caps.has_ext_entitlements) {
+      const offeringIds = [...offeringToCourseId.keys()];
       const rows = (await runner.query(
         `SELECT ee.*, COALESCE(ee.effective_owned, TRUE) AS is_effective_owned
          FROM external_entitlements ee
          WHERE ee.user_id = $1
-           AND ee.local_course_id = ANY($2::bigint[])
+           AND (
+             ee.local_course_id = ANY($2::bigint[])
+             OR (array_length($3::text[], 1) IS NOT NULL AND ee.external_course_id = ANY($3::text[]))
+           )
          ORDER BY ee.source_updated_at DESC, ee.id DESC`,
-        [userId, uniqueCourseIds],
+        [userId, uniqueCourseIds, offeringIds],
       )).rows;
 
       for (const row of rows) {
         externalRows.push(row);
-        const courseId = Number(row.local_course_id);
+        const resolvedCourseId = row.local_course_id != null
+          ? Number(row.local_course_id)
+          : offeringToCourseId.get(row.external_course_id);
+        if (!Number.isSafeInteger(resolvedCourseId)) continue;
+        const courseId = resolvedCourseId;
         const notExpired = !row.valid_until || new Date(row.valid_until).getTime() > evalNow.getTime();
         const withinWindow = isWithinValidityWindow(row, evalNow);
 
@@ -489,8 +489,14 @@ function createCourseOwnershipProjectionService({
           continue;
         }
         const metaCourseId = Number(row.metadata?.local_course_id ?? row.payload?.metadata?.local_course_id);
-        if (uniqueCourseIds.includes(metaCourseId)) {
-          pendingSyncCourseSet.add(metaCourseId);
+        const extCourseId = typeof row.external_course_id === "string"
+          ? row.external_course_id.trim()
+          : (typeof row.payload?.external_course_id === "string" ? row.payload.external_course_id.trim() : "");
+        const resolvedCourseId = Number.isSafeInteger(metaCourseId) && uniqueCourseIds.includes(metaCourseId)
+          ? metaCourseId
+          : (extCourseId ? offeringToCourseId.get(extCourseId) : null);
+        if (uniqueCourseIds.includes(resolvedCourseId)) {
+          pendingSyncCourseSet.add(resolvedCourseId);
         }
       }
 
@@ -558,7 +564,12 @@ function createCourseOwnershipProjectionService({
     let courseOfferingId = null;
     if (caps.has_mappings && uniqueCourseIds.length > 0) {
       const mappings = await loadMappedOfferings(runner, uniqueCourseIds);
-      courseOfferingId = mappings[0]?.offering_id || null;
+      const ownedOfferingMatch = mappings.find((m) =>
+        externalRows.some(
+          (r) => r.status === "active" && r.effective_owned !== false && r.external_course_id === m.offering_id,
+        ),
+      );
+      courseOfferingId = ownedOfferingMatch?.offering_id || mappings[0]?.offering_id || null;
     }
 
     const canLaunchCourse = Boolean(owned && courseOfferingId);

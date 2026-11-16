@@ -39,6 +39,35 @@ import {
   panelClass,
   errorText,
 } from './shared';
+import { CourseOwnershipBadge } from '@/components/courses/CourseOwnershipBadge';
+import { CourseSsoLaunchButton } from '@/components/courses/CourseSsoLaunchButton';
+
+function describePurchaseBlock(product: ShopProduct): string {
+  const reason = product.purchaseBlockReason || '';
+  const unpriced = reason === 'PRICE_NOT_CONFIGURED' || product.configurationIssues?.includes('PRICE_NOT_CONFIGURED');
+  if (unpriced) {
+    return 'Khóa học hoặc gói này đang cập nhật học phí nên chưa mở bán trực tuyến. Bạn vui lòng quay lại sau hoặc liên hệ hỗ trợ.';
+  }
+  if (reason === 'ALREADY_OWNED' || product.owned || product.ownershipStatus === 'owned') {
+    return 'Bạn đã sở hữu đầy đủ quyền học cho gói/khóa học này nên không cần thanh toán lại.';
+  }
+  if (product.ownershipStatus === 'partially_owned') {
+    return 'Tài khoản của bạn đã sở hữu một phần khóa học trong gói này. Vui lòng kiểm tra quyền đang có trước khi mua bổ sung.';
+  }
+  if (reason === 'PENDING_SYNC' || product.ownershipStatus === 'pending_sync') {
+    return 'Hệ thống đang đồng bộ quyền học từ CSCA-Course. Vui lòng đợi vài giây rồi bấm Làm mới trạng thái.';
+  }
+  if (reason === 'IDENTITY_VERIFICATION_REQUIRED' || product.ownershipStatus === 'verification_required') {
+    return 'Tài khoản cần xác minh liên kết danh tính giữa Moly và CSCA-Course trước khi mua hoặc đồng bộ quyền.';
+  }
+  if (reason === 'EXTERNAL_GRANT_BLOCKED') {
+    return 'Gói tạm thời bị chặn mua tự động do có bản ghi cấp quyền hoặc xung đột danh tính cần đối soát. Vui lòng liên hệ Zalo 0815913408.';
+  }
+  if (reason === 'VIDEO_SALES_DISABLED') {
+    return 'Cổng thanh toán gói video hiện đang tạm đóng. Bạn vui lòng quay lại sau.';
+  }
+  return 'Gói này hiện đang tạm dừng mở bán trực tuyến. Bạn vui lòng quay lại sau hoặc liên hệ Zalo 0815913408.';
+}
 
 function formatCountdown(expiresAt: string): { text: string; expired: boolean } {
   const remainingSec = Math.max(0, Math.floor((Date.parse(expiresAt) - Date.now()) / 1000));
@@ -629,9 +658,14 @@ export default function VideoCheckout() {
           {/* Left: Product Details */}
           <section className={`${panelClass} space-y-5`}>
             <div>
-              <span className="rounded-full bg-teal-100 px-3 py-1 text-xs font-black uppercase tracking-wider text-teal-800 dark:bg-teal-900/60 dark:text-teal-200">
-                {type === 'combo' ? 'Combo Video + Luyện đề VIP' : 'Gói Khóa học Video'}
-              </span>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="rounded-full bg-teal-100 px-3 py-1 text-xs font-black uppercase tracking-wider text-teal-800 dark:bg-teal-900/60 dark:text-teal-200">
+                  {type === 'combo' ? 'Combo Video + Luyện đề VIP' : 'Gói Khóa học Video'}
+                </span>
+                {product.ownershipStatus ? (
+                  <CourseOwnershipBadge status={product.ownershipStatus} label={product.ownershipLabel} />
+                ) : null}
+              </div>
               <h2 className="mt-3 text-2xl font-black sm:text-3xl">{product.name}</h2>
               {product.description && (
                 <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">{product.description}</p>
@@ -689,9 +723,9 @@ export default function VideoCheckout() {
               </div>
             )}
 
-            {owned.length > 0 && (
+            {(owned.length > 0 || product.owned || product.ownershipStatus === 'owned' || product.ownershipStatus === 'partially_owned') && (
               <Message>
-                Bạn hiện đang có quyền học một số khóa thuộc gói này.{' '}
+                Bạn hiện đang sở hữu quyền học {product.ownershipStatus === 'partially_owned' ? 'một phần ' : ''}thuộc gói/khóa học này.{' '}
                 <Link className="font-bold underline" href="/tai-khoan/goi-video">
                   Kiểm tra thời hạn đang sở hữu
                 </Link>{' '}
@@ -723,6 +757,47 @@ export default function VideoCheckout() {
               <Message>
                 Đang có một yêu cầu tạo đơn trước đó chưa xác nhận xong. Bấm <strong>Thử lại yêu cầu thanh toán</strong> để mở lại đúng đơn đã tạo (không tạo trùng).
               </Message>
+            ) : !product.canPurchase ? (
+              <div className="space-y-4">
+                <Message
+                  error={
+                    product.purchaseBlockReason === 'IDENTITY_VERIFICATION_REQUIRED' ||
+                    product.purchaseBlockReason === 'EXTERNAL_GRANT_BLOCKED' ||
+                    product.ownershipStatus === 'verification_required'
+                  }
+                >
+                  {describePurchaseBlock(product)}
+                </Message>
+
+                <div className="flex flex-wrap gap-2">
+                  {product.canLaunchCourse && (
+                    <CourseSsoLaunchButton
+                      courseId={product.courses[0]?.id}
+                      targetPath={product.ssoTargetPath}
+                      label="Vào học ngay"
+                    />
+                  )}
+                  {(product.owned || product.ownershipStatus === 'owned') && (
+                    <Link href="/hoc" className={buttonClass}>
+                      <FiPlayCircle /> Mở trang học tập
+                    </Link>
+                  )}
+                  {(product.ownershipStatus === 'pending_sync' || product.purchaseBlockReason === 'PENDING_SYNC') && (
+                    <button
+                      type="button"
+                      onClick={() => setRetry((r) => r + 1)}
+                      className={secondaryClass}
+                    >
+                      <FiRefreshCw /> Làm mới trạng thái
+                    </button>
+                  )}
+                  {product.courses[0] && (
+                    <Link href={`/khoa-hoc/${product.courses[0].slug}`} className={secondaryClass}>
+                      Xem chi tiết khóa học
+                    </Link>
+                  )}
+                </div>
+              </div>
             ) : (
               <fieldset disabled={busy} className="space-y-4">
                 {product.video?.requiresSubjectChoice && (
@@ -784,10 +859,6 @@ export default function VideoCheckout() {
                   </div>
                 </label>
               </fieldset>
-            )}
-
-            {!product.canPurchase && !pending && (
-              <Message>Gói này hiện đang tạm dừng mở bán trực tuyến. Bạn vui lòng quay lại sau hoặc liên hệ Zalo 0815913408.</Message>
             )}
 
             {quote && !pending ? (

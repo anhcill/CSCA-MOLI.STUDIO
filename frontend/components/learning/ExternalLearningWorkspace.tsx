@@ -1,9 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
+  FiAlertTriangle,
+  FiBookmark,
   FiCheck,
   FiClock,
   FiColumns,
@@ -11,24 +13,31 @@ import {
   FiLock,
   FiMaximize2,
   FiPlayCircle,
+  FiRefreshCw,
   FiShield,
   FiUser,
 } from 'react-icons/fi';
-import learningApi from '@/lib/api/learning';
+import learningApi, { generateIdempotencyKey } from '@/lib/api/learning';
 import type {
   CurriculumSectionDto,
   ExternalCourseWorkspaceDto,
+  ExternalQuizSubmitResponseDto,
   ExternalVideoPartDto,
+  ExternalVideoPlaybackTokenDto,
+  ExternalWorkspaceProgressDto,
   ExternalWorkspaceUnitSummaryDto,
 } from '@/lib/types/courses';
 import { CourseSsoLaunchButton } from '@/components/courses/CourseSsoLaunchButton';
-import { ExternalUnitContentTabs } from './ExternalUnitContentTabs';
+import { ExternalUnitContentTabs, type ExternalTabId } from './ExternalUnitContentTabs';
 import { LearningFooter } from './LearningFooter';
 import { LearningHeader } from './LearningHeader';
 import { LearningRoomLoading } from './LearningRoomLoading';
 import { LearningSidebar } from './LearningSidebar';
 
-const BUNNY_ORIGIN = 'https://player.mediadelivery.net';
+const ALLOWED_BUNNY_ORIGINS = new Set([
+  'https://iframe.mediadelivery.net',
+  'https://player.mediadelivery.net',
+]);
 
 function formatClock(totalSeconds: number): string {
   const sec = Math.max(0, Math.floor(totalSeconds));
@@ -41,9 +50,12 @@ function getSafeBunnyEmbedUrl(rawUrl: string | null | undefined): string | null 
   if (!rawUrl || typeof rawUrl !== 'string') return null;
   try {
     const parsed = new URL(rawUrl);
-    if (parsed.origin !== BUNNY_ORIGIN || !parsed.pathname.startsWith('/embed/')) return null;
+    if (!ALLOWED_BUNNY_ORIGINS.has(parsed.origin) || !parsed.pathname.startsWith('/embed/')) return null;
     parsed.searchParams.set('autoplay', 'false');
     parsed.searchParams.set('playsinline', 'true');
+    parsed.searchParams.set('disableIosPlayer', 'true');
+    parsed.searchParams.set('chromecast', 'false');
+    parsed.searchParams.set('disableAirPlay', 'true');
     return parsed.toString();
   } catch {
     return null;
@@ -101,13 +113,48 @@ function groupUnitsIntoSections(
 
 function parseErrorMessage(err: unknown): { code: string | null; message: string } {
   if (err && typeof err === 'object') {
-    const ax = err as { response?: { status?: number; data?: { code?: string; errorCode?: string; message?: string } }; message?: string };
-    const code = ax.response?.data?.code || ax.response?.data?.errorCode || null;
+    const ax = err as {
+      response?: { status?: number; data?: { code?: string; errorCode?: string; message?: string } };
+      message?: string;
+    };
+    const rawCode = ax.response?.data?.code || ax.response?.data?.errorCode || null;
+    const code = rawCode ? String(rawCode).toUpperCase() : null;
     const msg = ax.response?.data?.message || ax.message || '';
+
+    if (code === 'DEVICE_LIMIT_LOCKED') {
+      return {
+        code,
+        message: 'Tài khoản đã bị khóa tạm thời do vượt quá giới hạn thiết bị tin cậy. Vui lòng liên hệ quản trị viên để mở khóa.',
+      };
+    }
+    if (code === 'DEVICE_SLOT_LIMIT_REACHED') {
+      return {
+        code,
+        message: 'Tài khoản đã đạt giới hạn thiết bị tin cậy (tối đa 2 trình duyệt). Vui lòng thu hồi bớt thiết bị cũ trên CSCA-Course trước khi học ở trình duyệt mới.',
+      };
+    }
+    if (code === 'DEVICE_BINDING_REVOKED' || code === 'UNTRUSTED_DEVICE_PROOF') {
+      return {
+        code,
+        message: 'Phiên thiết bị của trình duyệt này đã bị thu hồi hoặc hết hạn. Vui lòng đăng nhập lại để cấp lại phiên tin cậy.',
+      };
+    }
+    if (code === 'UNIT_LOCKED') {
+      return {
+        code,
+        message: msg || 'Bài học đang bị khóa theo trình tự tiến độ. Hãy hoàn thành bài học trước đó để mở khóa.',
+      };
+    }
+    if (code === 'VIDEO_NOT_READY' || code === 'VIDEO_URL_UNAVAILABLE') {
+      return {
+        code,
+        message: msg || 'Video đang được xử lý hoặc tạm thời chưa sẵn sàng để phát.',
+      };
+    }
     if (code === 'PROFILE_SCOPE_MISMATCH') {
       return { code, message: 'Hồ sơ hoặc bài học không thuộc phạm vi khóa học này.' };
     }
-    if (code === 'COURSE_ACCESS_REVOKED' || code === 'COURSE_ENTITLEMENT_REQUIRED' || ax.response?.status === 403) {
+    if (code === 'COURSE_ACCESS_REVOKED' || code === 'COURSE_ENTITLEMENT_REQUIRED' || code === 'ENTITLEMENT_REQUIRED' || ax.response?.status === 403) {
       return { code, message: msg || 'Quyền truy cập khóa học đã hết hạn, bị thu hồi hoặc cần hoàn thành bài trước đó.' };
     }
     if (msg) return { code, message: msg };
@@ -129,11 +176,52 @@ export function ExternalLearningWorkspace({
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(initialProfileId);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [errorCode, setErrorCode] = useState<string | null>(null);
   const [requestVersion, setRequestVersion] = useState(0);
   const [theaterMode, setTheaterMode] = useState(false);
   const [selectedPartIndex, setSelectedPartIndex] = useState(0);
   const [seekTargetSeconds, setSeekTargetSeconds] = useState<number | null>(null);
+
+  const [playbackToken, setPlaybackToken] = useState<ExternalVideoPlaybackTokenDto | null>(null);
+  const [iframeEmbedUrl, setIframeEmbedUrl] = useState<string | null>(null);
+  const [tokenLoading, setTokenLoading] = useState(false);
+  const [tokenRefreshing, setTokenRefreshing] = useState(false);
+  const [playbackError, setPlaybackError] = useState<string>('');
+  const [playbackErrorCode, setPlaybackErrorCode] = useState<string | null>(null);
+  const [tokenRetryNonce, setTokenRetryNonce] = useState(0);
+  const [liveCourseProgress, setLiveCourseProgress] = useState<ExternalWorkspaceProgressDto | null>(null);
+  const [liveUnitPercent, setLiveUnitPercent] = useState<number | null>(null);
+  const [liveUnitCompleted, setLiveUnitCompleted] = useState(false);
+  const [syncBadge, setSyncBadge] = useState('');
+  const [livePositionSeconds, setLivePositionSeconds] = useState(0);
+  const [requestedTab, setRequestedTab] = useState<ExternalTabId | null>(null);
+  const [requestedTabNonce, setRequestedTabNonce] = useState(0);
+  const [bookmarkRefreshNonce, setBookmarkRefreshNonce] = useState(0);
+  const [savingQuickBookmark, setSavingQuickBookmark] = useState(false);
+
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const iframeEmbedUrlRef = useRef<string | null>(null);
+  const deferredEmbedUrlRef = useRef<string | null>(null);
+  const playingRef = useRef(false);
+  const prevSampleRef = useRef<{ seconds: number; time: number } | null>(null);
+  const positionRef = useRef(0);
+  const durationRef = useRef(0);
+  const unackedWatchedRef = useRef(0);
+  const pendingSeekRef = useRef<number | null>(null);
+  const initialResumeSeededForRef = useRef<string | null>(null);
+  const lastSentPosRef = useRef(-1);
+  const clientSeqRef = useRef(0);
+  const flushingRef = useRef(false);
+  const tokenRequestPendingRef = useRef(false);
+  const unitCompletedNotifiedRef = useRef(false);
+  const aliveRef = useRef(true);
+
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => {
+      aliveRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     setSelectedProfileId(initialProfileId);
@@ -149,19 +237,54 @@ export function ExternalLearningWorkspace({
     let active = true;
     setLoading(true);
     setError('');
+    setErrorCode(null);
     setSelectedPartIndex(0);
     setSeekTargetSeconds(null);
+    setPlaybackToken(null);
+    setIframeEmbedUrl(null);
+    iframeEmbedUrlRef.current = null;
+    deferredEmbedUrlRef.current = null;
+    setPlaybackError('');
+    setPlaybackErrorCode(null);
+    setLiveCourseProgress(null);
+    setLiveUnitPercent(null);
+    setLiveUnitCompleted(false);
+    setSyncBadge('');
+    setLivePositionSeconds(0);
+    setRequestedTab(null);
+    setBookmarkRefreshNonce(0);
+    playingRef.current = false;
+    prevSampleRef.current = null;
+    positionRef.current = 0;
+    durationRef.current = 0;
+    unackedWatchedRef.current = 0;
+    pendingSeekRef.current = null;
+    initialResumeSeededForRef.current = null;
+    lastSentPosRef.current = -1;
+    unitCompletedNotifiedRef.current = false;
+
     learningApi.getExternalCourseWorkspace({
       courseSlugOrId: courseSlug,
       profileId: selectedProfileId,
       unitId: externalUnitId,
     })
       .then((data) => {
-        if (active) setWorkspace(data);
+        if (!active) return;
+        setWorkspace(data);
+        setLiveCourseProgress(data.progress ?? null);
+        setLiveUnitCompleted(Boolean(data.activeUnit?.watchProgress?.isCompleted));
+        if (typeof data.activeUnit?.watchProgress?.completionPercent === 'number') {
+          setLiveUnitPercent(data.activeUnit.watchProgress.completionPercent);
+        }
+        if (data.activeUnit?.watchProgress?.isCompleted) {
+          unitCompletedNotifiedRef.current = true;
+        }
       })
       .catch((err) => {
         if (!active) return;
-        setError(parseErrorMessage(err).message);
+        const parsed = parseErrorMessage(err);
+        setErrorCode(parsed.code);
+        setError(parsed.message);
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -215,19 +338,415 @@ export function ExternalLearningWorkspace({
   }, [activeUnit]);
 
   const activeVideo = videoParts[selectedPartIndex] ?? videoParts[0] ?? null;
-  const safeEmbedUrl = getSafeBunnyEmbedUrl(activeVideo?.embedUrl);
+  const activeVideoId = activeVideo ? (activeVideo.assetId || activeVideo.id || activeVideo.partId || null) : null;
+  const isUnitLocked = Boolean(workspace?.selectedUnitLock?.locked || activeUnit?.isLocked);
+  const remoteProfileId = workspace?.profile?.remoteProfileId || null;
+  const unitParamId = activeUnit?.id || externalUnitId;
+  const canUseDelegatedPlayback = Boolean(
+    workspace
+    && !workspace.isPublicPreviewAccess
+    && !isUnitLocked
+    && remoteProfileId
+    && activeVideoId,
+  );
+
+  const sendPlayerCommand = useCallback((method: string, value?: string | number, listener?: string) => {
+    const urlStr = iframeEmbedUrlRef.current;
+    if (!urlStr || !iframeRef.current?.contentWindow) return;
+    try {
+      const origin = new URL(urlStr).origin;
+      if (!ALLOWED_BUNNY_ORIGINS.has(origin)) return;
+      iframeRef.current.contentWindow.postMessage(
+        JSON.stringify({
+          context: 'player.js',
+          version: '0.0.11',
+          method,
+          ...(value !== undefined ? { value } : {}),
+          ...(listener ? { listener } : {}),
+        }),
+        origin,
+      );
+    } catch { /* ignore */ }
+  }, []);
+
+  const applyDeferredEmbedIfIdle = useCallback(() => {
+    if (deferredEmbedUrlRef.current && !playingRef.current && !document.fullscreenElement) {
+      if (positionRef.current > 0 && pendingSeekRef.current == null) {
+        pendingSeekRef.current = Math.floor(positionRef.current);
+      }
+      const nextUrl = deferredEmbedUrlRef.current;
+      deferredEmbedUrlRef.current = null;
+      iframeEmbedUrlRef.current = nextUrl;
+      setIframeEmbedUrl(nextUrl);
+    }
+  }, []);
+
+  const silentRefreshWorkspace = useCallback(async () => {
+    if (!workspace) return;
+    try {
+      const refreshed = await learningApi.getExternalCourseWorkspace({
+        courseSlugOrId: courseSlug,
+        profileId: selectedProfileId || workspace.profile.remoteProfileId,
+        unitId: externalUnitId,
+      });
+      if (!aliveRef.current) return;
+      setWorkspace(refreshed);
+      if (refreshed.progress) setLiveCourseProgress(refreshed.progress);
+    } catch { /* silent background sync retryable on next action */ }
+  }, [courseSlug, externalUnitId, selectedProfileId, workspace]);
+
+  const flushProgress = useCallback(async (keepalive = false, forceOnEnd = false) => {
+    if (!canUseDelegatedPlayback || !remoteProfileId || !activeVideoId) return;
+    if (flushingRef.current) return;
+
+    const wholeDelta = forceOnEnd
+      ? Math.min(60, Math.round(unackedWatchedRef.current))
+      : Math.min(60, Math.floor(unackedWatchedRef.current));
+    const currentPos = Math.max(0, Math.floor(positionRef.current));
+    if (!forceOnEnd && wholeDelta <= 0 && currentPos === lastSentPosRef.current) {
+      return;
+    }
+
+    flushingRef.current = true;
+    const nextSeq = ++clientSeqRef.current;
+    try {
+      const res = await learningApi.updateExternalVideoProgress({
+        profileId: remoteProfileId,
+        unitId: unitParamId,
+        videoId: String(activeVideoId),
+        payload: {
+          currentTimeSeconds: currentPos,
+          watchedDeltaSeconds: Math.max(0, wholeDelta),
+          durationSeconds: durationRef.current > 0
+            ? Math.round(durationRef.current)
+            : (playbackToken?.durationSeconds ?? activeVideo?.durationSeconds ?? null),
+          clientSequence: nextSeq,
+          eventTimestamp: new Date().toISOString(),
+        },
+        keepalive,
+      });
+
+      unackedWatchedRef.current = Math.max(0, unackedWatchedRef.current - wholeDelta);
+      if (!aliveRef.current) return;
+
+      if (!res.stale) {
+        lastSentPosRef.current = Math.floor(res.lastPositionSeconds ?? currentPos);
+        const unitPct = res.unitProgress?.completionPercent ?? res.completionPercent;
+        if (typeof unitPct === 'number') setLiveUnitPercent(unitPct);
+        if (res.courseProgress) setLiveCourseProgress(res.courseProgress);
+        if (res.isUnitCompleted) {
+          setLiveUnitCompleted(true);
+          setSyncBadge('Đã đạt mốc hoàn thành bài học');
+          if (!unitCompletedNotifiedRef.current) {
+            unitCompletedNotifiedRef.current = true;
+            void silentRefreshWorkspace();
+          }
+        } else if (wholeDelta > 0) {
+          setSyncBadge(`Đã đồng bộ tiến độ (${Math.round(unitPct ?? 0)}%)`);
+        }
+      }
+    } catch (err) {
+      // Never fake completion on network/server failure; preserve unacked watch time and inspect hard locks.
+      if (!aliveRef.current) return;
+      const parsed = parseErrorMessage(err);
+      if (
+        parsed.code === 'DEVICE_LIMIT_LOCKED'
+        || parsed.code === 'DEVICE_SLOT_LIMIT_REACHED'
+        || parsed.code === 'DEVICE_BINDING_REVOKED'
+        || parsed.code === 'UNTRUSTED_DEVICE_PROOF'
+      ) {
+        sendPlayerCommand('pause');
+        playingRef.current = false;
+        setPlaybackErrorCode(parsed.code);
+        setPlaybackError(parsed.message);
+      }
+    } finally {
+      flushingRef.current = false;
+    }
+  }, [
+    activeVideo?.durationSeconds,
+    activeVideoId,
+    canUseDelegatedPlayback,
+    playbackToken?.durationSeconds,
+    remoteProfileId,
+    sendPlayerCommand,
+    silentRefreshWorkspace,
+    unitParamId,
+  ]);
+
+  const requestPlaybackToken = useCallback(async (forceSwap = false) => {
+    if (!canUseDelegatedPlayback || !remoteProfileId || !activeVideoId) return;
+    if (tokenRequestPendingRef.current) return;
+    tokenRequestPendingRef.current = true;
+    const isInitialLoad = !iframeEmbedUrlRef.current || forceSwap;
+    if (isInitialLoad) setTokenLoading(true);
+    else setTokenRefreshing(true);
+
+    try {
+      const nextToken = await learningApi.createExternalPlaybackToken({
+        profileId: remoteProfileId,
+        unitId: unitParamId,
+        videoId: String(activeVideoId),
+        ttlSeconds: 60,
+      });
+      if (!aliveRef.current) return;
+
+      const safeNextUrl = getSafeBunnyEmbedUrl(nextToken.embedUrl);
+      if (!safeNextUrl) {
+        setPlaybackErrorCode('VIDEO_URL_UNAVAILABLE');
+        setPlaybackError('Địa chỉ video phát không hợp lệ hoặc ngoài nguồn Bunny được phép.');
+        return;
+      }
+
+      setPlaybackToken(nextToken);
+      setPlaybackError('');
+      setPlaybackErrorCode(null);
+
+      const videoKey = `${remoteProfileId}:${unitParamId}:${String(activeVideoId)}`;
+      if (initialResumeSeededForRef.current !== videoKey) {
+        initialResumeSeededForRef.current = videoKey;
+        const resumeSec = Math.max(0, Math.floor(Number(nextToken.resumePositionSeconds || 0)));
+        if (pendingSeekRef.current === null && resumeSec > 0) {
+          pendingSeekRef.current = resumeSec;
+          positionRef.current = resumeSec;
+          setLivePositionSeconds(resumeSec);
+        }
+        durationRef.current = Number(nextToken.durationSeconds || activeVideo?.durationSeconds || 0);
+        if (nextToken.unitProgress) {
+          setLiveUnitPercent(nextToken.unitProgress.completionPercent);
+          if (nextToken.unitProgress.isCompleted) {
+            setLiveUnitCompleted(true);
+            unitCompletedNotifiedRef.current = true;
+          }
+        }
+      }
+
+      if (forceSwap || !iframeEmbedUrlRef.current || (!playingRef.current && !document.fullscreenElement)) {
+        if (iframeEmbedUrlRef.current && positionRef.current > 0 && pendingSeekRef.current === null) {
+          pendingSeekRef.current = Math.floor(positionRef.current);
+        }
+        deferredEmbedUrlRef.current = null;
+        iframeEmbedUrlRef.current = safeNextUrl;
+        setIframeEmbedUrl(safeNextUrl);
+      } else {
+        deferredEmbedUrlRef.current = safeNextUrl;
+      }
+    } catch (err) {
+      if (!aliveRef.current) return;
+      sendPlayerCommand('pause');
+      playingRef.current = false;
+      const parsed = parseErrorMessage(err);
+      setPlaybackErrorCode(parsed.code);
+      setPlaybackError(parsed.message);
+    } finally {
+      tokenRequestPendingRef.current = false;
+      if (aliveRef.current) {
+        setTokenLoading(false);
+        setTokenRefreshing(false);
+      }
+    }
+  }, [activeVideo?.durationSeconds, activeVideoId, canUseDelegatedPlayback, remoteProfileId, sendPlayerCommand, unitParamId]);
+
+  useEffect(() => {
+    if (!canUseDelegatedPlayback || !activeVideoId) return undefined;
+    // Reset per-part tracking state when switching video parts within a unit
+    playingRef.current = false;
+    prevSampleRef.current = null;
+    unackedWatchedRef.current = 0;
+    lastSentPosRef.current = -1;
+    iframeEmbedUrlRef.current = null;
+    deferredEmbedUrlRef.current = null;
+    setIframeEmbedUrl(null);
+    setPlaybackToken(null);
+    setPlaybackError('');
+    setPlaybackErrorCode(null);
+
+    void requestPlaybackToken(true);
+    return () => {
+      void flushProgress(true);
+    };
+  }, [activeVideoId, canUseDelegatedPlayback, tokenRetryNonce]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!canUseDelegatedPlayback || !playbackToken?.expiresAt || playbackErrorCode) return undefined;
+    const expiresAtMs = Date.parse(playbackToken.expiresAt);
+    const delayMs = Number.isFinite(expiresAtMs)
+      ? Math.max(8000, Math.min(48000, expiresAtMs - Date.now() - 12000))
+      : 45000;
+    const timer = window.setTimeout(() => {
+      void requestPlaybackToken(false);
+    }, delayMs);
+    return () => window.clearTimeout(timer);
+  }, [canUseDelegatedPlayback, playbackErrorCode, playbackToken?.expiresAt, requestPlaybackToken]);
+
+  useEffect(() => {
+    if (!canUseDelegatedPlayback || !iframeEmbedUrl) return undefined;
+    let readyHandled = false;
+
+    const receive = (event: MessageEvent) => {
+      if (!ALLOWED_BUNNY_ORIGINS.has(event.origin)) return;
+      if (event.source !== iframeRef.current?.contentWindow) return;
+
+      let data: { context?: string; event?: string; value?: { seconds?: number; duration?: number } } | null = null;
+      try {
+        data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+      } catch {
+        return;
+      }
+      if (!data || data.context !== 'player.js') return;
+
+      if (data.event === 'ready' && !readyHandled) {
+        readyHandled = true;
+        for (const name of ['play', 'pause', 'ended', 'timeupdate', 'seek', 'error']) {
+          sendPlayerCommand('addEventListener', name, `ext-${String(activeVideoId)}-${name}`);
+        }
+        if (pendingSeekRef.current !== null && pendingSeekRef.current > 0) {
+          sendPlayerCommand('setCurrentTime', pendingSeekRef.current);
+          positionRef.current = pendingSeekRef.current;
+          pendingSeekRef.current = null;
+        }
+        if (playingRef.current && !document.hidden) {
+          sendPlayerCommand('play');
+        }
+      } else if (data.event === 'play') {
+        playingRef.current = !document.hidden;
+        prevSampleRef.current = null;
+        if (document.hidden) sendPlayerCommand('pause');
+      } else if (data.event === 'pause') {
+        playingRef.current = false;
+        prevSampleRef.current = null;
+        void flushProgress(false);
+        applyDeferredEmbedIfIdle();
+      } else if (data.event === 'ended') {
+        playingRef.current = false;
+        prevSampleRef.current = null;
+        void flushProgress(false, true);
+        applyDeferredEmbedIfIdle();
+      } else if (data.event === 'seek') {
+        prevSampleRef.current = null;
+      } else if (data.event === 'error') {
+        playingRef.current = false;
+        prevSampleRef.current = null;
+        setPlaybackErrorCode('BUNNY_PLAYER_ERROR');
+        setPlaybackError('Trình phát video tạm thời gặp lỗi. Hãy thử tải lại phiên phát.');
+      } else if (data.event === 'timeupdate') {
+        const seconds = Number(data.value?.seconds);
+        const duration = Number(data.value?.duration);
+        if (!Number.isFinite(seconds) || seconds < 0 || !Number.isFinite(duration) || duration <= 0 || seconds > duration + 1) {
+          return;
+        }
+        durationRef.current = duration;
+        const nowPerf = performance.now();
+        const last = prevSampleRef.current;
+        if (playingRef.current && last) {
+          const delta = seconds - last.seconds;
+          const elapsed = (nowPerf - last.time) / 1000;
+          if (delta > 0 && delta <= 5 && delta <= elapsed * 2.1 + 0.25) {
+            unackedWatchedRef.current += delta;
+          }
+        }
+        const roundedSec = Math.floor(seconds);
+        positionRef.current = seconds;
+        setLivePositionSeconds((prev) => (prev === roundedSec ? prev : roundedSec));
+        prevSampleRef.current = { seconds, time: nowPerf };
+      }
+    };
+
+    const onVisibilityChange = () => {
+      if (document.hidden && playingRef.current) {
+        sendPlayerCommand('pause');
+        playingRef.current = false;
+        prevSampleRef.current = null;
+        void flushProgress(true);
+      }
+    };
+    const onFullscreenChange = () => applyDeferredEmbedIfIdle();
+    const onPageHide = () => {
+      void flushProgress(true);
+    };
+    const interval = window.setInterval(() => {
+      void flushProgress(false);
+    }, 15000);
+
+    window.addEventListener('message', receive);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    window.addEventListener('pagehide', onPageHide);
+    return () => {
+      window.removeEventListener('message', receive);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      document.removeEventListener('fullscreenchange', onFullscreenChange);
+      window.removeEventListener('pagehide', onPageHide);
+      window.clearInterval(interval);
+    };
+  }, [activeVideoId, applyDeferredEmbedIfIdle, canUseDelegatedPlayback, flushProgress, iframeEmbedUrl, sendPlayerCommand]);
 
   const handleSeekVideo = (seconds: number) => {
     const clean = Math.max(0, Math.floor(seconds));
     setSeekTargetSeconds(clean);
-    if (safeEmbedUrl && iframeRef.current?.contentWindow) {
-      iframeRef.current.contentWindow.postMessage(
-        JSON.stringify({ context: 'player.js', version: '0.0.11', method: 'setCurrentTime', value: clean }),
-        BUNNY_ORIGIN,
-      );
-    }
+    setLivePositionSeconds(clean);
+    positionRef.current = clean;
+    pendingSeekRef.current = clean;
+    prevSampleRef.current = null;
+    sendPlayerCommand('setCurrentTime', clean);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  const handleQuickBookmark = async () => {
+    if (!workspace || workspace.isPublicPreviewAccess || !remoteProfileId || savingQuickBookmark) return;
+    const sec = Math.max(0, Math.floor(positionRef.current || livePositionSeconds));
+    try {
+      setSavingQuickBookmark(true);
+      await learningApi.createExternalUnitBookmark({
+        profileId: remoteProfileId,
+        unitId: unitParamId,
+        timestampSeconds: sec,
+        label: `Mốc ${formatClock(sec)}`,
+        videoAssetId: activeVideoId ? String(activeVideoId) : null,
+        idempotencyKey: generateIdempotencyKey(),
+      });
+      setBookmarkRefreshNonce((n) => n + 1);
+      setSyncBadge(`Đã lưu mốc ${formatClock(sec)}`);
+    } catch {
+      setSyncBadge('Chưa thể lưu mốc video');
+    } finally {
+      setSavingQuickBookmark(false);
+    }
+  };
+
+  const handleQuizSubmitted = useCallback((response: ExternalQuizSubmitResponseDto) => {
+    if (response.courseProgress) {
+      setLiveCourseProgress(response.courseProgress);
+    }
+    if (response.unitProgress) {
+      setLiveUnitPercent(response.unitProgress.completionPercent);
+      if (response.unitProgress.isCompleted) {
+        setLiveUnitCompleted(true);
+        setSyncBadge('Đã đạt mốc hoàn thành bài học');
+      }
+    }
+    if (Array.isArray(response.units) && response.units.length > 0) {
+      const updatedMap = new Map(response.units.map((u) => [String(u.id), u]));
+      setWorkspace((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          progress: response.courseProgress ?? prev.progress,
+          units: prev.units.map((u) => {
+            const matched = updatedMap.get(String(u.remoteUnitId));
+            if (!matched) return u;
+            return {
+              ...u,
+              isLocked: matched.isLocked,
+              isCompleted: matched.isCompleted,
+              watchedPercent: matched.progressPercent,
+            };
+          }),
+        };
+      });
+    }
+    void silentRefreshWorkspace();
+  }, [silentRefreshWorkspace]);
 
   if (loading) return <LearningRoomLoading progress={null} stage="Đang kết nối không gian học CSCA-Course" />;
 
@@ -235,11 +754,19 @@ export function ExternalLearningWorkspace({
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#f5efe8] p-8 dark:bg-[#050d1d]">
         <div role="alert" className="max-w-lg rounded-2xl border border-red-200 bg-red-50 p-8 text-center text-red-700 dark:border-red-900/70 dark:bg-red-950/35 dark:text-red-300">
+          <FiAlertTriangle className="mx-auto mb-3 h-10 w-10" />
           <p className="font-bold">{error || 'Không tìm thấy không gian học.'}</p>
+          {errorCode ? <p className="mt-1 text-xs opacity-75">Mã trạng thái: {errorCode}</p> : null}
           <div className="mt-5 flex flex-wrap justify-center gap-3">
-            <button type="button" onClick={() => setRequestVersion((v) => v + 1)} className="rounded-lg bg-red-600 px-4 py-2 font-bold text-white">
-              Thử lại
-            </button>
+            {errorCode === 'DEVICE_BINDING_REVOKED' || errorCode === 'UNTRUSTED_DEVICE_PROOF' ? (
+              <Link href="/login" className="rounded-lg bg-red-600 px-4 py-2 font-bold text-white">
+                Đăng nhập lại
+              </Link>
+            ) : (
+              <button type="button" onClick={() => setRequestVersion((v) => v + 1)} className="rounded-lg bg-red-600 px-4 py-2 font-bold text-white">
+                Thử lại
+              </button>
+            )}
             <Link href={`/khoa-hoc/${courseSlug}`} className="rounded-lg border border-red-300 px-4 py-2 font-bold dark:border-red-800">
               Về trang khóa học
             </Link>
@@ -251,7 +778,7 @@ export function ExternalLearningWorkspace({
 
   const isMirror = workspace.profile.mode === 'MIRROR';
   const modeLabel = isMirror ? 'Live Mirror' : 'Tự học Độc lập';
-  const isLocked = Boolean(workspace.selectedUnitLock?.locked || activeUnit?.isLocked);
+  const isLocked = isUnitLocked;
   const lockReason = workspace.selectedUnitLock?.reason
     || activeUnit?.lockReason
     || 'Hãy hoàn thành bài học và bài kiểm tra bắt buộc trước đó để mở khóa nội dung này.';
@@ -259,8 +786,18 @@ export function ExternalLearningWorkspace({
     ?? navContext.activeUnitSummary?.unitProjectionId
     ?? (Number(externalUnitId.replace(/^u-/, '')) || 0);
   const activeSidebarId = navContext.activeUnitSummary?.id || externalUnitId;
-  const progressPct = workspace.progress?.overallPercent ?? 0;
+  const progressPct = liveCourseProgress?.overallPercent ?? workspace.progress?.overallPercent ?? 0;
   const deviceLimit = workspace.profile.capabilities?.deviceLimit ?? workspace.profile.deviceLimit;
+
+  const previewEmbedUrl = workspace.isPublicPreviewAccess
+    ? getSafeBunnyEmbedUrl(activeVideo?.embedUrl)
+    : null;
+  const activeIframeSrc = workspace.isPublicPreviewAccess ? previewEmbedUrl : iframeEmbedUrl;
+  const unitDisplayPct = liveUnitPercent
+    ?? activeUnit?.watchProgress?.completionPercent
+    ?? navContext.activeUnitSummary?.watchedPercent
+    ?? null;
+  const isUnitMarkedCompleted = liveUnitCompleted || Boolean(navContext.activeUnitSummary?.isCompleted);
 
   return (
     <div className="min-h-screen bg-[#f5efe8] text-[#18243a] transition-colors duration-300 dark:bg-[#050d1d] dark:text-[#f1e5d3]">
@@ -269,7 +806,11 @@ export function ExternalLearningWorkspace({
         courseTitle={workspace.course.title}
         progressPct={progressPct}
         badgeLabel={modeLabel}
-        onNotesClick={() => document.getElementById('external-workspace-tabs')?.scrollIntoView({ behavior: 'smooth' })}
+        onNotesClick={() => {
+          setRequestedTab('notes');
+          setRequestedTabNonce((n) => n + 1);
+          document.getElementById('external-workspace-tabs')?.scrollIntoView({ behavior: 'smooth' });
+        }}
       />
 
       <div className={`relative mx-auto grid max-w-[1600px] gap-5 px-4 py-5 sm:px-6 lg:items-start lg:px-8 ${theaterMode ? 'lg:grid-cols-1' : 'lg:grid-cols-[minmax(0,1fr)_430px]'}`}>
@@ -306,6 +847,11 @@ export function ExternalLearningWorkspace({
                   <FiShield /> Tối đa {deviceLimit} thiết bị
                 </span>
               ) : null}
+              {syncBadge ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-teal-50 px-2.5 py-1 font-bold text-teal-800 dark:bg-teal-950/50 dark:text-teal-200">
+                  {syncBadge}
+                </span>
+              ) : null}
             </div>
 
             {workspace.profiles.length > 1 ? (
@@ -338,9 +884,13 @@ export function ExternalLearningWorkspace({
                   <p className="text-[10px] font-black uppercase tracking-[.18em] text-[#49b6ac]">
                     {navContext.currentLabel}
                   </p>
-                  {navContext.activeUnitSummary?.isCompleted ? (
+                  {isUnitMarkedCompleted ? (
                     <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
                       <FiCheck className="h-3 w-3" /> Đã hoàn thành
+                    </span>
+                  ) : unitDisplayPct !== null && !workspace.isPublicPreviewAccess ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-bold text-slate-200">
+                      Đã xem {Math.round(unitDisplayPct)}%
                     </span>
                   ) : null}
                 </div>
@@ -349,14 +899,27 @@ export function ExternalLearningWorkspace({
                 </h1>
               </div>
 
-              <button
-                type="button"
-                onClick={toggleTheaterMode}
-                className="hidden items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-bold text-white/90 transition hover:bg-white/15 lg:inline-flex"
-              >
-                {theaterMode ? <FiColumns className="h-3.5 w-3.5" /> : <FiMaximize2 className="h-3.5 w-3.5" />}
-                {theaterMode ? 'Hiện cột lộ trình' : 'Chế độ rộng'}
-              </button>
+              <div className="flex shrink-0 items-center gap-2">
+                {!isLocked && !workspace.isPublicPreviewAccess && remoteProfileId && activeVideo ? (
+                  <button
+                    type="button"
+                    disabled={savingQuickBookmark}
+                    onClick={() => void handleQuickBookmark()}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-[#49b6ac]/40 bg-[#49b6ac]/15 px-3 py-1.5 text-xs font-bold text-[#7ee3d8] transition hover:bg-[#49b6ac]/25 disabled:opacity-50"
+                  >
+                    <FiBookmark className="h-3.5 w-3.5" />
+                    {savingQuickBookmark ? 'Đang lưu...' : `Lưu mốc (${formatClock(livePositionSeconds)})`}
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={toggleTheaterMode}
+                  className="hidden items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-bold text-white/90 transition hover:bg-white/15 lg:inline-flex"
+                >
+                  {theaterMode ? <FiColumns className="h-3.5 w-3.5" /> : <FiMaximize2 className="h-3.5 w-3.5" />}
+                  {theaterMode ? 'Hiện cột lộ trình' : 'Chế độ rộng'}
+                </button>
+              </div>
             </div>
 
             {videoParts.length > 1 && !isLocked ? (
@@ -412,15 +975,73 @@ export function ExternalLearningWorkspace({
                     </div>
                   </div>
                 </div>
-              ) : safeEmbedUrl ? (
-                <iframe
-                  ref={iframeRef}
-                  src={safeEmbedUrl}
-                  title={activeVideo?.title || activeUnit?.title || 'Video bài học'}
-                  allow="accelerometer; gyroscope; encrypted-media; picture-in-picture"
-                  allowFullScreen
-                  className="h-full w-full border-0"
-                />
+              ) : playbackError ? (
+                <div role="alert" className="flex h-full flex-col items-center justify-center gap-3 bg-[#08152b] p-6 text-center text-white">
+                  <FiAlertTriangle className="h-10 w-10 text-amber-300" />
+                  <p className="max-w-lg text-sm font-bold leading-6">{playbackError}</p>
+                  {playbackErrorCode ? (
+                    <p className="text-xs text-slate-400">Mã lỗi: {playbackErrorCode}</p>
+                  ) : null}
+                  <div className="flex flex-wrap items-center justify-center gap-3 pt-1">
+                    {playbackErrorCode === 'DEVICE_BINDING_REVOKED' || playbackErrorCode === 'UNTRUSTED_DEVICE_PROOF' ? (
+                      <Link href="/login" className="rounded-xl bg-teal-600 px-4 py-2 text-xs font-black text-white hover:bg-teal-500">
+                        Đăng nhập lại
+                      </Link>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPlaybackError('');
+                          setPlaybackErrorCode(null);
+                          setTokenRetryNonce((n) => n + 1);
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-xl bg-teal-600 px-4 py-2 text-xs font-black text-white hover:bg-teal-500"
+                      >
+                        <FiRefreshCw className="h-3.5 w-3.5" /> Tải lại trình phát
+                      </button>
+                    )}
+                    {playbackErrorCode === 'DEVICE_SLOT_LIMIT_REACHED' || playbackErrorCode === 'DEVICE_LIMIT_LOCKED' ? (
+                      <div className="w-56">
+                        <CourseSsoLaunchButton
+                          courseId={workspace.course.id}
+                          targetPath="/profile"
+                          label="Quản lý thiết bị trên Course"
+                        />
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              ) : activeIframeSrc ? (
+                <>
+                  <iframe
+                    ref={iframeRef}
+                    src={activeIframeSrc}
+                    title={playbackToken?.title || activeVideo?.title || activeUnit?.title || 'Video bài học'}
+                    allow="autoplay; encrypted-media; fullscreen; picture-in-picture 'none'; display-capture 'none'; remote-playback 'none'"
+                    allowFullScreen
+                    className="h-full w-full border-0"
+                  />
+                  {playbackToken?.watermark?.label ? (
+                    <div
+                      aria-hidden="true"
+                      data-video-watermark
+                      className="pointer-events-none absolute left-3 top-2 z-20 max-w-[calc(100%-6rem)] select-none truncate rounded bg-black/25 px-2 py-0.5 text-[10px] font-medium text-white/60"
+                      style={{ textShadow: '0 1px 2px #000' }}
+                    >
+                      {playbackToken.watermark.label}
+                    </div>
+                  ) : null}
+                  {tokenRefreshing ? (
+                    <p role="status" className="pointer-events-none absolute right-3 top-2 z-20 rounded bg-black/75 px-2.5 py-1 text-[11px] font-semibold text-white/90">
+                      Đang gia hạn phiên phát...
+                    </p>
+                  ) : null}
+                </>
+              ) : tokenLoading ? (
+                <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center text-white">
+                  <FiRefreshCw className="h-8 w-8 animate-spin text-[#49b6ac]" />
+                  <p className="text-sm font-bold">Đang xác thực trình duyệt & cấp phiên phát video bảo mật...</p>
+                </div>
               ) : activeVideo ? (
                 <div className="relative flex h-full w-full flex-col items-center justify-center overflow-hidden p-6 text-center text-white">
                   {activeVideo.thumbnailUrl ? (
@@ -448,7 +1069,7 @@ export function ExternalLearningWorkspace({
                       <CourseSsoLaunchButton
                         courseId={workspace.course.id}
                         targetPath={workspace.course.ssoTargetPath}
-                        label="Phát video đầy đủ trên CSCA-Course"
+                        label="Phát video trên CSCA-Course"
                       />
                     </div>
                   </div>
@@ -478,13 +1099,22 @@ export function ExternalLearningWorkspace({
             <ExternalUnitContentTabs
               courseId={workspace.course.id}
               courseSlug={courseSlug}
+              profileId={remoteProfileId}
+              unitParamId={unitParamId}
               ssoTargetPath={workspace.course.ssoTargetPath}
               unit={activeUnit}
               capabilities={workspace.profile.capabilities || {}}
               isPublicPreviewAccess={workspace.isPublicPreviewAccess}
               units={workspace.units}
               activeUnitProjectionId={activeUnitProjectionId}
+              currentPositionSeconds={livePositionSeconds}
+              activeVideoAssetId={activeVideoId ? String(activeVideoId) : null}
+              bookmarkRefreshNonce={bookmarkRefreshNonce}
+              requestedTab={requestedTab}
+              requestedTabNonce={requestedTabNonce}
               onSeekVideo={handleSeekVideo}
+              onQuizSubmitted={handleQuizSubmitted}
+              onAssignmentSubmitted={() => { void silentRefreshWorkspace(); }}
             />
           </div>
         </main>

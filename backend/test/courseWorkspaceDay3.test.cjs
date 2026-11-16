@@ -261,6 +261,7 @@ async function setupDay3MolyEnv(t, stubHandler) {
       id SERIAL PRIMARY KEY,
       user_id INTEGER NOT NULL,
       status VARCHAR(20) NOT NULL DEFAULT 'active',
+      allowed_subjects TEXT[] DEFAULT ARRAY[]::text[],
       starts_at TIMESTAMPTZ DEFAULT NOW(),
       expires_at TIMESTAMPTZ
     );
@@ -377,7 +378,9 @@ async function setupDay3MolyEnv(t, stubHandler) {
 
   // Wire require.cache so Express learningRoutes + courseService + learningService use PGlite + workspace
   const prevJwtSecret = process.env.JWT_SECRET;
+  const prevDelegatedLearningEnabled = process.env.COURSE_DELEGATED_LEARNING_ENABLED;
   process.env.JWT_SECRET = TEST_JWT_SECRET;
+  process.env.COURSE_DELEGATED_LEARNING_ENABLED = "true";
 
   const dbPath = require.resolve("../src/config/database");
   const runtimePath = require.resolve("../src/services/courseIntegrationRuntime");
@@ -419,6 +422,8 @@ async function setupDay3MolyEnv(t, stubHandler) {
     await new Promise((resolve) => server.close(resolve));
     if (prevJwtSecret === undefined) delete process.env.JWT_SECRET;
     else process.env.JWT_SECRET = prevJwtSecret;
+    if (prevDelegatedLearningEnabled === undefined) delete process.env.COURSE_DELEGATED_LEARNING_ENABLED;
+    else process.env.COURSE_DELEGATED_LEARNING_ENABLED = prevDelegatedLearningEnabled;
 
     if (prevDbMod) require.cache[dbPath] = prevDbMod; else delete require.cache[dbPath];
     if (prevRuntimeMod) require.cache[runtimePath] = prevRuntimeMod; else delete require.cache[runtimePath];
@@ -1139,6 +1144,14 @@ test("Day 3 workspace HTTP endpoints enforce JWT identity, preview-only fallback
   const app = buildAdminAndV2App(envCtx);
   const entitledJwt = jwt.sign({ id: entitledUser.id, role: "student" }, TEST_JWT_SECRET);
   const revokedJwt = jwt.sign({ id: revokedUser.id, role: "student" }, TEST_JWT_SECRET);
+
+  // Rollout gate is fail-closed even for a public preview unit.
+  process.env.COURSE_DELEGATED_LEARNING_ENABLED = "false";
+  const rolloutBlockedRes = await request(app)
+    .get(`/api/learning/external/courses/ly-ws-day3/workspace?unitId=u-${uPreview.id}`);
+  assert.equal(rolloutBlockedRes.status, 503);
+  assert.equal(rolloutBlockedRes.body.code, "DELEGATED_LEARNING_DISABLED");
+  process.env.COURSE_DELEGATED_LEARNING_ENABLED = "true";
 
   // 1) Unauthenticated access to explicit public-preview unit -> 200 (allowFileDownload forced false)
   const previewRes = await request(app)

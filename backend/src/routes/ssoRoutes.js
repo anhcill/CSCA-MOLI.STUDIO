@@ -172,6 +172,8 @@ function createMolySsoRouters({
         courseId: req.body?.courseId ?? req.body?.course_id ?? null,
         offeringId: req.body?.offeringId ?? req.body?.offering_id ?? null,
         targetPath: req.body?.targetPath ?? req.body?.target_path ?? null,
+        req,
+        res,
         correlationId: req.get("X-Correlation-ID") || undefined,
       });
       return res.json({
@@ -216,6 +218,7 @@ function createMolySsoRouters({
         code,
         state,
         req,
+        res,
         ipAddress,
         correlationId: req.get("X-Correlation-ID") || undefined,
       });
@@ -289,6 +292,7 @@ function createMolySsoRouters({
         password,
         authenticatedUser: req.user || null,
         req,
+        res,
         correlationId: req.get("X-Correlation-ID") || undefined,
       });
 

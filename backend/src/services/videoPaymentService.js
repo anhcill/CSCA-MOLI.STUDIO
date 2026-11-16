@@ -5,6 +5,7 @@ const { resolveSelectedSubjects, normalizeTier } = require('../utils/vipEntitlem
 const { lockCoupon, couponDiscount, consumeCoupon } = require('./paymentCouponReservation');
 const { preserveLegacyVip, recalculateVideoVip } = require('./videoVipSummary');
 const { bankNameFromBin } = require('../utils/vietqrBanks');
+const { syncProfileCheckoutReadyForCourses } = require('../utils/profileCheckoutReady');
 
 const hash = value => crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const fail = (code, message, status = 409) => { throw new CourseApiError(status, code, message); };
@@ -577,6 +578,14 @@ function createVideoPaymentService({ db, gateway, recalculateVip, sendEmail, now
       }
       const config={renewalMode:input.renewalMode??product.renewal_mode,subjectPrices:prices};
       await client.query(`UPDATE ${table} SET renewal_mode=$2,subject_prices=$3::jsonb,updated_at=NOW() WHERE id=$1`,[id,config.renewalMode,JSON.stringify(prices)]);
+      const videoPackageId = type === 'video' ? id : product.video_package_id;
+      if (videoPackageId) {
+        const linkedCourses = (await client.query(
+          'SELECT course_id FROM video_package_courses WHERE video_package_id=$1',
+          [videoPackageId],
+        )).rows.map(r => Number(r.course_id));
+        await syncProfileCheckoutReadyForCourses(client, linkedCourses);
+      }
       await client.query('INSERT INTO video_payment_config_audit(actor_id,entity_type,entity_id,changes) VALUES ($1,$2,$3,$4::jsonb)',[actorId,type,id,JSON.stringify(config)]);
       return config;
     });

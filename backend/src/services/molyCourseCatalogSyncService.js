@@ -1,9 +1,12 @@
 const crypto = require("crypto");
 const { CourseApiError } = require("../utils/courseResponses");
 const { SUBJECT_CODES } = require("../utils/courseContract");
+const { revokeMolyTrustedDevicesByHashes } = require("./molyTrustedDeviceService");
 const {
   createIntegrationLogger,
-  isCatalogSyncKillSwitchActive,
+  isContentSyncKillSwitchActive,
+  isIntegrationKillSwitchActive,
+  isMutationsRepairKillSwitchActive,
   observeMetricLatency,
   recordMetric,
   resolveCorrelationId,
@@ -50,6 +53,762 @@ function toIso(value) {
   if (!value) return null;
   const date = value instanceof Date ? value : new Date(value);
   return Number.isFinite(date.getTime()) ? date.toISOString() : null;
+}
+
+/**
+ * Monotonically upserts a learner's unit progress projection row (and optional
+ * sequentially-unlocked next unit) inside a caller transaction, checking
+ * `(last_revision, source_updated_at)` beforehand so stale events never trip
+ * `trg_course_progress_projections_prevent_stale`.
+ */
+async function upsertLearningProgressProjectionTx(txClient, {
+  userId,
+  profileProjectionId,
+  localCourseId,
+  unitType,
+  remoteUnitId,
+  watchedSeconds = 0,
+  lastPositionSeconds = 0,
+  completionPct = 0,
+  isVideoCompleted = false,
+  isQuizCompleted = false,
+  isUnitCompleted = false,
+  isUnlocked = true,
+  courseCompletionPct = null,
+  lastUnitId = null,
+  syncRevision = 1,
+  sourceUpdatedAt = null,
+  unlockedNextUnitId = null,
+  nextUnitType = null,
+  now = () => new Date(),
+} = {}) {
+  const tblRes = await txClient.query(
+    `SELECT to_regclass('course_progress_projections') IS NOT NULL AS has_prog`,
+  );
+  if (!tblRes.rows[0]?.has_prog) {
+    return { action: "skipped", reason: "schema_not_ready" };
+  }
+
+  const normType = String(unitType || "lesson").toLowerCase() === "class_session" ? "class_session" : "lesson";
+  const normUnitId = String(remoteUnitId || "").trim();
+  const numericUserId = Number(userId);
+  const numericProfId = Number(profileProjectionId);
+  const numericCourseId = Number(localCourseId);
+  if (!numericUserId || !numericProfId || !numericCourseId || !normUnitId) {
+    return { action: "skipped", reason: "invalid_keys" };
+  }
+
+  const incomingRev = Math.max(1, Number.parseInt(String(syncRevision || 1), 10) || 1);
+  const updatedAtIso = toIso(sourceUpdatedAt) || now().toISOString();
+  const updatedAtMs = new Date(updatedAtIso).getTime();
+
+  const existingRes = await txClient.query(
+    `SELECT id, last_revision, source_updated_at
+     FROM course_progress_projections
+     WHERE user_id = $1
+       AND profile_projection_id = $2
+       AND unit_type = $3
+       AND remote_unit_id = $4
+     FOR UPDATE`,
+    [numericUserId, numericProfId, normType, normUnitId],
+  );
+  const existing = existingRes.rows[0] || null;
+  if (existing) {
+    const oldRev = Number(existing.last_revision || 1);
+    const oldMs = existing.source_updated_at ? new Date(existing.source_updated_at).getTime() : 0;
+    if (oldRev > incomingRev || (oldRev === incomingRev && oldMs > updatedAtMs)) {
+      return { action: "stale", reason: "STALE_PROGRESS_EVENT", unitId: normUnitId };
+    }
+  }
+
+  const clampedPct = Math.min(100, Math.max(0, Math.round(Number(completionPct || 0) * 100) / 100));
+  const clampedCoursePct = courseCompletionPct != null
+    ? Math.min(100, Math.max(0, Math.round(Number(courseCompletionPct || 0) * 100) / 100))
+    : null;
+
+  await txClient.query(
+    `INSERT INTO course_progress_projections (
+       user_id, profile_projection_id, local_course_id, unit_type, remote_unit_id,
+       watched_seconds, last_position_seconds, completion_pct,
+       is_video_completed, is_quiz_completed, is_unit_completed, is_unlocked,
+       course_completion_pct, last_unit_id, last_revision, source_updated_at
+     ) VALUES (
+       $1, $2, $3, $4, $5,
+       $6, $7, $8,
+       $9, $10, $11, $12,
+       $13, $14, $15, $16::timestamptz
+     )
+     ON CONFLICT (user_id, profile_projection_id, unit_type, remote_unit_id)
+     DO UPDATE SET
+       watched_seconds = GREATEST(course_progress_projections.watched_seconds, EXCLUDED.watched_seconds),
+       last_position_seconds = EXCLUDED.last_position_seconds,
+       completion_pct = GREATEST(course_progress_projections.completion_pct, EXCLUDED.completion_pct),
+       is_video_completed = (course_progress_projections.is_video_completed OR EXCLUDED.is_video_completed),
+       is_quiz_completed = (course_progress_projections.is_quiz_completed OR EXCLUDED.is_quiz_completed),
+       is_unit_completed = (course_progress_projections.is_unit_completed OR EXCLUDED.is_unit_completed),
+       is_unlocked = (course_progress_projections.is_unlocked OR EXCLUDED.is_unlocked),
+       course_completion_pct = COALESCE(EXCLUDED.course_completion_pct, course_progress_projections.course_completion_pct),
+       last_unit_id = COALESCE(EXCLUDED.last_unit_id, course_progress_projections.last_unit_id),
+       last_revision = EXCLUDED.last_revision,
+       source_updated_at = EXCLUDED.source_updated_at`,
+    [
+      numericUserId,
+      numericProfId,
+      numericCourseId,
+      normType,
+      normUnitId,
+      Math.max(0, Math.round(Number(watchedSeconds || 0))),
+      Math.max(0, Math.round(Number(lastPositionSeconds || 0))),
+      clampedPct,
+      Boolean(isVideoCompleted),
+      Boolean(isQuizCompleted),
+      Boolean(isUnitCompleted),
+      Boolean(isUnlocked),
+      clampedCoursePct,
+      lastUnitId ? String(lastUnitId) : normUnitId,
+      incomingRev,
+      updatedAtIso,
+    ],
+  );
+
+  if (unlockedNextUnitId && String(unlockedNextUnitId).trim()) {
+    const nextId = String(unlockedNextUnitId).trim();
+    const nextType = String(nextUnitType || normType).toLowerCase() === "class_session" ? "class_session" : "lesson";
+    const nextExistingRes = await txClient.query(
+      `SELECT id, is_unlocked
+       FROM course_progress_projections
+       WHERE user_id = $1
+         AND profile_projection_id = $2
+         AND unit_type = $3
+         AND remote_unit_id = $4
+       FOR UPDATE`,
+      [numericUserId, numericProfId, nextType, nextId],
+    );
+    const nextExisting = nextExistingRes.rows[0] || null;
+    if (!nextExisting) {
+      await txClient.query(
+        `INSERT INTO course_progress_projections (
+           user_id, profile_projection_id, local_course_id, unit_type, remote_unit_id,
+           watched_seconds, last_position_seconds, completion_pct,
+           is_video_completed, is_quiz_completed, is_unit_completed, is_unlocked,
+           last_revision, source_updated_at
+         ) VALUES (
+           $1, $2, $3, $4, $5,
+           0, 0, 0,
+           FALSE, FALSE, FALSE, TRUE,
+           $6, $7::timestamptz
+         )`,
+        [numericUserId, numericProfId, numericCourseId, nextType, nextId, incomingRev, updatedAtIso],
+      );
+    } else if (!nextExisting.is_unlocked) {
+      await txClient.query(
+        `UPDATE course_progress_projections
+         SET is_unlocked = TRUE,
+             last_revision = GREATEST(last_revision, $2),
+             source_updated_at = GREATEST(source_updated_at, $3::timestamptz)
+         WHERE id = $1`,
+        [nextExisting.id, incomingRev, updatedAtIso],
+      );
+    }
+  }
+
+  return { action: "updated", unitId: normUnitId, isUnitCompleted: Boolean(isUnitCompleted), completionPct: clampedPct };
+}
+
+const DISALLOWED_ASSESSMENT_METADATA_KEYS = new Set([
+  "solution",
+  "solutions",
+  "solutiontext",
+  "solutionurl",
+  "solutionfileid",
+  "solutionfiles",
+  "solutionpdfurl",
+  "answerkey",
+  "answerkeys",
+  "correctanswer",
+  "correctanswers",
+  "correctoptionid",
+  "correctoptionids",
+  "explanation",
+  "explanations",
+  "r2key",
+  "storagekey",
+  "signedurl",
+  "downloadurl",
+]);
+
+function sanitizeAssessmentMetadata(rawMetadata = {}, { canViewSolution = false, isGraded = false } = {}) {
+  const input = rawMetadata && typeof rawMetadata === "object" && !Array.isArray(rawMetadata)
+    ? rawMetadata
+    : {};
+  const allowFeedback = (Boolean(canViewSolution) || Boolean(isGraded)) && input.allowFeedback !== false;
+  const out = {};
+
+  const safeScalarKeys = [
+    "title",
+    "submittedAt",
+    "startedAt",
+    "answeredCount",
+    "totalQuestions",
+    "correctCount",
+    "passed",
+    "solutionPolicy",
+    "embargoReason",
+    "gradedByName",
+    "contentText",
+    "audioAssetId",
+  ];
+  for (const key of safeScalarKeys) {
+    if (input[key] !== undefined && input[key] !== null) {
+      out[key] = input[key];
+    }
+  }
+  if (Array.isArray(input.fileAssetIds)) {
+    out.fileAssetIds = input.fileAssetIds.map((id) => String(id)).slice(0, 50);
+  }
+  if (input.summary && typeof input.summary === "object" && !Array.isArray(input.summary)) {
+    const cleanSummary = {};
+    for (const [k, v] of Object.entries(input.summary)) {
+      if (DISALLOWED_ASSESSMENT_METADATA_KEYS.has(k.toLowerCase())) continue;
+      if (k === "feedback" || k === "rubric" || k === "rubricScores") continue;
+      cleanSummary[k] = v;
+    }
+    if (Object.keys(cleanSummary).length > 0) out.summary = cleanSummary;
+  }
+
+  if (allowFeedback) {
+    if (input.feedback !== undefined && input.feedback !== null) {
+      out.feedback = typeof input.feedback === "string"
+        ? input.feedback.slice(0, 4000)
+        : input.feedback;
+    }
+    if (input.teacherFeedback !== undefined && input.teacherFeedback !== null) {
+      out.teacherFeedback = String(input.teacherFeedback).slice(0, 4000);
+    }
+    if (input.rubric !== undefined && input.rubric !== null) {
+      out.rubric = input.rubric;
+    }
+    if (input.rubricScores !== undefined && input.rubricScores !== null) {
+      out.rubricScores = input.rubricScores;
+    }
+    if (input.rubricBreakdown !== undefined && input.rubricBreakdown !== null) {
+      out.rubricBreakdown = input.rubricBreakdown;
+    }
+  }
+
+  return out;
+}
+
+async function upsertAssessmentProjectionTx(txClient, {
+  userId,
+  profileProjectionId,
+  unitType = "lesson",
+  remoteUnitId,
+  itemType,
+  remoteItemId,
+  remoteAttemptOrSubId = null,
+  status = "in_progress",
+  attemptCount = 0,
+  maxAttempts = null,
+  score = null,
+  maxScore = null,
+  canViewSolution = false,
+  gradedAt = null,
+  deletedAt = null,
+  metadata = {},
+  syncRevision = 1,
+  sourceUpdatedAt = null,
+  now = () => new Date(),
+}) {
+  const numericUserId = Number(userId);
+  const numericProfId = Number(profileProjectionId);
+  const normUnitType = String(unitType || "").toLowerCase() === "class_session" ? "class_session" : "lesson";
+  const normItemType = String(itemType || "").toLowerCase() === "assignment" ? "assignment" : "quiz";
+  const normUnitId = String(remoteUnitId || "").trim().slice(0, 128);
+  const normItemId = String(remoteItemId || "").trim().slice(0, 128);
+  if (
+    !Number.isSafeInteger(numericUserId)
+    || !Number.isSafeInteger(numericProfId)
+    || !normUnitId
+    || !normItemId
+  ) {
+    return { action: "skipped", reason: "invalid_assessment_params" };
+  }
+
+  const incomingRev = Math.max(1, Number(syncRevision || 1));
+  const updatedAtIso = toIso(sourceUpdatedAt) || now().toISOString();
+  const gradedAtIso = toIso(gradedAt);
+  const deletedAtIso = toIso(deletedAt);
+
+  const existingRes = await txClient.query(
+    `SELECT id, last_revision, source_updated_at
+     FROM course_assessment_projections
+     WHERE user_id = $1
+       AND profile_projection_id = $2
+       AND item_type = $3
+       AND remote_item_id = $4
+     FOR UPDATE`,
+    [numericUserId, numericProfId, normItemType, normItemId],
+  );
+  const existing = existingRes.rows[0] || null;
+  if (
+    existing
+    && isStaleIncoming({
+      incomingRevision: incomingRev,
+      incomingUpdatedAt: updatedAtIso,
+      storedRevision: existing.last_revision,
+      storedUpdatedAt: existing.source_updated_at,
+    })
+  ) {
+    return { action: "stale", reason: "STALE_ASSESSMENT_EVENT", itemType: normItemType, remoteItemId: normItemId };
+  }
+
+  const normStatus = String(status || (gradedAtIso ? "graded" : "in_progress")).slice(0, 32);
+  const isGraded = Boolean(gradedAtIso) || normStatus.toLowerCase() === "graded";
+  const cleanCanView = Boolean(canViewSolution);
+  const cleanMeta = sanitizeAssessmentMetadata(metadata, { canViewSolution: cleanCanView, isGraded });
+  const numericScore = score != null && Number.isFinite(Number(score)) && Number(score) >= 0 ? Number(score) : null;
+  const numericMaxScore = maxScore != null && Number.isFinite(Number(maxScore)) && Number(maxScore) > 0 ? Number(maxScore) : null;
+  const normAttemptCount = Math.max(0, Number.parseInt(attemptCount ?? 0, 10) || 0);
+  const normMaxAttempts = maxAttempts != null && Number(maxAttempts) >= 1 ? Math.floor(Number(maxAttempts)) : null;
+
+  const upserted = await txClient.query(
+    `INSERT INTO course_assessment_projections (
+       user_id, profile_projection_id, unit_type, remote_unit_id,
+       item_type, remote_item_id, remote_attempt_or_sub_id,
+       status, attempt_count, max_attempts, score, max_score,
+       can_view_solution, graded_at, last_revision, source_updated_at, deleted_at, metadata
+     ) VALUES (
+       $1::int, $2::bigint, $3::varchar, $4::varchar,
+       $5::varchar, $6::varchar, $7::varchar,
+       $8::varchar, $9::int, $10::int, $11::numeric, $12::numeric,
+       $13::boolean, $14::timestamptz, $15::bigint, $16::timestamptz, $17::timestamptz, $18::jsonb
+     )
+     ON CONFLICT (user_id, profile_projection_id, item_type, remote_item_id)
+     DO UPDATE SET
+       unit_type = EXCLUDED.unit_type,
+       remote_unit_id = EXCLUDED.remote_unit_id,
+       remote_attempt_or_sub_id = COALESCE(EXCLUDED.remote_attempt_or_sub_id, course_assessment_projections.remote_attempt_or_sub_id),
+       status = EXCLUDED.status,
+       attempt_count = GREATEST(course_assessment_projections.attempt_count, EXCLUDED.attempt_count),
+       max_attempts = COALESCE(EXCLUDED.max_attempts, course_assessment_projections.max_attempts),
+       score = COALESCE(EXCLUDED.score, course_assessment_projections.score),
+       max_score = COALESCE(EXCLUDED.max_score, course_assessment_projections.max_score),
+       can_view_solution = EXCLUDED.can_view_solution,
+       graded_at = COALESCE(EXCLUDED.graded_at, course_assessment_projections.graded_at),
+       last_revision = EXCLUDED.last_revision,
+       source_updated_at = EXCLUDED.source_updated_at,
+       deleted_at = EXCLUDED.deleted_at,
+       metadata = EXCLUDED.metadata,
+       updated_at = NOW()
+     WHERE (
+       course_assessment_projections.last_revision < EXCLUDED.last_revision
+       OR (
+         course_assessment_projections.last_revision = EXCLUDED.last_revision
+         AND course_assessment_projections.source_updated_at <= EXCLUDED.source_updated_at
+       )
+     )
+     RETURNING *`,
+    [
+      numericUserId,
+      numericProfId,
+      normUnitType,
+      normUnitId,
+      normItemType,
+      normItemId,
+      remoteAttemptOrSubId != null ? String(remoteAttemptOrSubId).slice(0, 128) : null,
+      normStatus,
+      normAttemptCount,
+      normMaxAttempts,
+      numericScore,
+      numericMaxScore,
+      cleanCanView,
+      gradedAtIso,
+      incomingRev,
+      updatedAtIso,
+      deletedAtIso,
+      JSON.stringify(cleanMeta),
+    ],
+  );
+
+  if (upserted.rowCount === 0) {
+    return { action: "stale", reason: "STALE_ASSESSMENT_EVENT", itemType: normItemType, remoteItemId: normItemId };
+  }
+  return { action: existing ? "updated" : "inserted", assessment: upserted.rows[0] };
+}
+
+async function upsertNoteProjectionTx(txClient, {
+  userId,
+  profileProjectionId,
+  unitType = "lesson",
+  remoteUnitId,
+  remoteNoteId,
+  timestampSeconds = 0,
+  content = "",
+  deletedAt = null,
+  syncRevision = 1,
+  sourceUpdatedAt = null,
+  now = () => new Date(),
+}) {
+  const numericProfId = Number(profileProjectionId);
+  const normUnitType = String(unitType || "").toLowerCase() === "class_session" ? "class_session" : "lesson";
+  const normUnitId = String(remoteUnitId || "").trim().slice(0, 128);
+  const normNoteId = String(remoteNoteId || "").trim().slice(0, 128);
+  if (!Number.isSafeInteger(numericProfId) || !normNoteId) {
+    return { action: "skipped", reason: "invalid_note_params" };
+  }
+
+  const incomingRev = Math.max(1, Number(syncRevision || 1));
+  const updatedAtIso = toIso(sourceUpdatedAt) || now().toISOString();
+  const deletedAtIso = toIso(deletedAt);
+
+  const existingRes = await txClient.query(
+    `SELECT * FROM course_note_projections
+     WHERE profile_projection_id = $1 AND remote_note_id = $2
+     FOR UPDATE`,
+    [numericProfId, normNoteId],
+  );
+  const existing = existingRes.rows[0] || null;
+  if (
+    existing
+    && isStaleIncoming({
+      incomingRevision: incomingRev,
+      incomingUpdatedAt: updatedAtIso,
+      storedRevision: existing.last_revision,
+      storedUpdatedAt: existing.source_updated_at,
+    })
+  ) {
+    return { action: "stale", reason: "STALE_NOTE_EVENT", remoteNoteId: normNoteId };
+  }
+
+  const resolvedUserId = Number(userId || existing?.user_id || 0);
+  const resolvedUnitId = normUnitId || existing?.remote_unit_id || "";
+  if (!Number.isSafeInteger(resolvedUserId) || resolvedUserId <= 0 || !resolvedUnitId) {
+    return { action: deletedAtIso ? "tombstoned" : "skipped", reason: "note_owner_or_unit_missing" };
+  }
+
+  const normTimestamp = Math.max(0, Math.round(Number(timestampSeconds ?? existing?.timestamp_seconds ?? 0)));
+  const normContent = content != null && String(content).length > 0
+    ? String(content)
+    : (existing?.content || "");
+
+  const upserted = await txClient.query(
+    `INSERT INTO course_note_projections (
+       user_id, profile_projection_id, unit_type, remote_unit_id,
+       remote_note_id, timestamp_seconds, content, last_revision, source_updated_at, deleted_at
+     ) VALUES (
+       $1::int, $2::bigint, $3::varchar, $4::varchar,
+       $5::varchar, $6::int, $7::text, $8::bigint, $9::timestamptz, $10::timestamptz
+     )
+     ON CONFLICT (profile_projection_id, remote_note_id)
+     DO UPDATE SET
+       unit_type = EXCLUDED.unit_type,
+       remote_unit_id = EXCLUDED.remote_unit_id,
+       timestamp_seconds = EXCLUDED.timestamp_seconds,
+       content = CASE
+         WHEN EXCLUDED.deleted_at IS NOT NULL AND length(EXCLUDED.content) = 0
+           THEN course_note_projections.content
+         ELSE EXCLUDED.content
+       END,
+       last_revision = EXCLUDED.last_revision,
+       source_updated_at = EXCLUDED.source_updated_at,
+       deleted_at = EXCLUDED.deleted_at,
+       updated_at = NOW()
+     WHERE (
+       course_note_projections.last_revision < EXCLUDED.last_revision
+       OR (
+         course_note_projections.last_revision = EXCLUDED.last_revision
+         AND course_note_projections.source_updated_at <= EXCLUDED.source_updated_at
+       )
+     )
+     RETURNING *`,
+    [
+      resolvedUserId,
+      numericProfId,
+      existing?.unit_type || normUnitType,
+      resolvedUnitId,
+      normNoteId,
+      normTimestamp,
+      normContent,
+      incomingRev,
+      updatedAtIso,
+      deletedAtIso,
+    ],
+  );
+
+  if (upserted.rowCount === 0) {
+    return { action: "stale", reason: "STALE_NOTE_EVENT", remoteNoteId: normNoteId };
+  }
+  return { action: deletedAtIso ? "tombstoned" : (existing ? "updated" : "inserted"), note: upserted.rows[0] };
+}
+
+async function upsertBookmarkProjectionTx(txClient, {
+  userId,
+  profileProjectionId,
+  unitType = "lesson",
+  remoteUnitId,
+  remoteBookmarkId,
+  videoAssetId = null,
+  timestampSeconds = 0,
+  label = "",
+  deletedAt = null,
+  syncRevision = 1,
+  sourceUpdatedAt = null,
+  now = () => new Date(),
+}) {
+  const reg = await txClient.query(`SELECT to_regclass('course_bookmark_projections') AS tbl`).catch(() => ({ rows: [] }));
+  if (!reg.rows[0]?.tbl) {
+    return { action: "skipped_schema_missing" };
+  }
+
+  const numericProfId = Number(profileProjectionId);
+  const normUnitType = String(unitType || "").toLowerCase() === "class_session" ? "class_session" : "lesson";
+  const normUnitId = String(remoteUnitId || "").trim().slice(0, 128);
+  const normBookmarkId = String(remoteBookmarkId || "").trim().slice(0, 128);
+  if (!Number.isSafeInteger(numericProfId) || !normBookmarkId) {
+    return { action: "skipped", reason: "invalid_bookmark_params" };
+  }
+
+  const incomingRev = Math.max(1, Number(syncRevision || 1));
+  const updatedAtIso = toIso(sourceUpdatedAt) || now().toISOString();
+  const deletedAtIso = toIso(deletedAt);
+
+  const existingRes = await txClient.query(
+    `SELECT * FROM course_bookmark_projections
+     WHERE profile_projection_id = $1 AND remote_bookmark_id = $2
+     FOR UPDATE`,
+    [numericProfId, normBookmarkId],
+  );
+  const existing = existingRes.rows[0] || null;
+  if (
+    existing
+    && isStaleIncoming({
+      incomingRevision: incomingRev,
+      incomingUpdatedAt: updatedAtIso,
+      storedRevision: existing.last_revision,
+      storedUpdatedAt: existing.source_updated_at,
+    })
+  ) {
+    return { action: "stale", reason: "STALE_BOOKMARK_EVENT", remoteBookmarkId: normBookmarkId };
+  }
+
+  const resolvedUserId = Number(userId || existing?.user_id || 0);
+  const resolvedUnitId = normUnitId || existing?.remote_unit_id || "";
+  if (!Number.isSafeInteger(resolvedUserId) || resolvedUserId <= 0 || !resolvedUnitId) {
+    return { action: deletedAtIso ? "tombstoned" : "skipped", reason: "bookmark_owner_or_unit_missing" };
+  }
+
+  const normTimestamp = Math.max(0, Math.round(Number(timestampSeconds ?? existing?.timestamp_seconds ?? 0)));
+  const normLabel = String(label ?? existing?.label ?? "").slice(0, 255);
+  const normVideoId = videoAssetId != null ? String(videoAssetId).slice(0, 128) : (existing?.video_asset_id || null);
+
+  const upserted = await txClient.query(
+    `INSERT INTO course_bookmark_projections (
+       user_id, profile_projection_id, unit_type, remote_unit_id,
+       remote_bookmark_id, video_asset_id, timestamp_seconds, label,
+       last_revision, source_updated_at, deleted_at
+     ) VALUES (
+       $1::int, $2::bigint, $3::varchar, $4::varchar,
+       $5::varchar, $6::varchar, $7::int, $8::varchar,
+       $9::bigint, $10::timestamptz, $11::timestamptz
+     )
+     ON CONFLICT (profile_projection_id, remote_bookmark_id)
+     DO UPDATE SET
+       unit_type = EXCLUDED.unit_type,
+       remote_unit_id = EXCLUDED.remote_unit_id,
+       video_asset_id = COALESCE(EXCLUDED.video_asset_id, course_bookmark_projections.video_asset_id),
+       timestamp_seconds = EXCLUDED.timestamp_seconds,
+       label = EXCLUDED.label,
+       last_revision = EXCLUDED.last_revision,
+       source_updated_at = EXCLUDED.source_updated_at,
+       deleted_at = EXCLUDED.deleted_at,
+       updated_at = NOW()
+     WHERE (
+       course_bookmark_projections.last_revision < EXCLUDED.last_revision
+       OR (
+         course_bookmark_projections.last_revision = EXCLUDED.last_revision
+         AND course_bookmark_projections.source_updated_at <= EXCLUDED.source_updated_at
+       )
+     )
+     RETURNING *`,
+    [
+      resolvedUserId,
+      numericProfId,
+      existing?.unit_type || normUnitType,
+      resolvedUnitId,
+      normBookmarkId,
+      normVideoId,
+      normTimestamp,
+      normLabel,
+      incomingRev,
+      updatedAtIso,
+      deletedAtIso,
+    ],
+  );
+
+  if (upserted.rowCount === 0) {
+    return { action: "stale", reason: "STALE_BOOKMARK_EVENT", remoteBookmarkId: normBookmarkId };
+  }
+  return { action: deletedAtIso ? "tombstoned" : (existing ? "updated" : "inserted"), bookmark: upserted.rows[0] };
+}
+
+async function upsertQaThreadProjectionTx(txClient, {
+  profileProjectionId,
+  unitType = "lesson",
+  remoteUnitId,
+  remoteThreadId,
+  authorExternalUserId = null,
+  authorUserId = null,
+  authorName = null,
+  authorRole = null,
+  title = "",
+  status = "open",
+  isPinned = false,
+  messageCount = 0,
+  messages = [],
+  unread = false,
+  lastMessageAt = null,
+  deletedAt = null,
+  syncRevision = 1,
+  sourceUpdatedAt = null,
+  now = () => new Date(),
+}) {
+  const reg = await txClient.query(`SELECT to_regclass('course_qa_thread_projections') AS tbl`).catch(() => ({ rows: [] }));
+  if (!reg.rows[0]?.tbl) {
+    return { action: "skipped_schema_missing" };
+  }
+
+  const numericProfId = Number(profileProjectionId);
+  const normUnitType = String(unitType || "").toLowerCase() === "class_session" ? "class_session" : "lesson";
+  const normUnitId = String(remoteUnitId || "").trim().slice(0, 128);
+  const normThreadId = String(remoteThreadId || "").trim().slice(0, 128);
+  if (!Number.isSafeInteger(numericProfId) || !normThreadId) {
+    return { action: "skipped", reason: "invalid_qa_thread_params" };
+  }
+
+  const incomingRev = Math.max(1, Number(syncRevision || 1));
+  const updatedAtIso = toIso(sourceUpdatedAt) || now().toISOString();
+  const deletedAtIso = toIso(deletedAt);
+
+  const existingRes = await txClient.query(
+    `SELECT * FROM course_qa_thread_projections
+     WHERE profile_projection_id = $1 AND remote_thread_id = $2
+     FOR UPDATE`,
+    [numericProfId, normThreadId],
+  );
+  const existing = existingRes.rows[0] || null;
+  if (
+    existing
+    && isStaleIncoming({
+      incomingRevision: incomingRev,
+      incomingUpdatedAt: updatedAtIso,
+      storedRevision: existing.last_revision,
+      storedUpdatedAt: existing.source_updated_at,
+    })
+  ) {
+    return { action: "stale", reason: "STALE_QA_THREAD_EVENT", remoteThreadId: normThreadId };
+  }
+
+  const resolvedUnitId = normUnitId || existing?.remote_unit_id || "";
+  if (!resolvedUnitId) {
+    return { action: deletedAtIso ? "tombstoned" : "skipped", reason: "qa_thread_unit_missing" };
+  }
+
+  const normStatus = ["open", "answered", "resolved"].includes(String(status || "").toLowerCase())
+    ? String(status).toLowerCase()
+    : (existing?.status || "open");
+  const cleanMessages = Array.isArray(messages)
+    ? messages.map((m, idx) => ({
+        messageId: m?.messageId != null ? String(m.messageId) : (m?.id != null ? String(m.id) : `msg-${idx + 1}`),
+        authorExternalUserId: m?.authorExternalUserId ? String(m.authorExternalUserId) : null,
+        authorName: m?.authorName ? String(m.authorName) : null,
+        authorRole: m?.authorRole ? String(m.authorRole) : null,
+        body: String(m?.body ?? m?.content ?? ""),
+        createdAt: toIso(m?.createdAt) || null,
+        updatedAt: toIso(m?.updatedAt) || null,
+      }))
+    : (Array.isArray(existing?.messages_json) ? existing.messages_json : []);
+  const normMsgCount = Math.max(0, Number.parseInt(messageCount ?? cleanMessages.length, 10) || cleanMessages.length || 0);
+  const lastMsgAtIso = toIso(lastMessageAt)
+    || (cleanMessages.length > 0 ? toIso(cleanMessages[cleanMessages.length - 1]?.createdAt) : null)
+    || existing?.last_message_at
+    || null;
+  const resolvedAuthorUserId = Number.isSafeInteger(Number(authorUserId)) && Number(authorUserId) > 0
+    ? Number(authorUserId)
+    : (existing?.author_user_id || null);
+
+  const upserted = await txClient.query(
+    `INSERT INTO course_qa_thread_projections (
+       profile_projection_id, unit_type, remote_unit_id, remote_thread_id,
+       author_external_user_id, author_user_id, author_name, author_role,
+       title, status, is_pinned, message_count, messages_json, unread,
+       last_message_at, last_revision, source_updated_at, deleted_at
+     ) VALUES (
+       $1::bigint, $2::varchar, $3::varchar, $4::varchar,
+       $5::varchar, $6::int, $7::varchar, $8::varchar,
+       $9::varchar, $10::varchar, $11::boolean, $12::int, $13::jsonb, $14::boolean,
+       $15::timestamptz, $16::bigint, $17::timestamptz, $18::timestamptz
+     )
+     ON CONFLICT (profile_projection_id, remote_thread_id)
+     DO UPDATE SET
+       unit_type = EXCLUDED.unit_type,
+       remote_unit_id = EXCLUDED.remote_unit_id,
+       author_external_user_id = COALESCE(EXCLUDED.author_external_user_id, course_qa_thread_projections.author_external_user_id),
+       author_user_id = COALESCE(EXCLUDED.author_user_id, course_qa_thread_projections.author_user_id),
+       author_name = COALESCE(EXCLUDED.author_name, course_qa_thread_projections.author_name),
+       author_role = COALESCE(EXCLUDED.author_role, course_qa_thread_projections.author_role),
+       title = CASE
+         WHEN length(EXCLUDED.title) > 0 THEN EXCLUDED.title
+         ELSE course_qa_thread_projections.title
+       END,
+       status = EXCLUDED.status,
+       is_pinned = EXCLUDED.is_pinned,
+       message_count = EXCLUDED.message_count,
+       messages_json = CASE
+         WHEN jsonb_array_length(EXCLUDED.messages_json) > 0 OR course_qa_thread_projections.messages_json IS NULL
+           THEN EXCLUDED.messages_json
+         ELSE course_qa_thread_projections.messages_json
+       END,
+       unread = EXCLUDED.unread,
+       last_message_at = COALESCE(EXCLUDED.last_message_at, course_qa_thread_projections.last_message_at),
+       last_revision = EXCLUDED.last_revision,
+       source_updated_at = EXCLUDED.source_updated_at,
+       deleted_at = EXCLUDED.deleted_at,
+       updated_at = NOW()
+     WHERE (
+       course_qa_thread_projections.last_revision < EXCLUDED.last_revision
+       OR (
+         course_qa_thread_projections.last_revision = EXCLUDED.last_revision
+         AND course_qa_thread_projections.source_updated_at <= EXCLUDED.source_updated_at
+       )
+     )
+     RETURNING *`,
+    [
+      numericProfId,
+      existing?.unit_type || normUnitType,
+      resolvedUnitId,
+      normThreadId,
+      authorExternalUserId != null ? String(authorExternalUserId).slice(0, 128) : (existing?.author_external_user_id || null),
+      resolvedAuthorUserId,
+      authorName != null ? String(authorName).slice(0, 255) : (existing?.author_name || null),
+      authorRole != null ? String(authorRole).slice(0, 32) : (existing?.author_role || null),
+      String(title || existing?.title || "Câu hỏi bài học").slice(0, 255),
+      normStatus,
+      Boolean(isPinned ?? existing?.is_pinned ?? false),
+      normMsgCount,
+      JSON.stringify(cleanMessages),
+      Boolean(unread ?? existing?.unread ?? false),
+      lastMsgAtIso,
+      incomingRev,
+      updatedAtIso,
+      deletedAtIso,
+    ],
+  );
+
+  if (upserted.rowCount === 0) {
+    return { action: "stale", reason: "STALE_QA_THREAD_EVENT", remoteThreadId: normThreadId };
+  }
+  return { action: deletedAtIso ? "tombstoned" : (existing ? "updated" : "inserted"), thread: upserted.rows[0] };
 }
 
 function normalizeAsciiSearch(value) {
@@ -590,7 +1349,11 @@ function createMolyCourseCatalogSyncService({
                allow_file_download = $9,
                device_limit = $10,
                enforce_trusted_devices = $11,
-               status = $12,
+               status = $12::varchar,
+               checkout_ready = CASE
+                 WHEN $12::varchar IN ('inactive', 'tombstoned', 'archived') OR $15::timestamptz IS NOT NULL THEN FALSE
+                 ELSE checkout_ready
+               END,
                last_revision = $13,
                source_updated_at = $14,
                deleted_at = $15,
@@ -894,6 +1657,7 @@ function createMolyCourseCatalogSyncService({
       await runner.query(
         `UPDATE course_profile_projections
          SET status = CASE WHEN $2::boolean THEN 'tombstoned' ELSE 'inactive' END,
+             checkout_ready = FALSE,
              deleted_at = CASE WHEN $2::boolean THEN COALESCE(deleted_at, $3::timestamptz) ELSE deleted_at END,
              last_revision = GREATEST(last_revision, $4),
              source_updated_at = GREATEST(source_updated_at, $5::timestamptz)
@@ -936,6 +1700,26 @@ function createMolyCourseCatalogSyncService({
       );
       const row = res.rows[0] || {};
       return Boolean(row.has_units && row.has_files);
+    } catch {
+      return false;
+    }
+  }
+
+  async function hasDay5FileColumns(runner = db) {
+    try {
+      const res = await runner.query(
+        `SELECT
+           EXISTS (
+             SELECT 1 FROM information_schema.columns
+             WHERE table_name = 'course_file_projections' AND column_name = 'placements_json'
+           ) AS has_placements,
+           EXISTS (
+             SELECT 1 FROM information_schema.columns
+             WHERE table_name = 'course_file_projections' AND column_name = 'allow_view_override'
+           ) AS has_view_override`,
+      );
+      const row = res.rows[0] || {};
+      return Boolean(row.has_placements && row.has_view_override);
     } catch {
       return false;
     }
@@ -1164,6 +1948,7 @@ function createMolyCourseCatalogSyncService({
       return { action: "stale", unitProjectionId: existingUnit ? Number(existingUnit.id) : null, unitType, remoteUnitId };
     }
 
+    const hasDay5Cols = unitFiles.length > 0 ? await hasDay5FileColumns(runner) : false;
     const seenFileIds = [];
     for (let idx = 0; idx < unitFiles.length; idx += 1) {
       const f = unitFiles[idx];
@@ -1172,52 +1957,94 @@ function createMolyCourseCatalogSyncService({
       seenFileIds.push(remoteFileId);
 
       const fileUpdatedAt = toIso(f?.updatedAt || sourceUpdatedAt) || sourceUpdatedAt;
-      await runner.query(
-        `INSERT INTO course_file_projections (
-           profile_projection_id, unit_projection_id, remote_file_id, title, original_filename,
-           mime_type, file_kind, size_bytes, is_slide, allow_download_override, sort_order,
-           is_published, last_revision, source_updated_at, deleted_at, metadata
-         )
-         VALUES (
-           $1::bigint, $2::bigint, $3::varchar, $4::varchar, $5::varchar,
-           $6::varchar, $7::varchar, $8::bigint, $9::boolean, $10::boolean, $11::integer,
-           $12::boolean, $13::bigint, $14::timestamptz, $15::timestamptz, $16::jsonb
-         )
-         ON CONFLICT (unit_projection_id, remote_file_id)
-         DO UPDATE SET
-           title = EXCLUDED.title,
-           original_filename = EXCLUDED.original_filename,
-           mime_type = EXCLUDED.mime_type,
-           file_kind = EXCLUDED.file_kind,
-           size_bytes = EXCLUDED.size_bytes,
-           is_slide = EXCLUDED.is_slide,
-           allow_download_override = EXCLUDED.allow_download_override,
-           sort_order = EXCLUDED.sort_order,
-           is_published = EXCLUDED.is_published,
-           last_revision = GREATEST(course_file_projections.last_revision, EXCLUDED.last_revision),
-           source_updated_at = GREATEST(course_file_projections.source_updated_at, EXCLUDED.source_updated_at),
-           deleted_at = EXCLUDED.deleted_at,
-           metadata = COALESCE(course_file_projections.metadata, '{}'::jsonb) || EXCLUDED.metadata,
-           updated_at = NOW()`,
-        [
-          Number(profileProjectionId),
-          Number(upsertedUnit.id),
-          remoteFileId.slice(0, 128),
-          String(f?.title || f?.originalFilename || `Tài liệu ${idx + 1}`).slice(0, 255),
-          f?.originalFilename ? String(f.originalFilename).slice(0, 255) : null,
-          f?.mimeType ? String(f.mimeType).slice(0, 150) : null,
-          f?.fileKind ? String(f.fileKind).slice(0, 50) : "document",
-          f?.sizeBytes != null ? Math.max(0, Number.parseInt(f.sizeBytes, 10) || 0) : null,
-          Boolean(f?.isSlide),
-          f?.allowDownloadOverride != null ? Boolean(f.allowDownloadOverride) : null,
-          Number.parseInt(f?.sortOrder ?? idx, 10) || 0,
-          !deleted && f?.isPublished !== false && isPublished,
-          revision,
-          fileUpdatedAt,
-          deleted ? deletedAt : null,
-          JSON.stringify({ updatedAt: fileUpdatedAt }),
-        ],
-      );
+      const placementsRaw = Array.isArray(f?.placements)
+        ? f.placements
+        : (Array.isArray(f?.placementsJson) ? f.placementsJson : []);
+      const allowViewVal = f?.allowViewOverride != null ? Boolean(f.allowViewOverride) : null;
+      const baseParams = [
+        Number(profileProjectionId),
+        Number(upsertedUnit.id),
+        remoteFileId.slice(0, 128),
+        String(f?.title || f?.originalFilename || `Tài liệu ${idx + 1}`).slice(0, 255),
+        f?.originalFilename ? String(f.originalFilename).slice(0, 255) : null,
+        f?.mimeType ? String(f.mimeType).slice(0, 150) : null,
+        f?.fileKind ? String(f.fileKind).slice(0, 50) : "document",
+        f?.sizeBytes != null ? Math.max(0, Number.parseInt(f.sizeBytes, 10) || 0) : null,
+        Boolean(f?.isSlide),
+        f?.allowDownloadOverride != null ? Boolean(f.allowDownloadOverride) : null,
+        Number.parseInt(f?.sortOrder ?? idx, 10) || 0,
+        !deleted && f?.isPublished !== false && isPublished,
+        revision,
+        fileUpdatedAt,
+        deleted ? deletedAt : null,
+        JSON.stringify({ updatedAt: fileUpdatedAt }),
+      ];
+
+      if (hasDay5Cols) {
+        await runner.query(
+          `INSERT INTO course_file_projections (
+             profile_projection_id, unit_projection_id, remote_file_id, title, original_filename,
+             mime_type, file_kind, size_bytes, is_slide, allow_download_override, sort_order,
+             is_published, last_revision, source_updated_at, deleted_at, metadata,
+             placements_json, allow_view_override
+           )
+           VALUES (
+             $1::bigint, $2::bigint, $3::varchar, $4::varchar, $5::varchar,
+             $6::varchar, $7::varchar, $8::bigint, $9::boolean, $10::boolean, $11::integer,
+             $12::boolean, $13::bigint, $14::timestamptz, $15::timestamptz, $16::jsonb,
+             $17::jsonb, $18::boolean
+           )
+           ON CONFLICT (unit_projection_id, remote_file_id)
+           DO UPDATE SET
+             title = EXCLUDED.title,
+             original_filename = EXCLUDED.original_filename,
+             mime_type = EXCLUDED.mime_type,
+             file_kind = EXCLUDED.file_kind,
+             size_bytes = EXCLUDED.size_bytes,
+             is_slide = EXCLUDED.is_slide,
+             allow_download_override = EXCLUDED.allow_download_override,
+             sort_order = EXCLUDED.sort_order,
+             is_published = EXCLUDED.is_published,
+             last_revision = GREATEST(course_file_projections.last_revision, EXCLUDED.last_revision),
+             source_updated_at = GREATEST(course_file_projections.source_updated_at, EXCLUDED.source_updated_at),
+             deleted_at = EXCLUDED.deleted_at,
+             metadata = COALESCE(course_file_projections.metadata, '{}'::jsonb) || EXCLUDED.metadata,
+             placements_json = EXCLUDED.placements_json,
+             allow_view_override = EXCLUDED.allow_view_override,
+             updated_at = NOW()`,
+          [...baseParams, JSON.stringify(placementsRaw), allowViewVal],
+        );
+      } else {
+        await runner.query(
+          `INSERT INTO course_file_projections (
+             profile_projection_id, unit_projection_id, remote_file_id, title, original_filename,
+             mime_type, file_kind, size_bytes, is_slide, allow_download_override, sort_order,
+             is_published, last_revision, source_updated_at, deleted_at, metadata
+           )
+           VALUES (
+             $1::bigint, $2::bigint, $3::varchar, $4::varchar, $5::varchar,
+             $6::varchar, $7::varchar, $8::bigint, $9::boolean, $10::boolean, $11::integer,
+             $12::boolean, $13::bigint, $14::timestamptz, $15::timestamptz, $16::jsonb
+           )
+           ON CONFLICT (unit_projection_id, remote_file_id)
+           DO UPDATE SET
+             title = EXCLUDED.title,
+             original_filename = EXCLUDED.original_filename,
+             mime_type = EXCLUDED.mime_type,
+             file_kind = EXCLUDED.file_kind,
+             size_bytes = EXCLUDED.size_bytes,
+             is_slide = EXCLUDED.is_slide,
+             allow_download_override = EXCLUDED.allow_download_override,
+             sort_order = EXCLUDED.sort_order,
+             is_published = EXCLUDED.is_published,
+             last_revision = GREATEST(course_file_projections.last_revision, EXCLUDED.last_revision),
+             source_updated_at = GREATEST(course_file_projections.source_updated_at, EXCLUDED.source_updated_at),
+             deleted_at = EXCLUDED.deleted_at,
+             metadata = COALESCE(course_file_projections.metadata, '{}'::jsonb) || EXCLUDED.metadata,
+             updated_at = NOW()`,
+          baseParams,
+        );
+      }
     }
 
     // Reconcile detached/removed files for this unit
@@ -1336,6 +2163,7 @@ function createMolyCourseCatalogSyncService({
              WHERE profile_projection_id = ANY($1::bigint[])
                AND unit_type = $2::varchar
                AND remote_unit_id = $3::varchar
+               AND (last_revision <= $5::bigint OR source_updated_at <= $4::timestamptz)
              RETURNING id`,
             [profIds, uType, uId, delTs, revFallback],
           );
@@ -1415,6 +2243,7 @@ function createMolyCourseCatalogSyncService({
           425,
           "PROFILE_PROJECTION_MISSING",
           `Profile projection ${remoteProfileId} must be synced before curriculum.`,
+          { retryable: true },
         );
       }
 
@@ -1507,7 +2336,8 @@ function createMolyCourseCatalogSyncService({
         await runner.query(
           `SELECT * FROM course_profile_projections
            WHERE source_system = $1 AND remote_profile_id = $2::varchar
-           LIMIT 1`,
+           LIMIT 1
+           FOR UPDATE`,
           [SOURCE_SYSTEM, remoteProfileId],
         )
       ).rows[0] || null;
@@ -1516,6 +2346,7 @@ function createMolyCourseCatalogSyncService({
           425,
           "PROFILE_PROJECTION_MISSING",
           `Profile projection ${remoteProfileId} must be synced before unit content.`,
+          { retryable: true },
         );
       }
 
@@ -1523,10 +2354,25 @@ function createMolyCourseCatalogSyncService({
       if (item.capabilities && typeof item.capabilities === "object") {
         await runner.query(
           `UPDATE course_profile_projections
-           SET metadata = COALESCE(metadata, '{}'::jsonb) || $2::jsonb,
+           SET allow_file_download = COALESCE($3::boolean, allow_file_download),
+               device_limit = COALESCE($4::integer, device_limit),
+               enforce_trusted_devices = COALESCE($5::boolean, enforce_trusted_devices),
+               metadata = COALESCE(metadata, '{}'::jsonb) || $2::jsonb,
                updated_at = NOW()
            WHERE id = $1::bigint`,
-          [Number(profProj.id), JSON.stringify({ capabilities: item.capabilities })],
+          [
+            Number(profProj.id),
+            JSON.stringify({ capabilities: item.capabilities }),
+            typeof item.capabilities.allowFileDownload === "boolean"
+              ? item.capabilities.allowFileDownload
+              : null,
+            Number.isFinite(Number(item.capabilities.deviceLimit)) && Number(item.capabilities.deviceLimit) > 0
+              ? Math.floor(Number(item.capabilities.deviceLimit))
+              : null,
+            typeof item.capabilities.enforceTrustedDevices === "boolean"
+              ? item.capabilities.enforceTrustedDevices
+              : null,
+          ],
         );
       }
 
@@ -1552,11 +2398,854 @@ function createMolyCourseCatalogSyncService({
     };
   }
 
+  async function resolveMolyUserIdsFromPayloadTx(txClient, payload) {
+    const rawExtIds = [];
+    if (Array.isArray(payload?.externalUserIds)) rawExtIds.push(...payload.externalUserIds);
+    if (payload?.externalUserId) rawExtIds.push(payload.externalUserId);
+    const resolved = new Set();
+    const unparsedExt = [];
+
+    for (const raw of rawExtIds) {
+      const clean = String(raw || "").trim();
+      if (!clean) continue;
+      const m = /^moly:(\d+)$/.exec(clean);
+      if (m) {
+        const uid = Number(m[1]);
+        if (Number.isSafeInteger(uid) && uid > 0) resolved.add(uid);
+      } else {
+        unparsedExt.push(clean);
+      }
+    }
+
+    if (resolved.size > 0) {
+      const uRes = await txClient.query(
+        `SELECT id FROM users WHERE id = ANY($1::int[])`,
+        [[...resolved]],
+      );
+      resolved.clear();
+      for (const r of uRes.rows) resolved.add(Number(r.id));
+    }
+
+    const courseUserId = payload?.userId != null ? String(payload.userId).trim() : null;
+    if (resolved.size === 0 && (courseUserId || unparsedExt.length > 0)) {
+      const lookupKeys = [
+        ...(courseUserId ? [courseUserId] : []),
+        ...unparsedExt,
+      ];
+      const extRes = await txClient.query(
+        `SELECT user_id
+         FROM external_identities
+         WHERE source_system = $1
+           AND status = 'active'
+           AND external_user_id = ANY($2::text[])`,
+        [SOURCE_SYSTEM, lookupKeys],
+      );
+      for (const r of extRes.rows) {
+        const uid = Number(r.user_id);
+        if (Number.isSafeInteger(uid) && uid > 0) resolved.add(uid);
+      }
+    }
+
+    return [...resolved];
+  }
+
+  async function applyProgressProjectionTx(txClient, payload, {
+    envelopeRevision = 1,
+    sourceUpdatedAt = null,
+  } = {}) {
+    const profileId = String(payload?.profileId || "").trim();
+    const unitId = String(payload?.unitId || "").trim();
+    if (!profileId || !unitId) {
+      throw new MolyCatalogSyncError(422, "VALIDATION_ERROR", "profileId and unitId are required in learning progress event.");
+    }
+
+    const profRes = await txClient.query(
+      `SELECT id, local_course_id
+       FROM course_profile_projections
+       WHERE source_system = $1 AND remote_profile_id = $2
+       LIMIT 1`,
+      [SOURCE_SYSTEM, profileId],
+    );
+    const prof = profRes.rows[0];
+    if (!prof || !prof.local_course_id) {
+      throw new MolyCatalogSyncError(
+        425,
+        "PROFILE_PROJECTION_MISSING",
+        `Profile projection ${profileId} does not exist locally yet for learning progress.`,
+        { retryable: true },
+      );
+    }
+
+    const userIds = await resolveMolyUserIdsFromPayloadTx(txClient, payload);
+    if (userIds.length === 0) {
+      return { action: "skipped", reason: "user_identity_not_found" };
+    }
+
+    let updatedCount = 0;
+    let staleCount = 0;
+    for (const userId of userIds) {
+      const res = await upsertLearningProgressProjectionTx(txClient, {
+        userId,
+        profileProjectionId: prof.id,
+        localCourseId: prof.local_course_id,
+        unitType: payload.unitType,
+        remoteUnitId: unitId,
+        watchedSeconds: payload.watchedSeconds,
+        lastPositionSeconds: payload.lastPositionSeconds,
+        completionPct: payload.completionPercent ?? payload.completionPct ?? 0,
+        isVideoCompleted: payload.isVideoCompleted,
+        isQuizCompleted: payload.isQuizCompleted,
+        isUnitCompleted: payload.isUnitCompleted,
+        isUnlocked: payload.isUnlocked !== false,
+        courseCompletionPct: payload.courseCompletionPct,
+        lastUnitId: payload.lastUnitId,
+        syncRevision: envelopeRevision || payload.syncRevision || 1,
+        sourceUpdatedAt: sourceUpdatedAt || payload.sourceUpdatedAt,
+        unlockedNextUnitId: payload.unlockedNextUnitId || null,
+        nextUnitType: payload.nextUnitType || null,
+        now,
+      });
+      if (res.action === "stale") staleCount += 1;
+      else if (res.action === "updated") updatedCount += 1;
+    }
+
+    if (staleCount > 0 && updatedCount === 0) {
+      return { action: "stale", reason: "STALE_PROGRESS_EVENT", unitId };
+    }
+    return { action: "updated", unitId, updatedCount, staleCount };
+  }
+
+  async function applyDeviceBindingRevokedTx(txClient, payload, { sourceUpdatedAt = null } = {}) {
+    const hashes = Array.isArray(payload?.molyDeviceTokenHashes)
+      ? payload.molyDeviceTokenHashes
+      : payload?.molyDeviceTokenHash
+        ? [payload.molyDeviceTokenHash]
+        : [];
+    const reason = String(payload?.reason || "remote_device_revoked").slice(0, 255);
+    const revokedAt = toIso(payload?.revokedAt || sourceUpdatedAt) || now().toISOString();
+    const userIds = await resolveMolyUserIdsFromPayloadTx(txClient, payload);
+
+    let revokedCount = 0;
+    if (hashes.length > 0) {
+      const res = await revokeMolyTrustedDevicesByHashes({
+        db: txClient,
+        hashes,
+        reason,
+        revokedAt,
+      });
+      revokedCount = res.revokedCount;
+    } else if (userIds.length > 0 && reason === "DEVICE_LIMIT_LOCKED") {
+      const res = await txClient.query(
+        `UPDATE moly_trusted_browser_devices
+         SET revoked_at = COALESCE(revoked_at, $2::timestamptz),
+             revoked_reason = COALESCE(revoked_reason, $3)
+         WHERE revoked_at IS NULL AND user_id = ANY($1::int[])`,
+        [userIds, revokedAt, reason],
+      ).catch(() => ({ rowCount: 0 }));
+      revokedCount = res?.rowCount || 0;
+    }
+
+    if (String(reason || "").toUpperCase() === "DEVICE_LIMIT_LOCKED" && userIds.length > 0) {
+      await txClient.query(
+        `UPDATE users
+         SET device_limit_locked_at = COALESCE(device_limit_locked_at, $2::timestamptz)
+         WHERE id = ANY($1::int[])`,
+        [userIds, revokedAt],
+      ).catch(() => {});
+    }
+
+    return { action: "revoked", revokedCount, reason };
+  }
+
+  function extractAggregateEntityId(aggregateId, expectedPrefixes = []) {
+    const raw = String(aggregateId || "").trim();
+    if (!raw) return "";
+    for (const prefix of expectedPrefixes) {
+      const p = `${String(prefix).toLowerCase()}:`;
+      if (raw.toLowerCase().startsWith(p)) {
+        return raw.slice(p.length).trim();
+      }
+    }
+    return raw;
+  }
+
+  function sanitizeFileEventMetadata(rawMeta = {}, updatedAtIso = null) {
+    const out = {};
+    if (rawMeta && typeof rawMeta === "object" && !Array.isArray(rawMeta)) {
+      for (const [k, v] of Object.entries(rawMeta)) {
+        const low = k.toLowerCase();
+        if (["signedurl", "downloadurl", "r2key", "storagekey", "presignedurl", "fileurl"].includes(low)) {
+          continue;
+        }
+        out[k] = v;
+      }
+    }
+    if (updatedAtIso) out.updatedAt = updatedAtIso;
+    return out;
+  }
+
+  async function applyFileProjectionTx(txClient, payload, {
+    aggregateId = null,
+    eventType = "file.upserted",
+    eventDeleted = false,
+    eventDeletedAt = null,
+    envelopeRevision = 1,
+    sourceUpdatedAt = null,
+  } = {}) {
+    if (!(await hasUnitProjectionTables(txClient))) {
+      return { action: "skipped_schema_missing", updatedCount: 0, staleCount: 0 };
+    }
+
+    const fileObj = payload?.file && typeof payload.file === "object" ? payload.file : (payload || {});
+    const remoteFileId = String(
+      fileObj.fileId
+      || fileObj.remoteFileId
+      || fileObj.id
+      || payload?.fileId
+      || payload?.remoteFileId
+      || extractAggregateEntityId(aggregateId, ["file", "learning_file"]),
+    ).trim().slice(0, 128);
+    if (!remoteFileId) {
+      throw new MolyCatalogSyncError(422, "VALIDATION_ERROR", "File event requires fileId.");
+    }
+
+    const isTombstone = Boolean(
+      eventType === "file.tombstoned"
+      || eventDeleted
+      || fileObj.deleted
+      || fileObj.isDeleted
+      || fileObj.tombstoned
+      || payload?.deleted,
+    );
+    const revision = Math.max(1, Number(fileObj.revision || payload?.revision || envelopeRevision || 1));
+    const updatedAtIso = toIso(
+      fileObj.sourceUpdatedAt || fileObj.updatedAt || payload?.sourceUpdatedAt || sourceUpdatedAt || now().toISOString(),
+    ) || now().toISOString();
+    const deletedAtIso = isTombstone
+      ? (toIso(fileObj.deletedAt || payload?.deletedAt || eventDeletedAt) || updatedAtIso)
+      : null;
+
+    const targetSpecs = [];
+    if (Array.isArray(payload?.targets)) {
+      for (const t of payload.targets) {
+        if (t && typeof t === "object") targetSpecs.push(t);
+      }
+    } else if (Array.isArray(payload?.profiles)) {
+      for (const p of payload.profiles) {
+        if (p && typeof p === "object") targetSpecs.push(p);
+      }
+    } else if (payload?.profileId || fileObj.profileId || payload?.unitId || fileObj.unitId) {
+      targetSpecs.push({
+        profileId: payload?.profileId || fileObj.profileId || null,
+        unitId: payload?.unitId || fileObj.unitId || null,
+        unitType: payload?.unitType || fileObj.unitType || null,
+        placements: payload?.placements || fileObj.placements,
+        allowViewOverride: payload?.allowViewOverride ?? fileObj.allowViewOverride,
+        allowDownloadOverride: payload?.allowDownloadOverride ?? fileObj.allowDownloadOverride,
+      });
+    }
+
+    const unitRowsMap = new Map();
+    for (const spec of targetSpecs) {
+      const pId = spec.profileId != null ? String(spec.profileId).trim() : "";
+      const uId = spec.unitId != null ? String(spec.unitId).trim() : "";
+      const uType = spec.unitType
+        ? (String(spec.unitType).toLowerCase() === "class_session" ? "class_session" : "lesson")
+        : null;
+      if (pId && uId) {
+        const uRes = await txClient.query(
+          `SELECT cu.id AS unit_projection_id, cu.profile_projection_id, cu.is_published AS unit_published
+           FROM course_unit_projections cu
+           JOIN course_profile_projections cp ON cp.id = cu.profile_projection_id
+           WHERE cp.source_system = $1
+             AND cp.remote_profile_id = $2::varchar
+             AND cu.remote_unit_id = $3::varchar
+             AND ($4::varchar IS NULL OR cu.unit_type = $4::varchar)
+           ORDER BY cu.id ASC
+           LIMIT 1`,
+          [SOURCE_SYSTEM, pId, uId, uType],
+        );
+        const unitRow = uRes.rows[0] || null;
+        if (!unitRow) {
+          if (!isTombstone) {
+            throw new MolyCatalogSyncError(
+              425,
+              "UNIT_PROJECTION_MISSING",
+              `Unit projection (${pId}/${uId}) must exist before syncing file ${remoteFileId}.`,
+              { retryable: true },
+            );
+          }
+          continue;
+        }
+        unitRowsMap.set(Number(unitRow.unit_projection_id), { unitRow, spec });
+      } else if (uId) {
+        const uRes = await txClient.query(
+          `SELECT cu.id AS unit_projection_id, cu.profile_projection_id, cu.is_published AS unit_published
+           FROM course_unit_projections cu
+           JOIN course_profile_projections cp ON cp.id = cu.profile_projection_id
+           WHERE cp.source_system = $1
+             AND cu.remote_unit_id = $2::varchar
+             AND ($3::varchar IS NULL OR cu.unit_type = $3::varchar)
+             AND cu.deleted_at IS NULL`,
+          [SOURCE_SYSTEM, uId, uType],
+        );
+        for (const unitRow of uRes.rows) {
+          unitRowsMap.set(Number(unitRow.unit_projection_id), { unitRow, spec });
+        }
+      }
+    }
+
+    if (unitRowsMap.size === 0 && targetSpecs.length === 0) {
+      const existingByFile = await txClient.query(
+        `SELECT cf.unit_projection_id, cf.profile_projection_id, cu.is_published AS unit_published
+         FROM course_file_projections cf
+         JOIN course_unit_projections cu ON cu.id = cf.unit_projection_id
+         WHERE cf.remote_file_id = $1::varchar`,
+        [remoteFileId],
+      );
+      for (const row of existingByFile.rows) {
+        unitRowsMap.set(Number(row.unit_projection_id), { unitRow: row, spec: {} });
+      }
+    }
+
+    if (unitRowsMap.size === 0) {
+      return {
+        action: isTombstone ? "tombstoned" : "skipped",
+        remoteFileId,
+        updatedCount: 0,
+        staleCount: 0,
+        reason: "target_unit_or_file_not_found",
+      };
+    }
+
+    const hasDay5Cols = await hasDay5FileColumns(txClient);
+    let updatedCount = 0;
+    let staleCount = 0;
+
+    for (const { unitRow, spec } of unitRowsMap.values()) {
+      const unitProjId = Number(unitRow.unit_projection_id);
+      const profProjId = Number(unitRow.profile_projection_id);
+
+      const existingRes = await txClient.query(
+        `SELECT * FROM course_file_projections
+         WHERE unit_projection_id = $1::bigint AND remote_file_id = $2::varchar
+         FOR UPDATE`,
+        [unitProjId, remoteFileId],
+      );
+      const existing = existingRes.rows[0] || null;
+
+      if (
+        existing
+        && isStaleIncoming({
+          incomingRevision: revision,
+          incomingUpdatedAt: updatedAtIso,
+          storedRevision: existing.last_revision,
+          storedUpdatedAt: existing.source_updated_at,
+        })
+      ) {
+        staleCount += 1;
+        continue;
+      }
+
+      if (isTombstone) {
+        if (!existing) {
+          continue;
+        }
+        await txClient.query(
+          `UPDATE course_file_projections
+           SET deleted_at = COALESCE(deleted_at, $3::timestamptz),
+               is_published = FALSE,
+               last_revision = $4::bigint,
+               source_updated_at = $5::timestamptz,
+               updated_at = NOW()
+           WHERE id = $1::bigint
+             AND remote_file_id = $2::varchar`,
+          [Number(existing.id), remoteFileId, deletedAtIso, revision, updatedAtIso],
+        );
+        updatedCount += 1;
+      } else {
+        const placementsRaw = Array.isArray(spec?.placements)
+          ? spec.placements
+          : (Array.isArray(fileObj.placements)
+            ? fileObj.placements
+            : (Array.isArray(payload?.placements)
+              ? payload.placements
+              : (existing?.placements_json || [])));
+        const allowViewVal = spec?.allowViewOverride !== undefined
+          ? (spec.allowViewOverride != null ? Boolean(spec.allowViewOverride) : null)
+          : (fileObj.allowViewOverride !== undefined
+            ? (fileObj.allowViewOverride != null ? Boolean(fileObj.allowViewOverride) : null)
+            : (existing?.allow_view_override ?? null));
+        const allowDownloadVal = spec?.allowDownloadOverride !== undefined
+          ? (spec.allowDownloadOverride != null ? Boolean(spec.allowDownloadOverride) : null)
+          : (fileObj.allowDownloadOverride !== undefined
+            ? (fileObj.allowDownloadOverride != null ? Boolean(fileObj.allowDownloadOverride) : null)
+            : (existing?.allow_download_override ?? null));
+        const cleanMeta = sanitizeFileEventMetadata(
+          spec?.metadata || fileObj.metadata || payload?.metadata || {},
+          updatedAtIso,
+        );
+        const isPub = fileObj.isPublished !== undefined
+          ? (Boolean(fileObj.isPublished) && Boolean(unitRow.unit_published))
+          : (existing ? existing.is_published : Boolean(unitRow.unit_published));
+
+        const commonParams = [
+          profProjId,
+          unitProjId,
+          remoteFileId,
+          String(spec?.title || fileObj.title || fileObj.originalFilename || existing?.title || `Tài liệu #${remoteFileId}`).slice(0, 255),
+          (spec?.originalFilename || fileObj.originalFilename || existing?.original_filename || null)
+            ? String(spec?.originalFilename || fileObj.originalFilename || existing?.original_filename).slice(0, 255)
+            : null,
+          (spec?.mimeType || fileObj.mimeType || existing?.mime_type || null)
+            ? String(spec?.mimeType || fileObj.mimeType || existing?.mime_type).slice(0, 150)
+            : null,
+          String(spec?.fileKind || fileObj.fileKind || existing?.file_kind || "document").slice(0, 50),
+          (spec?.sizeBytes ?? fileObj.sizeBytes ?? existing?.size_bytes) != null
+            ? Math.max(0, Number.parseInt(spec?.sizeBytes ?? fileObj.sizeBytes ?? existing?.size_bytes, 10) || 0)
+            : null,
+          Boolean(spec?.isSlide ?? fileObj.isSlide ?? existing?.is_slide ?? false),
+          allowDownloadVal,
+          Number.parseInt(spec?.sortOrder ?? fileObj.sortOrder ?? existing?.sort_order ?? 0, 10) || 0,
+          isPub,
+          revision,
+          updatedAtIso,
+          null,
+          JSON.stringify(cleanMeta),
+        ];
+
+        if (hasDay5Cols) {
+          await txClient.query(
+            `INSERT INTO course_file_projections (
+               profile_projection_id, unit_projection_id, remote_file_id, title, original_filename,
+               mime_type, file_kind, size_bytes, is_slide, allow_download_override, sort_order,
+               is_published, last_revision, source_updated_at, deleted_at, metadata,
+               placements_json, allow_view_override
+             ) VALUES (
+               $1::bigint, $2::bigint, $3::varchar, $4::varchar, $5::varchar,
+               $6::varchar, $7::varchar, $8::bigint, $9::boolean, $10::boolean, $11::integer,
+               $12::boolean, $13::bigint, $14::timestamptz, $15::timestamptz, $16::jsonb,
+               $17::jsonb, $18::boolean
+             )
+             ON CONFLICT (unit_projection_id, remote_file_id)
+             DO UPDATE SET
+               title = EXCLUDED.title,
+               original_filename = EXCLUDED.original_filename,
+               mime_type = EXCLUDED.mime_type,
+               file_kind = EXCLUDED.file_kind,
+               size_bytes = EXCLUDED.size_bytes,
+               is_slide = EXCLUDED.is_slide,
+               allow_download_override = EXCLUDED.allow_download_override,
+               sort_order = EXCLUDED.sort_order,
+               is_published = EXCLUDED.is_published,
+               last_revision = EXCLUDED.last_revision,
+               source_updated_at = EXCLUDED.source_updated_at,
+               deleted_at = NULL,
+               metadata = COALESCE(course_file_projections.metadata, '{}'::jsonb) || EXCLUDED.metadata,
+               placements_json = EXCLUDED.placements_json,
+               allow_view_override = EXCLUDED.allow_view_override,
+               updated_at = NOW()`,
+            [...commonParams, JSON.stringify(placementsRaw), allowViewVal],
+          );
+        } else {
+          await txClient.query(
+            `INSERT INTO course_file_projections (
+               profile_projection_id, unit_projection_id, remote_file_id, title, original_filename,
+               mime_type, file_kind, size_bytes, is_slide, allow_download_override, sort_order,
+               is_published, last_revision, source_updated_at, deleted_at, metadata
+             ) VALUES (
+               $1::bigint, $2::bigint, $3::varchar, $4::varchar, $5::varchar,
+               $6::varchar, $7::varchar, $8::bigint, $9::boolean, $10::boolean, $11::integer,
+               $12::boolean, $13::bigint, $14::timestamptz, $15::timestamptz, $16::jsonb
+             )
+             ON CONFLICT (unit_projection_id, remote_file_id)
+             DO UPDATE SET
+               title = EXCLUDED.title,
+               original_filename = EXCLUDED.original_filename,
+               mime_type = EXCLUDED.mime_type,
+               file_kind = EXCLUDED.file_kind,
+               size_bytes = EXCLUDED.size_bytes,
+               is_slide = EXCLUDED.is_slide,
+               allow_download_override = EXCLUDED.allow_download_override,
+               sort_order = EXCLUDED.sort_order,
+               is_published = EXCLUDED.is_published,
+               last_revision = EXCLUDED.last_revision,
+               source_updated_at = EXCLUDED.source_updated_at,
+               deleted_at = NULL,
+               metadata = COALESCE(course_file_projections.metadata, '{}'::jsonb) || EXCLUDED.metadata,
+               updated_at = NOW()`,
+            commonParams,
+          );
+        }
+        updatedCount += 1;
+      }
+
+      await txClient.query(
+        `UPDATE course_unit_projections
+         SET file_count = (
+           SELECT COUNT(*)::int
+           FROM course_file_projections
+           WHERE unit_projection_id = $1::bigint
+             AND deleted_at IS NULL
+             AND is_published = TRUE
+         )
+         WHERE id = $1::bigint`,
+        [unitProjId],
+      );
+    }
+
+    if (staleCount > 0 && updatedCount === 0) {
+      return { action: "stale", reason: "STALE_FILE_EVENT", remoteFileId, updatedCount, staleCount };
+    }
+    return {
+      action: isTombstone ? "tombstoned" : "updated",
+      remoteFileId,
+      updatedCount,
+      staleCount,
+    };
+  }
+
+  async function resolveProfileForInboxEventTx(txClient, payload, label) {
+    const profileId = String(payload?.profileId || payload?.remoteProfileId || "").trim();
+    if (!profileId) {
+      throw new MolyCatalogSyncError(422, "VALIDATION_ERROR", `profileId is required in ${label} event.`);
+    }
+    const profRes = await txClient.query(
+      `SELECT id, local_course_id, remote_profile_id
+       FROM course_profile_projections
+       WHERE source_system = $1 AND remote_profile_id = $2::varchar
+       LIMIT 1`,
+      [SOURCE_SYSTEM, profileId],
+    );
+    const prof = profRes.rows[0] || null;
+    if (!prof || !prof.local_course_id) {
+      throw new MolyCatalogSyncError(
+        425,
+        "PROFILE_PROJECTION_MISSING",
+        `Profile projection ${profileId} does not exist locally yet for ${label}.`,
+        { retryable: true },
+      );
+    }
+    return prof;
+  }
+
+  async function applyAssessmentProjectionTx(txClient, payload, {
+    aggregateId = null,
+    eventType = "assessment.attempt.updated",
+    eventDeleted = false,
+    eventDeletedAt = null,
+    envelopeRevision = 1,
+    sourceUpdatedAt = null,
+  } = {}) {
+    const reg = await txClient.query(`SELECT to_regclass('course_assessment_projections') AS tbl`).catch(() => ({ rows: [] }));
+    if (!reg.rows[0]?.tbl) {
+      return { action: "skipped_schema_missing" };
+    }
+
+    const inner = payload?.assessment && typeof payload.assessment === "object" ? payload.assessment : (payload || {});
+    const prof = await resolveProfileForInboxEventTx(txClient, { ...payload, ...inner }, "assessment");
+    const unitId = String(inner.unitId || inner.remoteUnitId || payload?.unitId || "").trim();
+    const itemTypeRaw = String(
+      inner.itemType
+      || payload?.itemType
+      || (inner.quizId || payload?.quizId ? "quiz" : inner.assignmentId || payload?.assignmentId ? "assignment" : ""),
+    ).trim().toLowerCase();
+    const itemType = itemTypeRaw === "assignment" ? "assignment" : itemTypeRaw === "quiz" ? "quiz" : "";
+    const remoteItemId = String(
+      inner.itemId
+      || inner.remoteItemId
+      || inner.quizId
+      || inner.assignmentId
+      || payload?.itemId
+      || payload?.quizId
+      || payload?.assignmentId
+      || extractAggregateEntityId(aggregateId, ["assessment", "quiz", "assignment"]),
+    ).trim();
+
+    if (!unitId || !itemType || !remoteItemId) {
+      throw new MolyCatalogSyncError(422, "VALIDATION_ERROR", "Assessment event requires unitId, itemType, and itemId.");
+    }
+
+    const userIds = await resolveMolyUserIdsFromPayloadTx(txClient, { ...payload, ...inner });
+    if (userIds.length === 0) {
+      return { action: "skipped", reason: "user_identity_not_found" };
+    }
+
+    const revision = Math.max(1, Number(inner.revision || payload?.revision || envelopeRevision || 1));
+    const updatedAtIso = toIso(
+      inner.sourceUpdatedAt || inner.updatedAt || payload?.sourceUpdatedAt || sourceUpdatedAt || now().toISOString(),
+    ) || now().toISOString();
+    const isTombstone = Boolean(eventDeleted || inner.deleted || payload?.deleted);
+    const deletedAtIso = isTombstone
+      ? (toIso(inner.deletedAt || payload?.deletedAt || eventDeletedAt) || updatedAtIso)
+      : null;
+
+    const rawMeta = {
+      ...(inner.metadata && typeof inner.metadata === "object" ? inner.metadata : {}),
+      ...(inner.summary && typeof inner.summary === "object" ? { summary: inner.summary } : {}),
+      feedback: inner.feedback ?? payload?.feedback,
+      teacherFeedback: inner.teacherFeedback ?? payload?.teacherFeedback,
+      rubric: inner.rubric ?? payload?.rubric,
+      rubricScores: inner.rubricScores ?? payload?.rubricScores,
+      rubricBreakdown: inner.rubricBreakdown ?? payload?.rubricBreakdown,
+      passed: inner.passed ?? payload?.passed,
+      answeredCount: inner.answeredCount ?? payload?.answeredCount,
+      totalQuestions: inner.totalQuestions ?? payload?.totalQuestions,
+      correctCount: inner.correctCount ?? payload?.correctCount,
+      submittedAt: inner.submittedAt ?? payload?.submittedAt,
+      startedAt: inner.startedAt ?? payload?.startedAt,
+      solutionPolicy: inner.solutionPolicy ?? payload?.solutionPolicy,
+      embargoReason: inner.embargoReason ?? payload?.embargoReason,
+      allowFeedback: inner.allowFeedback ?? payload?.allowFeedback,
+    };
+
+    let updatedCount = 0;
+    let staleCount = 0;
+    for (const userId of userIds) {
+      const res = await upsertAssessmentProjectionTx(txClient, {
+        userId,
+        profileProjectionId: prof.id,
+        unitType: inner.unitType || payload?.unitType || "lesson",
+        remoteUnitId: unitId,
+        itemType,
+        remoteItemId,
+        remoteAttemptOrSubId: inner.attemptId ?? inner.submissionId ?? inner.remoteAttemptOrSubId ?? payload?.attemptId ?? payload?.submissionId ?? null,
+        status: inner.status || payload?.status || (eventType === "assessment.submission.graded" ? "graded" : "in_progress"),
+        attemptCount: inner.attemptCount ?? payload?.attemptCount ?? 0,
+        maxAttempts: inner.maxAttempts ?? payload?.maxAttempts ?? null,
+        score: inner.score ?? payload?.score ?? null,
+        maxScore: inner.maxScore ?? payload?.maxScore ?? null,
+        canViewSolution: inner.canViewSolution ?? inner.can_view_solution ?? payload?.canViewSolution ?? false,
+        gradedAt: inner.gradedAt || inner.graded_at || payload?.gradedAt || (eventType === "assessment.submission.graded" ? updatedAtIso : null),
+        deletedAt: deletedAtIso,
+        metadata: rawMeta,
+        syncRevision: revision,
+        sourceUpdatedAt: updatedAtIso,
+        now,
+      });
+      if (res.action === "stale") staleCount += 1;
+      else if (res.action !== "skipped") updatedCount += 1;
+
+      const progPayload = inner.progress && typeof inner.progress === "object" ? inner.progress : null;
+      if (
+        res.action !== "stale"
+        && (progPayload || inner.isQuizCompleted != null || inner.isUnitCompleted != null || inner.unlockedNextUnitId != null)
+      ) {
+        await upsertLearningProgressProjectionTx(txClient, {
+          userId,
+          profileProjectionId: prof.id,
+          localCourseId: prof.local_course_id,
+          unitType: inner.unitType || payload?.unitType || "lesson",
+          remoteUnitId: unitId,
+          watchedSeconds: progPayload?.watchedSeconds ?? 0,
+          lastPositionSeconds: progPayload?.lastPositionSeconds ?? 0,
+          completionPct: progPayload?.completionPercent ?? progPayload?.completionPct ?? (inner.isUnitCompleted ? 100 : 0),
+          isVideoCompleted: Boolean(progPayload?.isVideoCompleted),
+          isQuizCompleted: Boolean(progPayload?.isQuizCompleted ?? inner.isQuizCompleted),
+          isUnitCompleted: Boolean(progPayload?.isUnitCompleted ?? inner.isUnitCompleted),
+          isUnlocked: progPayload?.isUnlocked !== false,
+          courseCompletionPct: progPayload?.courseCompletionPct ?? inner.courseCompletionPct ?? null,
+          lastUnitId: progPayload?.lastUnitId || unitId,
+          syncRevision: revision,
+          sourceUpdatedAt: updatedAtIso,
+          unlockedNextUnitId: progPayload?.unlockedNextUnitId || inner.unlockedNextUnitId || null,
+          nextUnitType: progPayload?.nextUnitType || inner.nextUnitType || null,
+          now,
+        });
+      }
+    }
+
+    if (staleCount > 0 && updatedCount === 0) {
+      return { action: "stale", reason: "STALE_ASSESSMENT_EVENT", itemType, remoteItemId };
+    }
+    return { action: "updated", itemType, remoteItemId, updatedCount, staleCount };
+  }
+
+  async function applyNoteProjectionTx(txClient, payload, {
+    aggregateId = null,
+    eventType = "learning.note.upserted",
+    eventDeleted = false,
+    eventDeletedAt = null,
+    envelopeRevision = 1,
+    sourceUpdatedAt = null,
+  } = {}) {
+    const reg = await txClient.query(`SELECT to_regclass('course_note_projections') AS tbl`).catch(() => ({ rows: [] }));
+    if (!reg.rows[0]?.tbl) {
+      return { action: "skipped_schema_missing" };
+    }
+
+    const noteObj = payload?.note && typeof payload.note === "object" ? payload.note : (payload || {});
+    const prof = await resolveProfileForInboxEventTx(txClient, { ...payload, ...noteObj }, "note");
+    const remoteNoteId = String(
+      noteObj.noteId
+      || noteObj.remoteNoteId
+      || noteObj.id
+      || payload?.noteId
+      || extractAggregateEntityId(aggregateId, ["note", "learning_note"]),
+    ).trim();
+    if (!remoteNoteId) {
+      throw new MolyCatalogSyncError(422, "VALIDATION_ERROR", "Note event requires noteId.");
+    }
+
+    const isTombstone = Boolean(eventType === "learning.note.tombstoned" || eventDeleted || noteObj.deleted || payload?.deleted);
+    const revision = Math.max(1, Number(noteObj.revision || payload?.revision || envelopeRevision || 1));
+    const updatedAtIso = toIso(
+      noteObj.sourceUpdatedAt || noteObj.updatedAt || payload?.sourceUpdatedAt || sourceUpdatedAt || now().toISOString(),
+    ) || now().toISOString();
+    const deletedAtIso = isTombstone
+      ? (toIso(noteObj.deletedAt || payload?.deletedAt || eventDeletedAt) || updatedAtIso)
+      : null;
+
+    const userIds = await resolveMolyUserIdsFromPayloadTx(txClient, { ...payload, ...noteObj });
+    const targetUserId = userIds[0] || null;
+    if (!targetUserId && !isTombstone) {
+      return { action: "skipped", reason: "user_identity_not_found" };
+    }
+
+    const res = await upsertNoteProjectionTx(txClient, {
+      userId: targetUserId,
+      profileProjectionId: prof.id,
+      unitType: noteObj.unitType || payload?.unitType || "lesson",
+      remoteUnitId: noteObj.unitId || noteObj.remoteUnitId || payload?.unitId || "",
+      remoteNoteId,
+      timestampSeconds: noteObj.timestampSeconds ?? payload?.timestampSeconds ?? 0,
+      content: noteObj.content ?? payload?.content ?? "",
+      deletedAt: deletedAtIso,
+      syncRevision: revision,
+      sourceUpdatedAt: updatedAtIso,
+      now,
+    });
+    return res;
+  }
+
+  async function applyBookmarkProjectionTx(txClient, payload, {
+    aggregateId = null,
+    eventType = "learning.bookmark.upserted",
+    eventDeleted = false,
+    eventDeletedAt = null,
+    envelopeRevision = 1,
+    sourceUpdatedAt = null,
+  } = {}) {
+    const bmObj = payload?.bookmark && typeof payload.bookmark === "object" ? payload.bookmark : (payload || {});
+    const prof = await resolveProfileForInboxEventTx(txClient, { ...payload, ...bmObj }, "bookmark");
+    const remoteBookmarkId = String(
+      bmObj.bookmarkId
+      || bmObj.remoteBookmarkId
+      || bmObj.id
+      || payload?.bookmarkId
+      || extractAggregateEntityId(aggregateId, ["bookmark", "learning_bookmark"]),
+    ).trim();
+    if (!remoteBookmarkId) {
+      throw new MolyCatalogSyncError(422, "VALIDATION_ERROR", "Bookmark event requires bookmarkId.");
+    }
+
+    const isTombstone = Boolean(eventType === "learning.bookmark.tombstoned" || eventDeleted || bmObj.deleted || payload?.deleted);
+    const revision = Math.max(1, Number(bmObj.revision || payload?.revision || envelopeRevision || 1));
+    const updatedAtIso = toIso(
+      bmObj.sourceUpdatedAt || bmObj.updatedAt || payload?.sourceUpdatedAt || sourceUpdatedAt || now().toISOString(),
+    ) || now().toISOString();
+    const deletedAtIso = isTombstone
+      ? (toIso(bmObj.deletedAt || payload?.deletedAt || eventDeletedAt) || updatedAtIso)
+      : null;
+
+    const userIds = await resolveMolyUserIdsFromPayloadTx(txClient, { ...payload, ...bmObj });
+    const targetUserId = userIds[0] || null;
+    if (!targetUserId && !isTombstone) {
+      return { action: "skipped", reason: "user_identity_not_found" };
+    }
+
+    return upsertBookmarkProjectionTx(txClient, {
+      userId: targetUserId,
+      profileProjectionId: prof.id,
+      unitType: bmObj.unitType || payload?.unitType || "lesson",
+      remoteUnitId: bmObj.unitId || bmObj.remoteUnitId || payload?.unitId || "",
+      remoteBookmarkId,
+      videoAssetId: bmObj.videoAssetId ?? payload?.videoAssetId ?? null,
+      timestampSeconds: bmObj.timestampSeconds ?? payload?.timestampSeconds ?? 0,
+      label: bmObj.label ?? payload?.label ?? "",
+      deletedAt: deletedAtIso,
+      syncRevision: revision,
+      sourceUpdatedAt: updatedAtIso,
+      now,
+    });
+  }
+
+  async function applyQaThreadProjectionTx(txClient, payload, {
+    aggregateId = null,
+    eventType = "qa.thread.updated",
+    eventDeleted = false,
+    eventDeletedAt = null,
+    envelopeRevision = 1,
+    sourceUpdatedAt = null,
+  } = {}) {
+    const threadObj = payload?.thread && typeof payload.thread === "object" ? payload.thread : (payload || {});
+    const prof = await resolveProfileForInboxEventTx(txClient, { ...payload, ...threadObj }, "qa_thread");
+    const remoteThreadId = String(
+      threadObj.threadId
+      || threadObj.remoteThreadId
+      || threadObj.id
+      || payload?.threadId
+      || extractAggregateEntityId(aggregateId, ["qa_thread", "thread"]),
+    ).trim();
+    if (!remoteThreadId) {
+      throw new MolyCatalogSyncError(422, "VALIDATION_ERROR", "Q&A thread event requires threadId.");
+    }
+
+    const isTombstone = Boolean(eventType === "qa.thread.tombstoned" || eventDeleted || threadObj.deleted || payload?.deleted);
+    const revision = Math.max(1, Number(threadObj.revision || payload?.revision || envelopeRevision || 1));
+    const updatedAtIso = toIso(
+      threadObj.sourceUpdatedAt || threadObj.updatedAt || payload?.sourceUpdatedAt || sourceUpdatedAt || now().toISOString(),
+    ) || now().toISOString();
+    const deletedAtIso = isTombstone
+      ? (toIso(threadObj.deletedAt || payload?.deletedAt || eventDeletedAt) || updatedAtIso)
+      : null;
+
+    const resolvedAuthorExternalId = threadObj.authorExternalUserId
+      || payload?.authorExternalUserId
+      || (Array.isArray(payload?.externalUserIds) ? payload.externalUserIds[0] : null)
+      || payload?.externalUserId
+      || null;
+    let authorUserId = null;
+    if (resolvedAuthorExternalId || threadObj.userId || payload?.authorId) {
+      const resolvedAuthor = await resolveMolyUserIdsFromPayloadTx(txClient, {
+        externalUserId: resolvedAuthorExternalId,
+        externalUserIds: payload?.externalUserIds,
+        userId: threadObj.userId || payload?.authorId || null,
+      });
+      authorUserId = resolvedAuthor[0] || null;
+    }
+
+    return upsertQaThreadProjectionTx(txClient, {
+      profileProjectionId: prof.id,
+      unitType: threadObj.unitType || payload?.unitType || "lesson",
+      remoteUnitId: threadObj.unitId || threadObj.remoteUnitId || payload?.unitId || "",
+      remoteThreadId,
+      authorExternalUserId: resolvedAuthorExternalId,
+      authorUserId,
+      authorName: threadObj.authorName || payload?.authorName || null,
+      authorRole: threadObj.authorRole || payload?.authorRole || null,
+      title: threadObj.title || payload?.title || "",
+      status: threadObj.status || payload?.status || "open",
+      isPinned: threadObj.isPinned ?? payload?.isPinned ?? false,
+      messageCount: threadObj.messageCount ?? payload?.messageCount ?? (Array.isArray(threadObj.messages) ? threadObj.messages.length : undefined),
+      messages: Array.isArray(threadObj.messages)
+        ? threadObj.messages
+        : (Array.isArray(payload?.messages) ? payload.messages : undefined),
+      unread: threadObj.unread ?? payload?.unread ?? false,
+      lastMessageAt: threadObj.lastMessageAt || payload?.lastMessageAt || null,
+      deletedAt: deletedAtIso,
+      syncRevision: revision,
+      sourceUpdatedAt: updatedAtIso,
+      now,
+    });
+  }
+
   async function processInboxRow(inboxRow, { workerId = "inline" } = {}) {
     const envelope = typeof inboxRow.payload === "string"
       ? JSON.parse(inboxRow.payload)
       : inboxRow.payload;
     const aggType = String(inboxRow.aggregate_type || envelope.aggregateType || "").toLowerCase();
+    const eventType = String(inboxRow.event_type || envelope.eventType || "").toLowerCase();
     const innerPayload = envelope.payload || envelope;
 
     try {
@@ -1581,6 +3270,92 @@ function createMolyCourseCatalogSyncService({
         } else if (aggType === "unit_content") {
           applied = await applyUnitContentRecordTx(txClient, innerPayload, {
             correlationId: inboxRow.correlation_id,
+            envelopeRevision: inboxRow.aggregate_revision,
+            sourceUpdatedAt: inboxRow.source_updated_at,
+          });
+        } else if (
+          aggType === "learning_progress"
+          || eventType === "learning.progress.updated"
+          || eventType === "learning.unit.completed"
+        ) {
+          applied = await applyProgressProjectionTx(txClient, innerPayload, {
+            envelopeRevision: inboxRow.aggregate_revision,
+            sourceUpdatedAt: inboxRow.source_updated_at,
+          });
+        } else if (aggType === "device_binding" || eventType === "device.binding.revoked") {
+          applied = await applyDeviceBindingRevokedTx(txClient, innerPayload, {
+            sourceUpdatedAt: inboxRow.source_updated_at,
+          });
+        } else if (
+          aggType === "file"
+          || aggType === "learning_file"
+          || eventType === "file.upserted"
+          || eventType === "file.tombstoned"
+        ) {
+          applied = await applyFileProjectionTx(txClient, innerPayload, {
+            aggregateId: inboxRow.aggregate_id,
+            eventType,
+            eventDeleted: inboxRow.deleted,
+            eventDeletedAt: inboxRow.deleted_at,
+            envelopeRevision: inboxRow.aggregate_revision,
+            sourceUpdatedAt: inboxRow.source_updated_at,
+          });
+        } else if (
+          aggType === "assessment"
+          || aggType === "quiz_attempt"
+          || aggType === "assignment_submission"
+          || eventType === "assessment.attempt.updated"
+          || eventType === "assessment.submission.graded"
+        ) {
+          applied = await applyAssessmentProjectionTx(txClient, innerPayload, {
+            aggregateId: inboxRow.aggregate_id,
+            eventType,
+            eventDeleted: inboxRow.deleted,
+            eventDeletedAt: inboxRow.deleted_at,
+            envelopeRevision: inboxRow.aggregate_revision,
+            sourceUpdatedAt: inboxRow.source_updated_at,
+          });
+        } else if (
+          aggType === "note"
+          || aggType === "learning_note"
+          || aggType === "learning_unit_note"
+          || eventType === "learning.note.upserted"
+          || eventType === "learning.note.tombstoned"
+        ) {
+          applied = await applyNoteProjectionTx(txClient, innerPayload, {
+            aggregateId: inboxRow.aggregate_id,
+            eventType,
+            eventDeleted: inboxRow.deleted,
+            eventDeletedAt: inboxRow.deleted_at,
+            envelopeRevision: inboxRow.aggregate_revision,
+            sourceUpdatedAt: inboxRow.source_updated_at,
+          });
+        } else if (
+          aggType === "bookmark"
+          || aggType === "learning_bookmark"
+          || aggType === "learning_unit_bookmark"
+          || eventType === "learning.bookmark.upserted"
+          || eventType === "learning.bookmark.tombstoned"
+        ) {
+          applied = await applyBookmarkProjectionTx(txClient, innerPayload, {
+            aggregateId: inboxRow.aggregate_id,
+            eventType,
+            eventDeleted: inboxRow.deleted,
+            eventDeletedAt: inboxRow.deleted_at,
+            envelopeRevision: inboxRow.aggregate_revision,
+            sourceUpdatedAt: inboxRow.source_updated_at,
+          });
+        } else if (
+          aggType === "qa_thread"
+          || aggType === "learning_unit_qa_thread"
+          || eventType === "qa.thread.updated"
+          || eventType === "qa.thread.tombstoned"
+        ) {
+          applied = await applyQaThreadProjectionTx(txClient, innerPayload, {
+            aggregateId: inboxRow.aggregate_id,
+            eventType,
+            eventDeleted: inboxRow.deleted,
+            eventDeletedAt: inboxRow.deleted_at,
             envelopeRevision: inboxRow.aggregate_revision,
             sourceUpdatedAt: inboxRow.source_updated_at,
           });
@@ -1666,8 +3441,9 @@ function createMolyCourseCatalogSyncService({
     if (!(await hasCatalogSyncTables(db))) {
       throw new MolyCatalogSyncError(503, "CATALOG_SYNC_SCHEMA_MISSING", "Catalog sync tables are not migrated.");
     }
-    if (isCatalogSyncKillSwitchActive(env)) {
-      throw new MolyCatalogSyncError(503, "SYNC_KILL_SWITCH_ACTIVE", "Course catalog sync is disabled by kill switch.", { retryable: true });
+    if (isContentSyncKillSwitchActive(env)) {
+      const code = isIntegrationKillSwitchActive(env) ? "INTEGRATION_KILL_SWITCH_ACTIVE" : "SYNC_KILL_SWITCH_ACTIVE";
+      throw new MolyCatalogSyncError(503, code, "Course catalog sync is disabled by kill switch.", { retryable: true });
     }
 
     const rawList = Array.isArray(rawInput?.events)
@@ -1792,7 +3568,7 @@ function createMolyCourseCatalogSyncService({
     limit = 50,
     leaseSeconds = 60,
   } = {}) {
-    if (isCatalogSyncKillSwitchActive(env)) {
+    if (isContentSyncKillSwitchActive(env)) {
       return { skipped: true, reason: "kill_switch", claimed: 0, results: [] };
     }
     if (!(await hasCatalogSyncTables(db))) {
@@ -1840,7 +3616,7 @@ function createMolyCourseCatalogSyncService({
 
     const results = [];
     for (const row of claimed) {
-      if (isCatalogSyncKillSwitchActive(env)) break;
+      if (isContentSyncKillSwitchActive(env)) break;
       try {
         results.push(await processInboxRow(row, { workerId }));
       } catch (err) {
@@ -1886,7 +3662,7 @@ function createMolyCourseCatalogSyncService({
       [streamName, SOURCE_SYSTEM],
     );
 
-    if (isCatalogSyncKillSwitchActive(env)) {
+    if (isContentSyncKillSwitchActive(env)) {
       await db.query(
         `UPDATE course_sync_checkpoints
          SET sync_status = 'paused_kill_switch', updated_at = NOW()
@@ -1928,7 +3704,7 @@ function createMolyCourseCatalogSyncService({
 
     try {
       for (let pageIndex = 0; pageIndex < maxPages; pageIndex += 1) {
-        if (isCatalogSyncKillSwitchActive(env)) {
+        if (isContentSyncKillSwitchActive(env)) {
           await db.query(
             `UPDATE course_sync_checkpoints
              SET sync_status = 'paused_kill_switch'
@@ -2112,7 +3888,7 @@ function createMolyCourseCatalogSyncService({
       throw new MolyCatalogSyncError(503, "COURSE_CLIENT_UNAVAILABLE", "CSCA-Course curriculum client is unavailable.");
     }
     const corr = resolveCorrelationId(correlationId);
-    if (isCatalogSyncKillSwitchActive(env)) {
+    if (isContentSyncKillSwitchActive(env)) {
       return { paused: true, reason: "kill_switch", coursesProcessed: 0, unitsApplied: 0, tombstonedCount: 0 };
     }
 
@@ -2262,6 +4038,117 @@ function createMolyCourseCatalogSyncService({
     };
   }
 
+  /**
+   * Resets and optionally dispatches a pending/failed/dead_letter inbox item.
+   * Honors global, content-sync, and mutations/repair kill switches.
+   */
+  async function retryInboxItem(
+    inboxIdValue,
+    {
+      actorId = null,
+      correlationId = null,
+      dispatchNow = true,
+      force = false,
+      workerId = "manual-inbox-retry",
+    } = {},
+  ) {
+    if (isIntegrationKillSwitchActive(env)) {
+      throw new MolyCatalogSyncError(
+        503,
+        "INTEGRATION_KILL_SWITCH_ACTIVE",
+        "Course integration sync is disabled by emergency kill switch.",
+        { retryable: true },
+      );
+    }
+    if (isContentSyncKillSwitchActive(env)) {
+      throw new MolyCatalogSyncError(
+        503,
+        "SYNC_KILL_SWITCH_ACTIVE",
+        "Course catalog sync is disabled by content sync kill switch.",
+        { retryable: true },
+      );
+    }
+    if (isMutationsRepairKillSwitchActive(env)) {
+      throw new MolyCatalogSyncError(
+        503,
+        "MUTATIONS_REPAIR_KILL_SWITCH_ACTIVE",
+        "Catalog inbox retry mutations are paused by repair kill switch.",
+        { retryable: true },
+      );
+    }
+    if (!(await hasCatalogSyncTables(db))) {
+      throw new MolyCatalogSyncError(503, "CATALOG_SYNC_SCHEMA_MISSING", "Catalog sync tables are not migrated.");
+    }
+
+    const inboxId = Number(inboxIdValue);
+    if (!Number.isSafeInteger(inboxId) || inboxId <= 0) {
+      throw new MolyCatalogSyncError(422, "VALIDATION_ERROR", "Valid inboxId is required.");
+    }
+
+    const corr = resolveCorrelationId(correlationId);
+    const resetRes = await withTx(async (txClient) => {
+      const existing = (await txClient.query(
+        "SELECT * FROM moly_course_sync_inbox WHERE id = $1 FOR UPDATE",
+        [inboxId],
+      )).rows[0] || null;
+      if (!existing) {
+        throw new MolyCatalogSyncError(404, "NOT_FOUND", `Catalog inbox item ${inboxId} not found.`);
+      }
+      if (["processed", "stale"].includes(existing.status)) {
+        return { retried: false, alreadyProcessed: true, item: existing };
+      }
+      if (existing.status === "ignored" && !force) {
+        throw new MolyCatalogSyncError(409, "INVALID_STATUS", "Ignored catalog inbox items cannot be automatically retried.");
+      }
+
+      const retryIso = now().toISOString();
+      const updated = (await txClient.query(
+        `UPDATE moly_course_sync_inbox
+         SET status = 'pending',
+             next_retry_at = $2::timestamptz,
+             locked_until = NULL,
+             locked_by = NULL,
+             max_attempts = GREATEST(max_attempts, attempt_count + 3),
+             last_error_code = NULL,
+             last_error_message = NULL,
+             correlation_id = COALESCE($3, correlation_id),
+             metadata = COALESCE(metadata, '{}'::jsonb) || $4::jsonb
+         WHERE id = $1
+         RETURNING *`,
+        [
+          inboxId,
+          retryIso,
+          corr,
+          JSON.stringify({
+            manual_retry_by: actorId ?? null,
+            manual_retry_at: retryIso,
+            forced: Boolean(force),
+          }),
+        ],
+      )).rows[0];
+      return { retried: true, alreadyProcessed: false, item: updated };
+    });
+
+    if (!resetRes.retried || !dispatchNow) {
+      return { ...resetRes, outcome: null };
+    }
+
+    const outcome = await processInboxRow(resetRes.item, { workerId });
+    const latest = (await db.query("SELECT * FROM moly_course_sync_inbox WHERE id = $1", [inboxId])).rows[0] || resetRes.item;
+    recordMetric("moly.catalog_inbox.manual_retry");
+    integrationLog.info("catalog_inbox_manual_retry", {
+      inboxId,
+      actorId: actorId ?? null,
+      outcomeStatus: outcome?.inboxStatus || latest?.status || null,
+    }, corr);
+    return {
+      retried: true,
+      alreadyProcessed: false,
+      item: latest,
+      outcome,
+    };
+  }
+
   return {
     MolyCatalogSyncError,
     normalizeSubjectCode,
@@ -2273,6 +4160,7 @@ function createMolyCourseCatalogSyncService({
     processAvailableInboxJobs,
     runCatalogBackfill,
     runCurriculumBackfill,
+    retryInboxItem,
   };
 }
 
@@ -2283,5 +4171,10 @@ module.exports = {
   normalizeSubjectCode,
   normalizeCourseLevel,
   validateEnvelope,
+  upsertLearningProgressProjectionTx,
+  upsertAssessmentProjectionTx,
+  upsertNoteProjectionTx,
+  upsertBookmarkProjectionTx,
+  upsertQaThreadProjectionTx,
   createMolyCourseCatalogSyncService,
 };

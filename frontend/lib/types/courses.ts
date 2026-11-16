@@ -67,7 +67,8 @@ export interface CourseProgressSummaryDto {
   completedLessons: number;
   totalLessons: number;
   completionPct: number;
-  lastLessonId: number | null;
+  watchedSeconds?: number;
+  lastLessonId: number | string | null;
   lastLessonTitle: string | null;
   lastPositionSeconds: number;
 }
@@ -106,6 +107,7 @@ export interface CourseCatalogItemDto {
   profiles?: CourseProfileSummaryDto[];
   firstUnitHref?: string | null;
   firstUnitSlug?: string | null;
+  resumeUnitHref?: string | null;
   activeProfileId?: string | null;
   enrolledCount: number;
   totalSections: number;
@@ -227,6 +229,7 @@ export interface EnrollmentDto {
   learningDestination?: string;
   firstUnitHref?: string | null;
   firstUnitSlug?: string | null;
+  resumeUnitHref?: string | null;
   activeProfileId?: string | null;
   progress: CourseProgressSummaryDto | null;
 }
@@ -410,7 +413,17 @@ export interface CourseAdminInput {
   certificateEnabled?: boolean;
 }
 
-export interface CourseAdminDto extends CourseDetailDto {
+export interface AdminCurriculumLessonDto extends Omit<CurriculumLessonDto, 'id'> {
+  id: number;
+}
+
+export interface AdminCurriculumSectionDto extends Omit<CurriculumSectionDto, 'id' | 'lessons'> {
+  id: number;
+  lessons: AdminCurriculumLessonDto[];
+}
+
+export interface CourseAdminDto extends Omit<CourseDetailDto, 'curriculum'> {
+  curriculum: AdminCurriculumSectionDto[];
   packageIds: number[];
   status: CourseStatus;
   createdAt: string;
@@ -724,34 +737,106 @@ export interface ExternalUnitFileDto {
   fileKind: string;
   allowView?: boolean;
   allowDownload?: boolean;
+  isSlide?: boolean;
+  allowDownloadOverride?: boolean | null;
+  revision?: number;
+  updatedAt?: string | null;
 }
+
+export type ExternalQuizReviewPolicy =
+  | 'immediate'
+  | 'after_due'
+  | 'after_graded'
+  | 'never'
+  | 'embargoed'
+  | string;
 
 export interface ExternalUnitQuizDto {
   id: string;
   title: string;
+  description?: string | null;
   durationMinutes?: number | null;
-  passingScore?: number;
+  passingScore?: number | null;
   attemptsCount?: number;
+  attemptLimit?: number | null;
   isCompleted?: boolean;
   bestScore?: number | null;
   maxScore?: number | null;
+  reviewPolicy?: ExternalQuizReviewPolicy | null;
+  canViewSolution?: boolean;
+  hasSolution?: boolean;
+  solutionFileId?: string | null;
+  embargoUntil?: string | null;
+}
+
+export interface ExternalAssignmentRubricItemDto {
+  id?: string;
+  criterion: string;
+  description?: string | null;
+  maxPoints?: number | null;
 }
 
 export interface ExternalUnitAssignmentDto {
   id: string;
   title: string;
-  description?: string;
-  maxScore?: number;
+  description?: string | null;
+  maxScore?: number | null;
   dueDate?: string | null;
   isSubmitted?: boolean;
   score?: number | null;
+  gradedAt?: string | null;
+  teacherFeedback?: string | null;
+  rubric?: ExternalAssignmentRubricItemDto[] | string | null;
 }
 
 export interface ExternalUnitNoteDto {
   id: string;
   timestampSeconds: number;
   content: string;
+  revision?: number;
   createdAt: string | null;
+  updatedAt?: string | null;
+}
+
+export interface ExternalUnitBookmarkDto {
+  id: string;
+  timestampSeconds: number;
+  label: string;
+  videoAssetId?: string | null;
+  createdAt: string | null;
+  updatedAt?: string | null;
+}
+
+export type ExternalQaStatus = 'open' | 'answered' | 'resolved';
+
+export interface ExternalQaMessageDto {
+  id: string;
+  threadId?: string;
+  authorId?: string | number | null;
+  authorName: string;
+  authorRole?: 'student' | 'teacher' | 'admin' | string;
+  isTeacher?: boolean;
+  isMine?: boolean;
+  body: string;
+  createdAt: string | null;
+  updatedAt?: string | null;
+}
+
+export interface ExternalQaThreadDto {
+  id: string;
+  unitId?: string;
+  title: string;
+  body?: string;
+  status: ExternalQaStatus;
+  unreadCount?: number;
+  hasUnread?: boolean;
+  isUnread?: boolean;
+  revision?: number;
+  authorName?: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+  messages?: ExternalQaMessageDto[];
+  replies?: ExternalQaMessageDto[];
 }
 
 export interface ExternalUnitDetailDto {
@@ -791,6 +876,8 @@ export interface ExternalUnitDetailDto {
   vocabulary?: ExternalUnitVocabularyDto[];
   formulas?: ExternalUnitFormulaDto[];
   notes?: ExternalUnitNoteDto[];
+  bookmarks?: ExternalUnitBookmarkDto[];
+  qaThreads?: ExternalQaThreadDto[];
 }
 
 export interface ExternalWorkspaceCapabilitiesDto {
@@ -851,4 +938,251 @@ export interface ExternalCourseWorkspaceDto {
   units: ExternalWorkspaceUnitSummaryDto[];
   activeUnit: ExternalUnitDetailDto | null;
   selectedUnitLock: ExternalSelectedUnitLockDto | null;
+}
+
+export interface ExternalVideoPlaybackTokenDto {
+  playbackSessionId: string;
+  deliveryType: string;
+  videoAssetId: string;
+  unitId: string;
+  unitType?: 'lesson' | 'class_session';
+  profileId: string;
+  courseId: string;
+  title: string;
+  embedUrl: string;
+  hlsPlaylistUrl?: string | null;
+  thumbnailUrl?: string | null;
+  availableResolutions?: string[];
+  durationSeconds: number;
+  expiresAt: string;
+  ttlSeconds: number;
+  watermark?: {
+    label?: string;
+    userId?: string | number;
+    externalUserId?: string;
+    ipAddress?: string | null;
+  } | null;
+  resumePositionSeconds: number;
+  watchProgress?: {
+    lastPositionSeconds: number;
+    watchedSeconds: number;
+    completionPercent: number;
+    isCompleted: boolean;
+    completedAt?: string | null;
+    lastHeartbeatAt?: string | null;
+  } | null;
+  unitProgress?: {
+    totalDurationSeconds: number;
+    watchedSeconds: number;
+    completionPercent: number;
+    isCompleted: boolean;
+    partCount?: number;
+    completedPartCount?: number;
+  } | null;
+  unitProjectionId?: number;
+  projectionSlug?: string;
+  deviceSlot?: {
+    id?: number;
+    deviceName?: string;
+  } | null;
+}
+
+export interface ExternalVideoProgressInput {
+  currentTimeSeconds: number;
+  watchedDeltaSeconds: number;
+  durationSeconds?: number | null;
+  clientSequence?: number;
+  eventTimestamp?: string;
+}
+
+export interface ExternalVideoProgressDto {
+  stale: boolean;
+  ignoredReason: string | null;
+  videoAssetId: string;
+  unitId: string;
+  unitType?: 'lesson' | 'class_session';
+  profileId: string;
+  courseId: string;
+  lastPositionSeconds: number;
+  watchedSeconds: number;
+  completionPercent: number;
+  isVideoCompleted: boolean;
+  isUnitCompleted: boolean;
+  completedAt: string | null;
+  lastHeartbeatAt: string | null;
+  durationSeconds: number;
+  clientSequence: number;
+  syncRevision: number;
+  unitProgress?: {
+    totalDurationSeconds: number;
+    watchedSeconds: number;
+    completionPercent: number;
+    isCompleted: boolean;
+    partCount?: number;
+    completedPartCount?: number;
+  } | null;
+  courseProgress?: ExternalWorkspaceProgressDto | null;
+  units?: Array<{
+    id: string;
+    unitType?: 'lesson' | 'class_session';
+    sessionNumber?: number;
+    isLocked: boolean;
+    isCompleted: boolean;
+    progressPercent: number;
+  }>;
+  unitProjectionId?: number;
+  projectionSlug?: string;
+}
+
+export interface ExternalFileStreamResult {
+  data: ArrayBuffer;
+  mimeType: string;
+  fileName: string;
+  sizeBytes: number;
+}
+
+export interface ExternalQuizOptionDto {
+  id?: string;
+  key?: string;
+  label?: string;
+  text: string;
+  isCorrect?: boolean;
+}
+
+export type ExternalQuizQuestionType =
+  | 'single_choice'
+  | 'multiple_choice'
+  | 'true_false'
+  | 'fill_blank'
+  | 'short_answer'
+  | 'essay'
+  | string;
+
+export interface ExternalQuizQuestionDto {
+  id: string;
+  questionId?: string;
+  sortOrder?: number;
+  questionType: ExternalQuizQuestionType;
+  prompt: string;
+  questionText?: string;
+  promptHtml?: string | null;
+  points?: number;
+  options?: ExternalQuizOptionDto[];
+  correctAnswer?: unknown;
+  explanation?: string | null;
+  imageUrl?: string | null;
+  userAnswer?: unknown;
+  studentAnswer?: unknown;
+  isCorrect?: boolean | null;
+  earnedPoints?: number | null;
+}
+
+export interface ExternalQuizAttemptDto {
+  id: string;
+  quizId?: string;
+  attemptNumber?: number;
+  status: 'in_progress' | 'submitted' | 'graded' | 'expired' | string;
+  startedAt?: string | null;
+  expiresAt?: string | null;
+  submittedAt?: string | null;
+  score?: number | null;
+  maxScore?: number | null;
+  percent?: number | null;
+  isPassed?: boolean | null;
+  answers?: Record<string, unknown>;
+  remainingSeconds?: number | null;
+}
+
+export interface ExternalQuizResultDto {
+  score: number;
+  maxScore: number;
+  percent?: number;
+  percentage?: number;
+  isPassed: boolean;
+  passed?: boolean;
+  correctCount?: number;
+  totalQuestions?: number;
+  canViewSolution?: boolean;
+  solutionFileId?: string | null;
+  hasSolution?: boolean;
+  reviewPolicy?: ExternalQuizReviewPolicy | null;
+  embargoUntil?: string | null;
+  questions?: ExternalQuizQuestionDto[];
+  review?: ExternalQuizQuestionDto[];
+}
+
+export interface ExternalQuizDetailDto {
+  quiz: ExternalUnitQuizDto;
+  questions: ExternalQuizQuestionDto[];
+  activeAttempt?: ExternalQuizAttemptDto | null;
+  attempts?: ExternalQuizAttemptDto[];
+  latestAttempt?: ExternalQuizAttemptDto | null;
+  latestResult?: ExternalQuizResultDto | null;
+  canStartAttempt?: boolean;
+  attemptsRemaining?: number | null;
+  canViewSolution?: boolean;
+  reviewPolicy?: ExternalQuizReviewPolicy | null;
+  embargoUntil?: string | null;
+  solutionEmbargoedReason?: string | null;
+}
+
+export interface ExternalQuizSubmitResponseDto {
+  attempt: ExternalQuizAttemptDto;
+  result: ExternalQuizResultDto;
+  unitProgress?: {
+    totalDurationSeconds?: number;
+    watchedSeconds?: number;
+    completionPercent: number;
+    isCompleted: boolean;
+    isQuizCompleted?: boolean;
+  } | null;
+  courseProgress?: ExternalWorkspaceProgressDto | null;
+  units?: Array<{
+    id: string;
+    unitType?: 'lesson' | 'class_session';
+    sessionNumber?: number;
+    isLocked: boolean;
+    isCompleted: boolean;
+    progressPercent: number;
+  }>;
+  canViewSolution?: boolean;
+}
+
+export interface ExternalAssignmentAttachmentDto {
+  id?: string;
+  fileName?: string;
+  originalName?: string;
+  originalFilename?: string;
+  assetKind?: string;
+  mimeType?: string | null;
+  sizeBytes?: number;
+  url?: string | null;
+  fileKind?: string;
+}
+
+export interface ExternalAssignmentSubmissionDto {
+  id: string;
+  assignmentId?: string;
+  status: 'submitted' | 'graded' | 'returned' | 'draft' | string;
+  contentText?: string | null;
+  textContent?: string | null;
+  submittedAt: string | null;
+  score: number | null;
+  maxScore?: number | null;
+  teacherFeedback?: string | null;
+  gradedAt?: string | null;
+  attachments?: ExternalAssignmentAttachmentDto[];
+  files?: ExternalAssignmentAttachmentDto[];
+  assets?: ExternalAssignmentAttachmentDto[];
+}
+
+export interface ExternalAssignmentDetailDto {
+  assignment: ExternalUnitAssignmentDto & {
+    instructions?: string | null;
+    allowFileUpload?: boolean;
+    allowTextSubmission?: boolean;
+    attachments?: ExternalAssignmentAttachmentDto[];
+  };
+  submission?: ExternalAssignmentSubmissionDto | null;
+  submissions?: ExternalAssignmentSubmissionDto[];
 }

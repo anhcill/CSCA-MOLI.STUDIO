@@ -3,6 +3,8 @@ import type {
   AdminCourseEnrollmentItemDto,
   AdminCourseEnrollmentQuery,
   AdminCourseEnrollmentsResponseDto,
+  AdminCurriculumLessonDto,
+  AdminCurriculumSectionDto,
   ApiPaginationDto,
   ApiSuccessEnvelope,
   CourseAdminDto,
@@ -184,7 +186,7 @@ type AdminListResponse = {
 
 function adminCourse(raw: AdminRaw): CourseAdminDto {
   const sections = raw.sections ?? raw.curriculum ?? [];
-  const curriculum: CurriculumSectionDto[] = sections.map((section) => ({
+  const curriculum: AdminCurriculumSectionDto[] = sections.map((section) => ({
     id: Number(section.id),
     title: section.title ?? '',
     description: section.description ?? null,
@@ -351,26 +353,26 @@ export const coursesApi = {
     return adminCourse(unwrapData(response.data));
   },
 
-  async createSection(courseId: number, input: CurriculumSectionInput): Promise<CurriculumSectionDto> {
-    const response = await axios.post<ApiSuccessEnvelope<CurriculumSectionDto>>(`/admin/courses/${encodeURIComponent(courseId)}/sections`, input);
+  async createSection(courseId: number, input: CurriculumSectionInput): Promise<AdminCurriculumSectionDto> {
+    const response = await axios.post<ApiSuccessEnvelope<AdminCurriculumSectionDto>>(`/admin/courses/${encodeURIComponent(courseId)}/sections`, input);
     return unwrapData(response.data);
   },
 
-  async createLesson(courseId: number, input: CurriculumLessonInput): Promise<CurriculumLessonDto> {
-    const response = await axios.post<ApiSuccessEnvelope<CurriculumLessonDto>>(`/admin/courses/${encodeURIComponent(courseId)}/lessons`, input);
+  async createLesson(courseId: number, input: CurriculumLessonInput): Promise<AdminCurriculumLessonDto> {
+    const response = await axios.post<ApiSuccessEnvelope<AdminCurriculumLessonDto>>(`/admin/courses/${encodeURIComponent(courseId)}/lessons`, input);
     return unwrapData(response.data);
   },
 
-  async updateSection(courseId: number, sectionId: number, input: Partial<CurriculumSectionInput>): Promise<CurriculumSectionDto> {
-    const response = await axios.patch<ApiSuccessEnvelope<CurriculumSectionDto>>(
+  async updateSection(courseId: number, sectionId: number, input: Partial<CurriculumSectionInput>): Promise<AdminCurriculumSectionDto> {
+    const response = await axios.patch<ApiSuccessEnvelope<AdminCurriculumSectionDto>>(
       `/admin/courses/${encodeURIComponent(courseId)}/sections/${encodeURIComponent(sectionId)}`,
       input,
     );
     return unwrapData(response.data);
   },
 
-  async updateLesson(courseId: number, lessonId: number, input: Partial<CurriculumLessonInput>): Promise<CurriculumLessonDto> {
-    const response = await axios.patch<ApiSuccessEnvelope<CurriculumLessonDto>>(
+  async updateLesson(courseId: number, lessonId: number, input: Partial<CurriculumLessonInput>): Promise<AdminCurriculumLessonDto> {
+    const response = await axios.patch<ApiSuccessEnvelope<AdminCurriculumLessonDto>>(
       `/admin/courses/${encodeURIComponent(courseId)}/lessons/${encodeURIComponent(lessonId)}`,
       input,
     );

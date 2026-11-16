@@ -3,6 +3,7 @@ const sanitizeHtml = require("sanitize-html");
 const repository = require("../repositories/adminCourseRepository");
 const { CourseApiError } = require("../utils/courseResponses");
 const { invalidateAuthorizationCache } = require("./rbacService");
+const { syncProfileCheckoutReadyForCourses } = require("../utils/profileCheckoutReady");
 
 const SUBJECTS = new Set(["MATH", "PHYSICS", "CHEMISTRY", "CHINESE_SCI", "CHINESE_SOC"]);
 const LEVELS = new Set(["basic", "intermediate", "advanced"]);
@@ -289,6 +290,7 @@ async function createCourse(body) {
       }
       const created = await repository.createCourse(values, client);
       await repository.replacePackageAccess(created.id, values.packageIds || [], client);
+      await syncProfileCheckoutReadyForCourses(client, [created.id]);
       return repository.findById(created.id, client);
     });
     return mapCourse(row);
@@ -314,6 +316,7 @@ async function updateCourse(courseIdValue, body) {
       delete patch.packageIds;
       await repository.updateCourse(courseId, patch, client);
       if (packageIds !== undefined) await repository.replacePackageAccess(courseId, packageIds, client);
+      await syncProfileCheckoutReadyForCourses(client, [courseId]);
       return repository.findById(courseId, client);
     });
     return mapCourse(row);

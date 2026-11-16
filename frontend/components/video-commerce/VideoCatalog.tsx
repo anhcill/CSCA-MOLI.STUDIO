@@ -18,7 +18,10 @@ export default function VideoCatalog({ embedded = false, productType = 'video' }
     {!embedded && <div className="mb-6 flex flex-wrap gap-3" role="group" aria-label="Loại gói">{(['video','combo'] as const).map(t=><button key={t} aria-pressed={type===t} className={type===t?buttonClass:secondaryClass} onClick={()=>{setType(t);setPage(1);}}>{t==='video'?'Gói video':'Combo gói + video'}</button>)}<Link href="/vip" className={secondaryClass}>Gói luyện tập hiện tại ↗</Link></div>}
     {promotion&&<div className="mb-6 rounded-2xl bg-[#102b34] p-6 text-white"><p className="text-lg font-black">{promotion.title}</p><p className="mt-2 text-sm text-slate-200">{promotion.content}</p>{promotion.coupon_code&&<p className="mt-3">Mã ưu đãi: <strong>{promotion.coupon_code}</strong></p>}</div>}
     {error?<Message error>{error} <button className="underline" onClick={()=>setRetry(r=>r+1)}>Thử lại</button></Message>:!data?<Message>Đang tải gói học…</Message>:!data.items.length?<Message>Chưa có gói mở bán. Bạn có thể tiếp tục khám phá thư viện khóa học.</Message>:<>
-      <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">{data.items.map(p=><article key={p.id} className={`${panelClass} flex flex-col`}>
+      <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">{data.items.map(p=>{
+        const isUnpriced = !p.canPurchase && (p.purchaseBlockReason === 'PRICE_NOT_CONFIGURED' || p.configurationIssues?.includes('PRICE_NOT_CONFIGURED'));
+        const isOwned = Boolean(p.owned || p.ownershipStatus === 'owned' || p.ownershipStatus === 'partially_owned' || p.purchaseBlockReason === 'ALREADY_OWNED');
+        return <article key={p.id} className={`${panelClass} flex flex-col`}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs font-black uppercase tracking-widest text-teal-700 dark:text-teal-300">{type==='video'?'HỌC QUA VIDEO':'VIDEO + LUYỆN TẬP'}</p>
           {p.ownershipStatus ? <CourseOwnershipBadge status={p.ownershipStatus} label={p.ownershipLabel} /> : null}
@@ -26,19 +29,31 @@ export default function VideoCatalog({ embedded = false, productType = 'video' }
         <h2 className="mt-3 text-xl font-black">{p.name}</h2>
         {courseId>0&&p.courses.some(c=>Number(c.id)===courseId)&&<p className="mt-2 text-sm font-bold text-teal-700">Có khóa bạn đang xem</p>}
         <p className="mt-3 whitespace-pre-line text-sm leading-6 text-slate-600 dark:text-slate-300">{p.description}</p>
-        <p className="mt-5 text-3xl font-black">{p.video?.requiresSubjectChoice&&Object.keys(p.subjectPrices).length?'Từ ':''}{money(p.video?.requiresSubjectChoice?Math.min(...p.video.allowedSubjects.map(s=>p.subjectPrices[s]??p.priceVnd??0)):p.priceVnd)}</p>
-        {p.originalPriceVnd!=null&&p.originalPriceVnd>(p.priceVnd??0)&&<del className="text-sm text-slate-500">{money(p.originalPriceVnd)}</del>}
+        <p className="mt-5 text-3xl font-black">
+          {isUnpriced
+            ? 'Đang cập nhật học phí'
+            : <>
+                {p.video?.requiresSubjectChoice&&Object.keys(p.subjectPrices).length?'Từ ':''}
+                {money(p.video?.requiresSubjectChoice?Math.min(...p.video.allowedSubjects.map(s=>p.subjectPrices[s]??p.priceVnd??0)):p.priceVnd)}
+              </>}
+        </p>
+        {!isUnpriced&&p.originalPriceVnd!=null&&p.originalPriceVnd>(p.priceVnd??0)&&<del className="text-sm text-slate-500">{money(p.originalPriceVnd)}</del>}
         <dl className="my-5 space-y-2 text-sm"><div><dt className="font-bold">Quyền video</dt><dd>{p.video?.durationMode==='lifetime'?'Không giới hạn':`${p.video?.durationDays} ngày`} · {p.video?.requiresSubjectChoice?'Chọn 1 môn':p.video?.allowedSubjects.map(s=>subjects[s]).join(', ')}</dd></div>{p.vip&&<div><dt className="font-bold">{p.vip.name}</dt><dd>{'vipDurationDays' in p?String(p.vipDurationDays):''} ngày quyền gói</dd></div>}</dl>
         <ul className="mb-5 space-y-2 text-sm">{p.courses.map(c=><li key={c.id}><Link href={`/khoa-hoc/${c.slug}`} className="underline decoration-slate-300 underline-offset-4">{c.title}</Link></li>)}{p.features.map(f=><li key={f}>✓ {f}</li>)}</ul>
         {p.canLaunchCourse ? <div className="mb-3"><CourseSsoLaunchButton courseId={p.courses[0]?.id} targetPath={p.ssoTargetPath} label="Vào học" /></div> : null}
-        {p.ownershipStatus === 'pending_sync' ? (
+        {p.ownershipStatus === 'pending_sync' || p.purchaseBlockReason === 'PENDING_SYNC' ? (
           <button type="button" onClick={()=>setRetry(r=>r+1)} className={`${secondaryClass} mt-auto`}>Đang đồng bộ quyền · Làm mới</button>
-        ) : p.ownershipStatus === 'verification_required' ? (
+        ) : p.ownershipStatus === 'verification_required' || p.purchaseBlockReason === 'IDENTITY_VERIFICATION_REQUIRED' ? (
           <Link href="/login?redirect=%2Fvip%3Fsection%3Dvideo" className={`${secondaryClass} mt-auto`}>Cần xác minh tài khoản</Link>
+        ) : isUnpriced ? (
+          <Link href={p.courses[0] ? `/khoa-hoc/${p.courses[0].slug}` : `/thanh-toan-khoa-hoc?type=${type}&productId=${p.id}`} className={`${secondaryClass} mt-auto`}>Chưa mở bán · Xem chi tiết</Link>
+        ) : isOwned && !p.canPurchase ? (
+          <Link href={p.courses[0] ? `/khoa-hoc/${p.courses[0].slug}` : '/hoc'} className={`${secondaryClass} mt-auto`}>Đã sở hữu · Xem khóa học</Link>
         ) : (
           <Link href={`/thanh-toan-khoa-hoc?type=${type}&productId=${p.id}`} className={`${p.canPurchase?buttonClass:secondaryClass} mt-auto`}>{p.canPurchase?(p.ownershipStatus==='expired'?'Mua lại khóa học':'Mua khóa học'):'Xem chi tiết gói'}</Link>
         )}
-      </article>)}</div><Pager page={page} hasMore={data.hasMore} onPage={setPage}/></>}
+      </article>;
+      })}</div><Pager page={page} hasMore={data.hasMore} onPage={setPage}/></>}
   </>;
   return embedded ? <section className="text-slate-900">{content}</section> : <ShopShell title="Chọn gói cho hành trình của bạn">{content}</ShopShell>;
 }

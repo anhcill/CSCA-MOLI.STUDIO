@@ -1,6 +1,30 @@
 const db = require("../config/database");
+const {
+  buildActiveOfferingMappingSqlPredicate,
+  detectMappingSchemaColumns,
+} = require("../utils/courseMappingResolver");
+
+async function hasCoursesContentOriginColumn() {
+  try {
+    const res = await db.query(
+      `SELECT EXISTS (
+         SELECT 1
+         FROM information_schema.columns
+         WHERE table_name = 'courses'
+           AND column_name = 'content_origin'
+       ) AS has_origin`,
+    );
+    return Boolean(res.rows[0]?.has_origin);
+  } catch {
+    return false;
+  }
+}
 
 async function listUserEnrollments(userId) {
+  const hasOrigin = await hasCoursesContentOriginColumn();
+  const originFilter = hasOrigin
+    ? "AND COALESCE(c.content_origin, 'moly_native') <> 'csca_course'"
+    : "";
   const result = await db.query(
     `SELECT
        e.*,
@@ -46,6 +70,7 @@ async function listUserEnrollments(userId) {
      ) p ON TRUE
      WHERE e.user_id = $1 AND e.status IN ('active', 'completed')
        AND (e.expires_at IS NULL OR e.expires_at > NOW())
+       ${originFilter}
      ORDER BY COALESCE(p.last_activity_at, e.updated_at) DESC, e.id DESC`,
     [userId],
   );
@@ -178,6 +203,37 @@ async function listExternalOnlyCourses(userId) {
     return [];
   }
 
+  const [hasOrigin, mappingCols] = await Promise.all([
+    hasCoursesContentOriginColumn(),
+    detectMappingSchemaColumns(db),
+  ]);
+  const mappingPredicate = buildActiveOfferingMappingSqlPredicate("ecm", mappingCols);
+  const originEnrollGuard = hasOrigin
+    ? `AND NOT EXISTS (
+         SELECT 1
+         FROM course_enrollments e
+         WHERE e.user_id = $1
+           AND e.course_id = c.id
+           AND (
+             e.status = 'revoked'
+             OR (
+               COALESCE(c.content_origin, 'moly_native') <> 'csca_course'
+               AND e.status IN ('active', 'completed')
+               AND (e.expires_at IS NULL OR e.expires_at > NOW())
+             )
+           )
+       )`
+    : `AND NOT EXISTS (
+         SELECT 1
+         FROM course_enrollments e
+         WHERE e.user_id = $1
+           AND e.course_id = c.id
+           AND (
+             e.status = 'revoked'
+             OR (e.status IN ('active', 'completed') AND (e.expires_at IS NULL OR e.expires_at > NOW()))
+           )
+       )`;
+
   const result = await db.query(
     `SELECT DISTINCT ON (c.id)
        ee.id AS external_entitlement_id,
@@ -226,11 +282,7 @@ async function listExternalOnlyCourses(userId) {
          SELECT 1
          FROM external_course_mappings ecm
          WHERE ecm.local_course_id = c.id
-           AND ecm.status = 'active'
-           AND (
-             ecm.source_system = 'moly'
-             OR (ecm.source_system = 'csca-course' AND (ecm.metadata ? 'moly_external_course_id'))
-           )
+           AND ${mappingPredicate}
        )
        AND NOT EXISTS (
          SELECT 1
@@ -248,23 +300,14 @@ async function listExternalOnlyCourses(userId) {
            AND ei.source_system = ee.source_system
            AND ei.status <> 'active'
        )
-       AND NOT EXISTS (
-         SELECT 1
-         FROM course_enrollments e
-         WHERE e.user_id = $1
-           AND e.course_id = c.id
-           AND (
-             e.status = 'revoked'
-             OR (e.status IN ('active', 'completed') AND (e.expires_at IS NULL OR e.expires_at > NOW()))
-           )
-       )
+       ${originEnrollGuard}
      ORDER BY c.id, ee.source_updated_at DESC NULLS LAST, ee.id DESC`,
     [userId],
   );
   return result.rows;
 }
 
-async function listExternalFirstUnits(courseIds = []) {
+async function listExternalFirstUnits(courseIds = [], userId = null) {
   const cleanIds = [...new Set((courseIds || []).map(Number).filter((id) => Number.isSafeInteger(id) && id > 0))];
   if (!cleanIds.length) return new Map();
 
@@ -272,11 +315,14 @@ async function listExternalFirstUnits(courseIds = []) {
     await db.query(
       `SELECT
          to_regclass('course_profile_projections') IS NOT NULL AS has_profiles,
-         to_regclass('course_unit_projections') IS NOT NULL AS has_units`,
+         to_regclass('course_unit_projections') IS NOT NULL AS has_units,
+         to_regclass('course_progress_projections') IS NOT NULL AS has_progress`,
     )
   ).rows[0];
   if (!caps?.has_profiles || !caps?.has_units) return new Map();
 
+  const cleanUserId = Number(userId);
+  const useProgressOrder = caps.has_progress && Number.isSafeInteger(cleanUserId) && cleanUserId > 0;
   const res = await db.query(
     `SELECT DISTINCT ON (u.local_course_id)
        u.local_course_id,
@@ -292,13 +338,14 @@ async function listExternalFirstUnits(courseIds = []) {
        AND p.deleted_at IS NULL
        AND p.status <> 'archived'
      ORDER BY u.local_course_id ASC,
+              ${useProgressOrder ? `EXISTS (SELECT 1 FROM course_progress_projections cp0 WHERE cp0.user_id = $2 AND cp0.profile_projection_id = p.id) DESC,` : ""}
               (CASE WHEN p.mode = 'INDEPENDENT' THEN 0 ELSE 1 END) ASC,
               p.id ASC,
               u.section_sort_order ASC,
               u.remote_section_id ASC,
               u.sort_order ASC,
               u.id ASC`,
-    [cleanIds],
+    useProgressOrder ? [cleanIds, cleanUserId] : [cleanIds],
   );
   const byCourse = new Map();
   for (const row of res.rows) {
@@ -312,7 +359,133 @@ async function listExternalFirstUnits(courseIds = []) {
   return byCourse;
 }
 
+async function listExternalProgressSummaries(userId, courseIds = []) {
+  const cleanUserId = Number(userId);
+  const cleanIds = [...new Set(courseIds.map((id) => Number(id)).filter((id) => Number.isSafeInteger(id) && id > 0))];
+  if (!Number.isSafeInteger(cleanUserId) || cleanUserId <= 0 || !cleanIds.length) return new Map();
+
+  const regRes = await db.query(
+    `SELECT
+       to_regclass('course_progress_projections') IS NOT NULL AS has_progress,
+       to_regclass('course_unit_projections') IS NOT NULL AS has_units,
+       to_regclass('course_profile_projections') IS NOT NULL AS has_profiles`,
+  );
+  const caps = regRes.rows[0] || {};
+  if (!caps.has_progress || !caps.has_units || !caps.has_profiles) return new Map();
+
+  const res = await db.query(
+    `WITH chosen_profile AS (
+       SELECT DISTINCT ON (p.local_course_id)
+         p.local_course_id,
+         p.id AS profile_projection_id,
+         p.remote_profile_id
+       FROM course_profile_projections p
+       WHERE p.local_course_id = ANY($2::bigint[])
+         AND p.deleted_at IS NULL
+         AND p.status <> 'archived'
+       ORDER BY p.local_course_id ASC,
+                EXISTS (
+                  SELECT 1 FROM course_progress_projections cp0
+                  WHERE cp0.user_id = $1 AND cp0.profile_projection_id = p.id
+                ) DESC,
+                EXISTS (
+                  SELECT 1 FROM course_unit_projections u0
+                  WHERE u0.profile_projection_id = p.id
+                    AND u0.deleted_at IS NULL
+                    AND u0.is_published = TRUE
+                ) DESC,
+                (CASE WHEN p.mode = 'INDEPENDENT' THEN 0 ELSE 1 END) ASC,
+                p.id ASC
+     ),
+     first_unit AS (
+       SELECT DISTINCT ON (u1.profile_projection_id)
+         u1.profile_projection_id,
+         u1.id AS first_unit_projection_id
+       FROM course_unit_projections u1
+       JOIN chosen_profile ch1 ON ch1.profile_projection_id = u1.profile_projection_id
+       WHERE u1.deleted_at IS NULL
+         AND u1.is_published = TRUE
+       ORDER BY u1.profile_projection_id ASC,
+                u1.section_sort_order ASC,
+                u1.remote_section_id ASC,
+                u1.sort_order ASC,
+                u1.id ASC
+     ),
+     recent_unit AS (
+       SELECT DISTINCT ON (cp2.local_course_id)
+         cp2.local_course_id,
+         u2.id AS unit_projection_id,
+         u2.title AS unit_title,
+         cp2.last_position_seconds,
+         cp2.source_updated_at
+       FROM course_progress_projections cp2
+       JOIN chosen_profile ch ON ch.profile_projection_id = cp2.profile_projection_id
+       LEFT JOIN course_unit_projections u2
+         ON u2.profile_projection_id = cp2.profile_projection_id
+        AND u2.unit_type = cp2.unit_type
+        AND u2.remote_unit_id = cp2.remote_unit_id
+        AND u2.deleted_at IS NULL
+       WHERE cp2.user_id = $1
+         AND cp2.local_course_id = ANY($2::bigint[])
+       ORDER BY cp2.local_course_id ASC,
+                (CASE WHEN cp2.watched_seconds > 0 OR cp2.last_position_seconds > 0 OR cp2.completion_pct > 0 OR cp2.is_unit_completed = TRUE THEN 0 ELSE 1 END) ASC,
+                (CASE WHEN cp2.last_unit_id = cp2.remote_unit_id THEN 0 ELSE 1 END) ASC,
+                cp2.source_updated_at DESC,
+                cp2.id DESC
+     )
+     SELECT
+       ch.local_course_id,
+       ch.remote_profile_id,
+       fu.first_unit_projection_id,
+       COUNT(u.id)::int AS total_units,
+       COUNT(u.id) FILTER (WHERE cp.is_unit_completed = TRUE)::int AS completed_units,
+       CASE WHEN COUNT(u.id) > 0
+         THEN ROUND((SUM(LEAST(100, COALESCE(cp.completion_pct, 0)))::numeric / COUNT(u.id)), 2)
+         ELSE 0 END AS partial_completion_pct,
+       MAX(cp.course_completion_pct) AS course_completion_pct,
+       COALESCE(SUM(cp.watched_seconds), 0)::int AS watched_seconds,
+       ru.unit_projection_id AS last_unit_projection_id,
+       ru.unit_title AS last_unit_title,
+       COALESCE(ru.last_position_seconds, 0)::int AS last_position_seconds
+     FROM chosen_profile ch
+     JOIN course_unit_projections u
+       ON u.profile_projection_id = ch.profile_projection_id
+      AND u.deleted_at IS NULL
+      AND u.is_published = TRUE
+     LEFT JOIN first_unit fu ON fu.profile_projection_id = ch.profile_projection_id
+     LEFT JOIN course_progress_projections cp
+       ON cp.user_id = $1
+      AND cp.profile_projection_id = u.profile_projection_id
+      AND cp.unit_type = u.unit_type
+      AND cp.remote_unit_id = u.remote_unit_id
+     LEFT JOIN recent_unit ru ON ru.local_course_id = ch.local_course_id
+     GROUP BY ch.local_course_id, ch.remote_profile_id, fu.first_unit_projection_id, ru.unit_projection_id, ru.unit_title, ru.last_position_seconds`,
+    [cleanUserId, cleanIds],
+  );
+
+  const byCourse = new Map();
+  for (const row of res.rows) {
+    const totalLessons = Number(row.total_units || 0);
+    const completedLessons = Number(row.completed_units || 0);
+    const pct = row.partial_completion_pct != null
+      ? Number(row.partial_completion_pct)
+      : (totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 10000) / 100 : 0);
+    byCourse.set(Number(row.local_course_id), {
+      activeProfileId: String(row.remote_profile_id),
+      firstUnitProjectionId: row.first_unit_projection_id ? Number(row.first_unit_projection_id) : null,
+      completedLessons,
+      totalLessons,
+      completionPct: Math.min(100, Math.max(0, Math.round(pct * 100) / 100)),
+      watchedSeconds: Number(row.watched_seconds || 0),
+      lastLessonId: row.last_unit_projection_id ? `u-${row.last_unit_projection_id}` : null,
+      lastLessonTitle: row.last_unit_title || null,
+      lastPositionSeconds: Number(row.last_position_seconds || 0),
+    });
+  }
+  return byCourse;
+}
+
 module.exports = {
-  listUserEnrollments, listExternalOnlyCourses, listExternalFirstUnits, findPublishedLesson, listLessonResources,
+  listUserEnrollments, listExternalOnlyCourses, listExternalFirstUnits, listExternalProgressSummaries, findPublishedLesson, listLessonResources,
   getLessonNavigation, findProgress, upsertProgress, getCourseProgress,
 };

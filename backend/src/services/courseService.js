@@ -302,14 +302,25 @@ async function getCourseLanding(slug, user, options = {}) {
     ? Boolean(access.canLearn || (ownershipInfo?.owned && ownershipInfo?.canLaunchCourse))
     : access.canLearn;
 
-  const totalLessons = toFiniteNumber(progressRow?.required_lessons);
-  const completedLessons = toFiniteNumber(progressRow?.completed_lessons);
+  let totalLessons = toFiniteNumber(progressRow?.required_lessons);
+  let completedLessons = toFiniteNumber(progressRow?.completed_lessons);
+  let effectiveCompletionPct = progressRow?.course_completion_pct;
   let detailCurriculum;
   let projectedMeta = {};
 
   if (isExternalOrigin) {
     const built = buildProjectedCurriculum(row, projected, effectiveCanLearn);
     detailCurriculum = built.detailCurriculum;
+    const extUnits = Array.isArray(projected?.units) ? projected.units : [];
+    totalLessons = extUnits.length;
+    if (user) {
+      completedLessons = extUnits.filter((u) => u.progress_status === "completed").length;
+      const pctSum = extUnits.reduce((sum, u) => sum + Math.min(100, Math.max(0, toFiniteNumber(u.watched_percent))), 0);
+      effectiveCompletionPct = totalLessons > 0 ? Math.round((pctSum / totalLessons) * 100) / 100 : 0;
+    } else {
+      completedLessons = 0;
+      effectiveCompletionPct = 0;
+    }
     const firstUnit = detailCurriculum[0]?.lessons?.[0] || null;
     projectedMeta = {
       projectedProfiles: built.projectedProfiles,
@@ -338,10 +349,11 @@ async function getCourseLanding(slug, user, options = {}) {
 
   const catalogItem = mapCatalogItem({
     ...row,
-    enrollment_id: enrollment?.id,
+    enrollment_id: enrollment?.id
+      || (isExternalOrigin && user && (effectiveCanLearn || ownershipInfo?.owned) ? -1 : null),
     completed_required: completedLessons,
     total_required: totalLessons,
-    course_completion_pct: progressRow?.course_completion_pct,
+    course_completion_pct: effectiveCompletionPct,
   });
   const unpricedSyncedBlock = !effectiveCanLearn && !ownershipInfo?.owned && catalogItem.checkoutReady === false;
   return {
@@ -381,10 +393,36 @@ async function enroll(courseIdValue, user) {
   if (existing?.status === "revoked") {
     throw new CourseApiError(403, "ENROLLMENT_REVOKED", "This enrollment was revoked by an administrator.");
   }
-  const packageEntitlement = course.access_type === "package"
-    ? await repository.findActivePackageEntitlement(user.id, courseId)
-    : null;
-  const videoEntitlement = await videoAccess.find(user.id, courseId);
+  const [packageEntitlement, videoEntitlement, ownershipMap] = await Promise.all([
+    course.access_type === "package"
+      ? repository.findActivePackageEntitlement(user.id, courseId)
+      : Promise.resolve(null),
+    videoAccess.find(user.id, courseId),
+    loadCourseOwnershipMap(user.id, [courseId]),
+  ]);
+  const ownershipInfo = ownershipMap.get(courseId) || null;
+  if (ownershipInfo) {
+    if (ownershipInfo.blockCode === "EXTERNAL_GRANT_BLOCKED" || ownershipInfo.status === "grant_blocked") {
+      throw new CourseApiError(409, "EXTERNAL_GRANT_BLOCKED", "Course access is suspended or blocked on the linked CSCA-Course account.", { courseId });
+    }
+    if (ownershipInfo.blockCode === "PENDING_SYNC" || ownershipInfo.status === "pending_sync") {
+      throw new CourseApiError(409, "PENDING_SYNC", "Course entitlement synchronization is currently pending.", { courseId });
+    }
+    if (ownershipInfo.blockCode === "IDENTITY_VERIFICATION_REQUIRED" || ownershipInfo.status === "verification_required") {
+      throw new CourseApiError(409, "IDENTITY_VERIFICATION_REQUIRED", "Resolve account linking conflict before enrolling in this course.", { courseId });
+    }
+    const courseDtoCheck = mapCourse(course);
+    if (
+      ownershipInfo.externalOwnedCourseIds?.includes(courseId)
+      || (courseDtoCheck.contentOrigin === "csca_course" && (ownershipInfo.owned || ownershipInfo.blockCode === "ALREADY_OWNED"))
+    ) {
+      throw new CourseApiError(409, "ALREADY_OWNED", "You already own access to this course.", {
+        courseId,
+        courseOfferingId: ownershipInfo.courseOfferingId || null,
+        ssoTargetPath: ownershipInfo.ssoTargetPath || null,
+      });
+    }
+  }
   const courseDto = mapCourse(course);
   if (courseDto.contentOrigin === "csca_course" && !courseDto.checkoutReady && !videoEntitlement && !packageEntitlement && !isActiveEnrollment(existing)) {
     throw new CourseApiError(422, "PRICE_NOT_CONFIGURED", "Course pricing is not configured for self-enrollment yet.");

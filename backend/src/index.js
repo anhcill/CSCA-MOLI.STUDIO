@@ -234,6 +234,34 @@ app.get("/health", async (req, res) => {
   }
 });
 
+// Integration readiness probe (secret-free DB + migrations 076-082 + runtime posture)
+app.get("/health/integration", async (req, res) => {
+  try {
+    const { collectIntegrationReadiness } = require("./utils/integrationReadiness");
+    let runtime = null;
+    if (coursesEnabled) {
+      try {
+        runtime = require("./services/courseIntegrationRuntime");
+      } catch {
+        runtime = null;
+      }
+    }
+    const readiness = await collectIntegrationReadiness({
+      db,
+      client: runtime?.client || null,
+      env: process.env,
+      workerStatus: typeof runtime?.getWorkerStatus === "function" ? runtime.getWorkerStatus() : null,
+    });
+    res.status(readiness.ready ? 200 : 503).json(readiness);
+  } catch {
+    res.status(503).json({
+      status: "not_ready",
+      ready: false,
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
 // ====================================
 // API ROUTES
 // ====================================
@@ -324,6 +352,9 @@ if (coursesEnabled) {
       reconciliation: courseIntegrationRuntime.reconciliation,
       catalogSync: courseIntegrationRuntime.catalogSync,
       db,
+      client: courseIntegrationRuntime.client,
+      env: process.env,
+      workerStatus: courseIntegrationRuntime.getWorkerStatus,
       authenticate,
       authorizeAnyPermission,
     }),

@@ -96,8 +96,85 @@ export interface ReconciliationRunItem {
   actions?: ReconciliationActionItem[];
 }
 
+export type ReconciliationDomain = 'entitlement' | 'content' | 'progress';
+
+export interface KillSwitchesOverview {
+  global?: boolean;
+  contentSync?: boolean;
+  delegatedLearning?: boolean;
+  mutationsRepair?: boolean;
+  globalKillSwitchActive?: boolean;
+  contentSyncKillSwitchActive?: boolean;
+  delegatedLearningKillSwitchActive?: boolean;
+  mutationsRepairKillSwitchActive?: boolean;
+}
+
+export interface V2InboxAttentionItem {
+  id: number;
+  event_id: string;
+  event_type: string;
+  aggregate_type?: string | null;
+  aggregate_id?: string | null;
+  aggregate_revision?: number | string | null;
+  status: string;
+  attempt_count: number;
+  last_error_code?: string | null;
+  last_error_message?: string | null;
+  received_at?: string | null;
+  created_at?: string | null;
+  next_retry_at?: string | null;
+}
+
+export interface SyncCheckpointItem {
+  stream_name: string;
+  source_system?: string;
+  high_water_revision?: number | string | null;
+  last_cursor?: string | null;
+  last_synced_at?: string | null;
+  sync_status?: string;
+  last_error_code?: string | null;
+  last_error_message?: string | null;
+}
+
+export interface ReconcileOptions {
+  dryRun?: boolean;
+  dispatchRepairs?: boolean;
+  domains?: ReconciliationDomain[];
+  userIds?: number[];
+  courseIds?: number[];
+  profileIds?: string[];
+  limit?: number;
+}
+
+export interface RetrySubjectPayload {
+  userId?: number;
+  externalUserId?: string;
+  courseId?: number;
+  profileId?: string;
+  domains?: ReconciliationDomain[];
+  dryRun?: boolean;
+}
+
+export interface ContractProbeResult {
+  healthy?: boolean;
+  ok?: boolean;
+  ready?: boolean;
+  status?: string;
+  correlationId?: string;
+  checkedAt?: string;
+  contractVersion?: string;
+  local?: Record<string, unknown>;
+  remote?: Record<string, unknown>;
+  courseService?: Record<string, unknown>;
+  molyService?: Record<string, unknown>;
+  handshake?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
 export interface IntegrationOpsOverview {
   killSwitchActive: boolean;
+  killSwitches?: KillSwitchesOverview;
+  rolloutFlags?: Record<string, boolean | string | number>;
   metrics: {
     killSwitchActive: boolean;
     counters: Record<string, number>;
@@ -106,11 +183,17 @@ export interface IntegrationOpsOverview {
   outboxCounts: Record<string, number>;
   stalePendingCount: number;
   conflictCounts: Record<string, number>;
+  v2InboxCounts?: Record<string, number>;
+  v2InboxAttentionItems?: V2InboxAttentionItem[];
+  checkpoints?: SyncCheckpointItem[];
   outboxItems: OutboxOpsItem[];
+  recentOutbox?: OutboxOpsItem[];
   conflicts: ConflictOpsItem[];
+  recentConflicts?: ConflictOpsItem[];
   courseMappings: CourseMappingItem[];
   unmappedCourses: UnmappedCourseItem[];
   reconciliationRuns: ReconciliationRunItem[];
+  latestReconciliationRun?: ReconciliationRunItem | null;
 }
 
 export const courseIntegrationOpsApi = {
@@ -123,8 +206,47 @@ export const courseIntegrationOpsApi = {
   syncOutbox: async (limit = 25) =>
     (await axios.post('/admin/course-integrations/outbox/sync', { limit })).data.data,
 
-  runReconciliation: async (dryRun = true) =>
-    (await axios.post('/admin/course-integrations/reconcile', { dryRun, dispatchRepairs: !dryRun })).data.data,
+  runReconciliation: async (options: boolean | ReconcileOptions = true) => {
+    const opts: ReconcileOptions = typeof options === 'boolean'
+      ? { dryRun: options, dispatchRepairs: !options }
+      : {
+          dryRun: options.dryRun ?? true,
+          dispatchRepairs: options.dispatchRepairs ?? !(options.dryRun ?? true),
+          ...(options.domains && options.domains.length > 0 ? { domains: options.domains } : {}),
+          ...(options.userIds && options.userIds.length > 0 ? { userIds: options.userIds } : {}),
+          ...(options.courseIds && options.courseIds.length > 0 ? { courseIds: options.courseIds } : {}),
+          ...(options.profileIds && options.profileIds.length > 0 ? { profileIds: options.profileIds } : {}),
+          ...(options.limit ? { limit: options.limit } : {}),
+        };
+    return (await axios.post('/admin/course-integrations/reconcile', opts)).data.data;
+  },
+
+  retryV2InboxItem: async (id: number) =>
+    (await axios.post(`/admin/course-integrations/catalog/inbox/${id}/retry`)).data.data,
+
+  runCatalogBackfill: async (payload: { full?: boolean; reset?: boolean; limit?: number } = {}) =>
+    (await axios.post('/admin/course-integrations/catalog/backfill', {
+      full: Boolean(payload.full),
+      reset: payload.reset ?? Boolean(payload.full),
+      ...(payload.limit ? { limit: payload.limit } : {}),
+    })).data.data,
+
+  runCurriculumBackfill: async (
+    courseId: number | string,
+    payload: { remote?: boolean; remoteCourseId?: string | null; profileId?: string | null; limit?: number } = {},
+  ) =>
+    (
+      await axios.post(
+        `/admin/course-integrations/catalog/courses/${encodeURIComponent(String(courseId))}/curriculum/backfill`,
+        payload,
+      )
+    ).data.data,
+
+  retrySubject: async (payload: RetrySubjectPayload) =>
+    (await axios.post('/admin/course-integrations/ops/retry-subject', payload)).data.data,
+
+  probeContract: async (): Promise<ContractProbeResult> =>
+    (await axios.get<{ data: ContractProbeResult }>('/admin/course-integrations/ops/contract-probe')).data.data,
 
   resolveConflict: async (
     conflictId: number,

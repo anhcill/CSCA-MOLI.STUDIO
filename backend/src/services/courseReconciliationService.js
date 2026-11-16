@@ -1,16 +1,33 @@
 const crypto = require("crypto");
 const { CourseApiError } = require("../utils/courseResponses");
 const {
+  buildActiveOfferingMappingSqlPredicate,
+  detectMappingSchemaColumns,
+  resolveOfferingIdFromMapping,
+} = require("../utils/courseMappingResolver");
+const {
+  upsertAssessmentProjectionTx,
+  upsertBookmarkProjectionTx,
+  upsertLearningProgressProjectionTx,
+  upsertNoteProjectionTx,
+  upsertQaThreadProjectionTx,
+} = require("./molyCourseCatalogSyncService");
+const {
   createIntegrationLogger,
   getIntegrationMetricsSnapshot,
+  getKillSwitchesSnapshot,
+  isContentSyncKillSwitchActive,
   isIntegrationKillSwitchActive,
+  isMutationsRepairKillSwitchActive,
   observeMetricLatency,
+  readRolloutPosture,
   recordMetric,
   resolveCorrelationId,
 } = require("../utils/integrationLogger");
 
 const SOURCE_SYSTEM = "moly";
 const TARGET_SYSTEM = "csca-course";
+const VALID_DOMAINS = ["entitlement", "content", "progress"];
 
 function toIso(value) {
   if (!value) return null;
@@ -19,13 +36,62 @@ function toIso(value) {
 }
 
 function normalizeMolyOfferingId(row) {
-  if (!row) return null;
-  const candidate = row.source_system === "moly"
-    ? row.external_course_id
-    : row.metadata?.moly_external_course_id;
-  if (typeof candidate !== "string") return null;
-  const trimmed = candidate.trim();
-  return trimmed.startsWith("moly:") && trimmed.length > 5 ? trimmed : null;
+  return resolveOfferingIdFromMapping(row);
+}
+
+function normalizeDomains(domains) {
+  if (!Array.isArray(domains) || domains.length === 0) {
+    return [...VALID_DOMAINS];
+  }
+  const normalized = [];
+  const seen = new Set();
+  for (const raw of domains) {
+    const val = String(raw || "").trim().toLowerCase();
+    if (VALID_DOMAINS.includes(val) && !seen.has(val)) {
+      seen.add(val);
+      normalized.push(val);
+    }
+  }
+  if (normalized.length === 0) {
+    throw new CourseApiError(
+      422,
+      "VALIDATION_ERROR",
+      "domains must include at least one of: entitlement, content, progress.",
+    );
+  }
+  return normalized;
+}
+
+function toStringList(...sources) {
+  const out = [];
+  const seen = new Set();
+  for (const src of sources) {
+    const arr = Array.isArray(src) ? src : (src != null ? [src] : []);
+    for (const item of arr) {
+      const s = String(item ?? "").trim();
+      if (s && !seen.has(s)) {
+        seen.add(s);
+        out.push(s);
+      }
+    }
+  }
+  return out;
+}
+
+function toPositiveIntList(...sources) {
+  const out = [];
+  const seen = new Set();
+  for (const src of sources) {
+    const arr = Array.isArray(src) ? src : (src != null ? [src] : []);
+    for (const item of arr) {
+      const n = Number(item);
+      if (Number.isSafeInteger(n) && n > 0 && !seen.has(n)) {
+        seen.add(n);
+        out.push(n);
+      }
+    }
+  }
+  return out;
 }
 
 function buildExpectedGrantId({ transactionId, entitlementId, localCourseId }) {
@@ -34,13 +100,14 @@ function buildExpectedGrantId({ transactionId, entitlementId, localCourseId }) {
 }
 
 /**
- * Day 5 reconciliation, operations overview, and safe conflict resolution service
- * for Moly Studio <-> CSCA-Course integration.
+ * Reconciliation, operations overview, and safe conflict resolution service
+ * for Moly Studio <-> CSCA-Course integration (Days 5-10: entitlement, content, and learning drift).
  */
 function createCourseReconciliationService({
   db,
   client = null,
   outbox = null,
+  catalogSync = null,
   now = () => new Date(),
   staleThresholdMinutes = 10,
   env = process.env,
@@ -72,6 +139,7 @@ function createCourseReconciliationService({
   async function schemaCaps(runner = db) {
     const res = await runner.query(
       `SELECT
+         to_regclass('courses') IS NOT NULL AS has_courses,
          to_regclass('integration_outbox') IS NOT NULL AS has_outbox,
          to_regclass('integration_conflicts') IS NOT NULL AS has_conflicts,
          to_regclass('external_course_mappings') IS NOT NULL AS has_mappings,
@@ -82,9 +150,32 @@ function createCourseReconciliationService({
          to_regclass('video_package_courses') IS NOT NULL AS has_video_pkg_courses,
          to_regclass('video_packages') IS NOT NULL AS has_video_packages,
          to_regclass('integration_reconciliation_runs') IS NOT NULL AS has_recon_runs,
-         to_regclass('integration_reconciliation_actions') IS NOT NULL AS has_recon_actions`,
+         to_regclass('integration_reconciliation_actions') IS NOT NULL AS has_recon_actions,
+         to_regclass('course_profile_projections') IS NOT NULL AS has_profile_projections,
+         to_regclass('course_unit_projections') IS NOT NULL AS has_unit_projections,
+         to_regclass('course_file_projections') IS NOT NULL AS has_file_projections,
+         to_regclass('course_progress_projections') IS NOT NULL AS has_progress_projections,
+         to_regclass('course_assessment_projections') IS NOT NULL AS has_assessment_projections,
+         to_regclass('course_note_projections') IS NOT NULL AS has_note_projections,
+         to_regclass('course_bookmark_projections') IS NOT NULL AS has_bookmark_projections,
+         to_regclass('course_qa_thread_projections') IS NOT NULL AS has_qa_thread_projections,
+         to_regclass('moly_course_sync_inbox') IS NOT NULL AS has_v2_inbox,
+         to_regclass('course_sync_checkpoints') IS NOT NULL AS has_checkpoints`,
     );
-    return res.rows[0] || {};
+    const base = res.rows[0] || {};
+    if (base.has_courses) {
+      const colRes = await runner.query(
+        `SELECT attname FROM pg_attribute
+         WHERE attrelid = to_regclass('courses')
+           AND NOT attisdropped
+           AND attname IN ('content_origin', 'remote_course_id', 'sync_revision', 'tombstoned_at')`,
+      );
+      const cols = new Set(colRes.rows.map((r) => r.attname));
+      base.has_course_v2_cols = cols.has("content_origin") && cols.has("remote_course_id") && cols.has("sync_revision");
+    } else {
+      base.has_course_v2_cols = false;
+    }
+    return base;
   }
 
   async function allocateMonotonicTimestamp(txClient, aggregateId, preferredDate) {
@@ -205,7 +296,11 @@ function createCourseReconciliationService({
     const mappings = (await txClient.query(
       "SELECT * FROM external_course_mappings WHERE local_course_id = $1 AND status = 'active' FOR SHARE", [localCourseId],
     )).rows;
-    if (!coursePair || !mappings.some(row => normalizeMolyOfferingId(row) === externalCourseId)) return skip('mapping_changed');
+    const validOfferings = mappings
+      .filter((row) => !row.deleted_at)
+      .map((row) => resolveOfferingIdFromMapping(row))
+      .filter(Boolean);
+    if (!coursePair || !validOfferings.includes(externalCourseId)) return skip('mapping_changed');
     const conflicts = (await txClient.query(
       `SELECT id FROM integration_conflicts WHERE status IN ('open', 'in_review')
        AND (candidate_user_id = $1 OR existing_user_id = $1 OR external_user_id = $2) LIMIT 1`,
@@ -342,61 +437,98 @@ function createCourseReconciliationService({
     return { enqueued: true, outbox: inserted, idempotentReuse: false };
   }
 
-  /**
-   * Executes two-way reconciliation between Moly Studio and CSCA-Course.
-   * Preserves all open identity conflicts untouched and never guesses missing mappings.
-   */
-  async function runReconciliation({
-    dryRun = true,
-    triggerMode = "manual",
-    triggeredBy = null,
-    scopeFilter = {},
-    correlationId = null,
-    limit = 500,
-    staleMinutes = staleThresholdMinutes,
-    dispatchRepairs = true,
-  } = {}) {
-    const startMs = Date.now();
-    const corr = resolveCorrelationId(correlationId);
-    const parsedUserFilter = scopeFilter?.userId != null ? Number(scopeFilter.userId) : null;
-    const extUserFilter = scopeFilter?.externalUserId
-      || (Number.isSafeInteger(parsedUserFilter) && parsedUserFilter > 0 ? `moly:${parsedUserFilter}` : null);
-    const extCourseFilter = scopeFilter?.externalCourseId || null;
+  function createEmptySummaryCounts(mutationsRepairPaused) {
+    return {
+      local_active_remote_missing: 0,
+      local_revoked_remote_active: 0,
+      remote_active_unknown_on_moly: 0,
+      missing_course_mapping: 0,
+      identity_missing_or_conflict: 0,
+      stale_pending_event: 0,
+      dead_letter_event: 0,
+      repaired_grant: 0,
+      repaired_revoke: 0,
+      reused_idempotent: 0,
+      content_course_drift: 0,
+      content_profile_drift: 0,
+      content_unit_drift: 0,
+      content_file_drift: 0,
+      repaired_content_courses: 0,
+      repaired_content_curriculum: 0,
+      progress_unit_drift: 0,
+      progress_assessment_drift: 0,
+      progress_note_drift: 0,
+      progress_bookmark_drift: 0,
+      progress_qa_drift: 0,
+      repaired_progress: 0,
+      repaired_assessments: 0,
+      repaired_notes: 0,
+      repaired_bookmarks: 0,
+      repaired_qa_threads: 0,
+      total_discrepancies: 0,
+      mutations_repair_paused: Boolean(mutationsRepairPaused),
+    };
+  }
 
-    const runRow = await recordRunStart({
-      corr,
-      triggerMode,
-      dryRun,
-      triggeredBy,
-      scopeFilter: {
-        ...(extUserFilter ? { externalUserId: extUserFilter } : {}),
-        ...(extCourseFilter ? { externalCourseId: extCourseFilter } : {}),
-        staleMinutes,
-      },
-    });
-
-    if (isIntegrationKillSwitchActive(env)) {
-      recordMetric("moly.reconciliation.blocked_kill_switch");
-      integrationLog.warn("reconciliation_blocked_kill_switch", { dryRun, triggerMode }, corr);
-      await finalizeRun(runRow?.id, {
-        status: "aborted_kill_switch",
-        summaryCounts: { blocked_by_kill_switch: true },
-        errorCode: "INTEGRATION_KILL_SWITCH_ACTIVE",
-        errorMessage: "Course integration sync is disabled by emergency kill switch.",
-      });
-      throw new CourseApiError(
-        503,
-        "INTEGRATION_KILL_SWITCH_ACTIVE",
-        "Course integration sync is disabled by emergency kill switch.",
-      );
+  function isRemoteNewerRevision(localRow, remoteRevision, remoteUpdatedAt) {
+    if (!localRow) return true;
+    const localRev = Number(localRow.sync_revision ?? localRow.last_revision ?? localRow.source_revision ?? 0);
+    const remRev = Number(remoteRevision || 0);
+    if (remRev > localRev) return true;
+    if (remRev < localRev) return false;
+    const localIso = toIso(localRow.source_updated_at);
+    const remIso = toIso(remoteUpdatedAt);
+    if (remIso && (!localIso || new Date(remIso).getTime() > new Date(localIso).getTime())) {
+      return true;
     }
+    return false;
+  }
 
+  async function resolveLocalUserIdMap(runner, externalUserIds = [], extraUserIds = []) {
+    const map = new Map();
+    for (const uid of extraUserIds) {
+      map.set(`moly:${uid}`, uid);
+    }
+    for (const ext of externalUserIds) {
+      if (typeof ext === "string" && ext.startsWith("moly:")) {
+        const parsed = Number(ext.slice(5));
+        if (Number.isSafeInteger(parsed) && parsed > 0) map.set(ext, parsed);
+      }
+    }
+    const cleanExts = externalUserIds.filter(Boolean);
+    if (cleanExts.length > 0 && (await runner.query("SELECT to_regclass('external_identities') IS NOT NULL AS ok")).rows[0]?.ok) {
+      const idRes = await runner.query(
+        `SELECT external_user_id, user_id
+         FROM external_identities
+         WHERE source_system IN ('moly', 'csca-course')
+           AND status = 'active'
+           AND external_user_id = ANY($1::text[])`,
+        [cleanExts],
+      );
+      for (const r of idRes.rows) {
+        if (r.external_user_id && r.user_id != null) {
+          map.set(r.external_user_id, Number(r.user_id));
+        }
+      }
+    }
+    return map;
+  }
+
+  async function reconcileEntitlementDomain({
+    caps,
+    dryRun,
+    limit,
+    staleMinutes,
+    corr,
+    extUserFilter,
+    extCourseFilter,
+    parsedUserFilter,
+    userIdsFilter,
+    summaryCounts,
+    actions,
+    repairedOutboxIds,
+  }) {
     if (!client || typeof client.queryReconciliationSnapshot !== "function" || !client.isConfigured()) {
-      await finalizeRun(runRow?.id, {
-        status: "failed",
-        errorCode: "COURSE_LMS_NOT_CONFIGURED",
-        errorMessage: "CSCA-Course integration credentials are not configured.",
-      });
       throw new CourseApiError(
         503,
         "COURSE_LMS_NOT_CONFIGURED",
@@ -404,48 +536,39 @@ function createCourseReconciliationService({
       );
     }
 
-    let snapshotRes;
     const observedOutboxes = new Map();
-    try {
-      const observed = await db.query(
-        `SELECT DISTINCT ON (external_grant_id, event_type) id, external_grant_id, event_type, status, remote_status
-         FROM integration_outbox WHERE external_grant_id IS NOT NULL
-         ORDER BY external_grant_id, event_type, id DESC`,
-      );
-      for (const row of observed.rows) observedOutboxes.set(`${row.external_grant_id}:${row.event_type}`, row);
-      snapshotRes = await client.queryReconciliationSnapshot({
-        correlationId: corr,
-        externalUserId: extUserFilter,
-        externalCourseId: extCourseFilter,
-        limit,
-      });
-    } catch (error) {
-      await finalizeRun(runRow?.id, {
-        status: "failed",
-        errorCode: error?.errorCode || error?.code || "RECONCILIATION_SNAPSHOT_FAILED",
-        errorMessage: error?.message || "Failed to fetch CSCA-Course reconciliation snapshot.",
-      });
-      throw error;
-    }
+    const observed = await db.query(
+      `SELECT DISTINCT ON (external_grant_id, event_type) id, external_grant_id, event_type, status, remote_status
+       FROM integration_outbox WHERE external_grant_id IS NOT NULL
+       ORDER BY external_grant_id, event_type, id DESC`,
+    );
+    for (const row of observed.rows) observedOutboxes.set(`${row.external_grant_id}:${row.event_type}`, row);
+
+    const snapshotRes = await client.queryReconciliationSnapshot({
+      correlationId: corr,
+      externalUserId: extUserFilter,
+      externalCourseId: extCourseFilter,
+      limit,
+    });
 
     const remote = snapshotRes.payload.data || {};
-    // Absence from a partial snapshot is not evidence of a missing grant.
     if (remote.complete !== true) {
-      await finalizeRun(runRow?.id, {
-        status: "failed",
-        errorCode: "RECONCILIATION_SNAPSHOT_INCOMPLETE",
-        errorMessage: "A complete snapshot is required. Narrow the reconciliation scope.",
-      });
-      throw new CourseApiError(409, "RECONCILIATION_SNAPSHOT_INCOMPLETE",
-        "A complete snapshot is required. Narrow the reconciliation scope.");
+      throw new CourseApiError(
+        409,
+        "RECONCILIATION_SNAPSHOT_INCOMPLETE",
+        "A complete snapshot is required. Narrow the reconciliation scope.",
+      );
     }
+
     const remoteIdentities = Array.isArray(remote.identities) ? remote.identities : [];
     const remoteConflicts = Array.isArray(remote.open_conflicts) ? remote.open_conflicts : [];
     const remoteEntitlements = Array.isArray(remote.entitlements) ? remote.entitlements : [];
-    const remoteCourseMappings = Array.isArray(remote.course_mappings) ? remote.course_mappings : [];
+    const remoteCourseMappings = [
+      ...(Array.isArray(remote.course_mappings) ? remote.course_mappings : []),
+      ...(Array.isArray(remote.profile_mappings) ? remote.profile_mappings : []),
+    ];
     const remoteInboxSummary = remote.inbox_summary || {};
 
-    const caps = await schemaCaps(db);
     const currentNow = now();
     const nowMs = currentNow.getTime();
     const staleCutoffIso = new Date(nowMs - Math.max(1, Number(staleMinutes) || 10) * 60000).toISOString();
@@ -467,6 +590,10 @@ function createCourseReconciliationService({
          ORDER BY id DESC`,
       )).rows
       : [];
+
+    const userFilterArray = userIdsFilter.length > 0 ? userIdsFilter : null;
+    const singleUserFilter = Number.isSafeInteger(parsedUserFilter) ? parsedUserFilter : null;
+
     const localVideoEntitlements = caps.has_video_entitlements && caps.has_video_ent_courses
       ? (await db.query(
         `SELECT e.id AS entitlement_id, e.user_id, e.video_package_id, e.transaction_id,
@@ -478,9 +605,10 @@ function createCourseReconciliationService({
          JOIN video_entitlement_courses ec ON ec.entitlement_id = e.id
          JOIN users u ON u.id = e.user_id
          WHERE ($1::int IS NULL OR e.user_id = $1)
-           AND ($2::text IS NULL OR 'moly:' || e.user_id::text = $2)
+           AND ($2::int[] IS NULL OR e.user_id = ANY($2::int[]))
+           AND ($3::text IS NULL OR 'moly:' || e.user_id::text = $3)
          ORDER BY e.id DESC, ec.course_id ASC`,
-        [Number.isSafeInteger(parsedUserFilter) ? parsedUserFilter : null, extUserFilter],
+        [singleUserFilter, userFilterArray, extUserFilter],
       )).rows
       : [];
     const localExtEntitlements = caps.has_ext_entitlements
@@ -490,8 +618,9 @@ function createCourseReconciliationService({
                 effective_owned, origin_system, source_updated_at
          FROM external_entitlements
          WHERE ($1::int IS NULL OR user_id = $1)
+           AND ($2::int[] IS NULL OR user_id = ANY($2::int[]))
          ORDER BY id DESC`,
-        [Number.isSafeInteger(parsedUserFilter) ? parsedUserFilter : null],
+        [singleUserFilter, userFilterArray],
       )).rows
       : [];
     const localOutboxRows = caps.has_outbox
@@ -502,29 +631,41 @@ function createCourseReconciliationService({
                 external_grant_id, external_course_id, created_at, updated_at
          FROM integration_outbox
          WHERE ($1::int IS NULL OR user_id = $1)
+           AND ($2::int[] IS NULL OR user_id = ANY($2::int[]))
          ORDER BY id DESC`,
-        [Number.isSafeInteger(parsedUserFilter) ? parsedUserFilter : null],
+        [singleUserFilter, userFilterArray],
       )).rows
       : [];
 
-    // Build lookups.
-    const activeMappingByLocalCourse = new Map();
+    const activeMappingsByLocalCourse = new Map();
     for (const m of localMappings) {
-      if (m.status !== "active") continue;
-      const offeringId = normalizeMolyOfferingId(m);
-      if (offeringId && !activeMappingByLocalCourse.has(Number(m.local_course_id))) {
-        activeMappingByLocalCourse.set(Number(m.local_course_id), {
-          ...m,
-          offeringId,
-        });
+      if (m.status !== "active" || m.deleted_at != null) continue;
+      const offeringId = resolveOfferingIdFromMapping(m);
+      if (!offeringId) continue;
+      const cid = Number(m.local_course_id);
+      if (!activeMappingsByLocalCourse.has(cid)) {
+        activeMappingsByLocalCourse.set(cid, []);
       }
+      activeMappingsByLocalCourse.get(cid).push({ ...m, offeringId });
     }
 
     const remoteActiveMappingOfferings = new Set();
     for (const rm of remoteCourseMappings) {
-      if (rm.status !== "active") continue;
-      const offeringId = normalizeMolyOfferingId(rm);
-      if (offeringId) remoteActiveMappingOfferings.add(offeringId);
+      if (rm.status !== "active" || rm.deleted_at != null) continue;
+      const resolved = resolveOfferingIdFromMapping(rm);
+      if (resolved) remoteActiveMappingOfferings.add(resolved);
+      if (typeof rm.external_course_id === "string" && rm.external_course_id.trim()) {
+        const ext = rm.external_course_id.trim();
+        if (ext.startsWith("moly:") || ext.startsWith("profile:")) {
+          remoteActiveMappingOfferings.add(ext);
+        }
+      }
+      if (typeof rm.remote_profile_id === "string" && rm.remote_profile_id.trim()) {
+        remoteActiveMappingOfferings.add(`profile:${rm.remote_profile_id.trim()}`);
+      }
+      if (typeof rm.profile_id === "string" && rm.profile_id.trim()) {
+        remoteActiveMappingOfferings.add(`profile:${rm.profile_id.trim()}`);
+      }
     }
 
     const remoteIdentityByExtUser = new Map();
@@ -534,23 +675,8 @@ function createCourseReconciliationService({
       }
     }
 
-    // Open conflict tracking across BOTH systems. Never auto-repair quarantined subjects!
     const conflictExtUsers = new Set();
     const conflictLocalUsers = new Set();
-    const actions = [];
-    const summaryCounts = {
-      local_active_remote_missing: 0,
-      local_revoked_remote_active: 0,
-      remote_active_unknown_on_moly: 0,
-      missing_course_mapping: 0,
-      identity_missing_or_conflict: 0,
-      stale_pending_event: 0,
-      dead_letter_event: 0,
-      repaired_grant: 0,
-      repaired_revoke: 0,
-      reused_idempotent: 0,
-      total_discrepancies: 0,
-    };
 
     const seenConflictKeys = new Set();
     for (const c of [...localConflicts, ...remoteConflicts]) {
@@ -603,7 +729,6 @@ function createCourseReconciliationService({
       }
     }
 
-    // Index remote grants.
     const remoteByGrantId = new Map();
     for (const re of remoteEntitlements) {
       if (re.external_grant_id) {
@@ -611,22 +736,12 @@ function createCourseReconciliationService({
       }
     }
 
-    // Index outbox original saved grant ids by (entitlement_id, local_course_id) when present.
-    const outboxGrantByEntCourse = new Map();
-    for (const ob of localOutboxRows) {
-      if (ob.event_type === "entitlement.granted" && ob.entitlement_id && ob.external_grant_id) {
-        outboxGrantByEntCourse.set(`${Number(ob.entitlement_id)}:${ob.external_grant_id}`, ob);
-      }
-    }
-
     const knownLocalGrantIds = new Set();
     const knownLocalMirroredGrantIds = new Set(
       localExtEntitlements.map((row) => row.external_grant_id).filter(Boolean),
     );
-    const repairedOutboxIds = [];
     const seenMissingCourseIds = new Set();
 
-    // Check unmapped courses used in active video_package_courses too.
     if (caps.has_video_pkg_courses && caps.has_video_packages) {
       const pkgCourseRows = (await db.query(
         `SELECT DISTINCT vpc.course_id
@@ -636,7 +751,7 @@ function createCourseReconciliationService({
       )).rows;
       for (const row of pkgCourseRows) {
         const lcid = Number(row.course_id);
-        if (!activeMappingByLocalCourse.has(lcid) && !seenMissingCourseIds.has(lcid)) {
+        if (!activeMappingsByLocalCourse.has(lcid) && !seenMissingCourseIds.has(lcid)) {
           seenMissingCourseIds.add(lcid);
           summaryCounts.missing_course_mapping += 1;
           actions.push({
@@ -651,13 +766,11 @@ function createCourseReconciliationService({
       }
     }
 
-    // 1) Reconcile every Moly local entitlement course pair -> Course.
     for (const ent of localVideoEntitlements) {
       const uid = Number(ent.user_id);
       const extUserId = `moly:${uid}`;
       const localCourseId = Number(ent.local_course_id);
-      const mapping = activeMappingByLocalCourse.get(localCourseId) || null;
-      if (extCourseFilter && mapping?.offeringId !== extCourseFilter) continue;
+      const candidates = activeMappingsByLocalCourse.get(localCourseId) || [];
       const expectedGrantId = buildExpectedGrantId({
         transactionId: ent.transaction_id,
         entitlementId: ent.entitlement_id,
@@ -665,13 +778,18 @@ function createCourseReconciliationService({
       });
       knownLocalGrantIds.add(expectedGrantId);
 
-      // Track any historical tx/ent alternate key too if present in outbox.
+      const remoteMatch = remoteByGrantId.get(expectedGrantId) || null;
+      const mapping = (extCourseFilter && candidates.find((c) => c.offeringId === extCourseFilter))
+        || (remoteMatch?.external_course_id && candidates.find((c) => c.offeringId === remoteMatch.external_course_id))
+        || candidates.find((c) => remoteActiveMappingOfferings.has(c.offeringId))
+        || candidates[0]
+        || null;
+      if (extCourseFilter && mapping?.offeringId !== extCourseFilter) continue;
+
       const startsOk = !ent.starts_at || new Date(ent.starts_at).getTime() <= nowMs;
       const notExpired = !ent.expires_at || new Date(ent.expires_at).getTime() > nowMs;
       const isLocalActive = ent.status === "active" && startsOk && notExpired && ent.user_is_active !== false;
       const isLocalRevokedOrExpired = ent.status === "revoked" || (ent.expires_at && new Date(ent.expires_at).getTime() <= nowMs);
-
-      const remoteMatch = remoteByGrantId.get(expectedGrantId) || null;
 
       if (!mapping) {
         if (isLocalActive && !seenMissingCourseIds.has(localCourseId)) {
@@ -714,7 +832,6 @@ function createCourseReconciliationService({
       const remoteIdentity = remoteIdentityByExtUser.get(extUserId) || null;
       const identityAmbiguous = conflictBlocked || (remoteIdentity && remoteIdentity.status !== "active");
 
-      // Category 1: local active vs remote missing.
       if (isLocalActive && (!remoteMatch || remoteMatch.effective_active !== true)) {
         summaryCounts.local_active_remote_missing += 1;
         if (identityAmbiguous) {
@@ -732,7 +849,6 @@ function createCourseReconciliationService({
           });
           continue;
         }
-
         if (dryRun) {
           actions.push({
             correlationId: corr,
@@ -794,7 +910,6 @@ function createCourseReconciliationService({
         });
       }
 
-      // Category 2: local revoked/expired vs remote active.
       if (!isLocalActive && isLocalRevokedOrExpired && remoteMatch && remoteMatch.effective_active === true) {
         summaryCounts.local_revoked_remote_active += 1;
         if (identityAmbiguous) {
@@ -812,7 +927,6 @@ function createCourseReconciliationService({
           });
           continue;
         }
-
         if (dryRun) {
           actions.push({
             correlationId: corr,
@@ -871,7 +985,6 @@ function createCourseReconciliationService({
       }
     }
 
-    // 2) Detect remote active grants that do NOT have any matching Moly entitlement or local mirror.
     for (const re of remoteEntitlements) {
       if (!re.effective_active) continue;
       const grantId = re.external_grant_id;
@@ -912,7 +1025,6 @@ function createCourseReconciliationService({
       }
     }
 
-    // 3) Detect stale pending outbox & dead-letter outbox events (+ remote inbox summary alerts).
     const cutoffMs = new Date(staleCutoffIso).getTime();
     for (const ob of localOutboxRows) {
       const createdMs = ob.created_at ? new Date(ob.created_at).getTime() : nowMs;
@@ -940,7 +1052,6 @@ function createCourseReconciliationService({
           },
         });
       }
-
       if (ob.status === "dead_letter" || (ob.status === "sent" && ob.remote_status === "dead_letter")) {
         summaryCounts.dead_letter_event += 1;
         actions.push({
@@ -985,6 +1096,1087 @@ function createCourseReconciliationService({
         });
       }
     }
+  }
+
+  async function reconcileContentDomain({
+    caps,
+    dryRun,
+    limit,
+    corr,
+    courseIds,
+    profileIds,
+    explicitlyRequested,
+    summaryCounts,
+    actions,
+  }) {
+    if (!caps.has_profile_projections && !caps.has_unit_projections) {
+      return { skipped: true, reason: "content_projection_schema_missing" };
+    }
+    if (!client || (typeof client.isConfigured === "function" && !client.isConfigured())) {
+      if (explicitlyRequested) {
+        throw new CourseApiError(
+          503,
+          "COURSE_LMS_NOT_CONFIGURED",
+          "CSCA-Course integration credentials are not configured.",
+        );
+      }
+      return { skipped: true, reason: "client_not_configured" };
+    }
+    if (typeof client.fetchContentReconciliationSnapshot !== "function") {
+      return { skipped: true, reason: "content_snapshot_method_missing" };
+    }
+
+    let remoteContent;
+    try {
+      remoteContent = await client.fetchContentReconciliationSnapshot({
+        courseIds,
+        profileIds,
+        limit,
+        correlationId: corr,
+        maxTransportAttempts: explicitlyRequested ? undefined : 1,
+      }) || {};
+    } catch (error) {
+      const status = error?.status ?? error?.httpStatus ?? null;
+      if (!explicitlyRequested && (status === 404 || status === 501)) {
+        integrationLog.warn("reconcile_content_endpoint_unsupported", { status }, corr);
+        return { skipped: true, reason: "remote_endpoint_not_found" };
+      }
+      throw error;
+    }
+
+    const remoteCourses = Array.isArray(remoteContent.courses) ? remoteContent.courses : [];
+    const nestedProfiles = remoteCourses.flatMap((c) => (
+      Array.isArray(c?.profiles) ? c.profiles.map((p) => ({ courseId: c.courseId ?? c.remoteCourseId ?? c.id, ...p })) : []
+    ));
+    const remoteProfiles = [
+      ...(Array.isArray(remoteContent.profiles) ? remoteContent.profiles : []),
+      ...(Array.isArray(remoteContent.courseProfiles) ? remoteContent.courseProfiles : []),
+      ...(Array.isArray(remoteContent.course_profiles) ? remoteContent.course_profiles : []),
+      ...nestedProfiles,
+    ];
+    const remoteUnits = [
+      ...(Array.isArray(remoteContent.units) ? remoteContent.units : []),
+      ...(Array.isArray(remoteContent.curriculumUnits) ? remoteContent.curriculumUnits : []),
+      ...(Array.isArray(remoteContent.curriculum_units) ? remoteContent.curriculum_units : []),
+    ];
+    const remoteFiles = [
+      ...(Array.isArray(remoteContent.files) ? remoteContent.files : []),
+      ...(Array.isArray(remoteContent.unitFiles) ? remoteContent.unitFiles : []),
+      ...(Array.isArray(remoteContent.unit_files) ? remoteContent.unit_files : []),
+    ];
+
+    const localCourses = caps.has_courses && caps.has_course_v2_cols
+      ? (await db.query(
+        `SELECT id, remote_course_id, title, status, sync_revision, source_updated_at, tombstoned_at
+         FROM courses
+         WHERE (content_origin = 'csca_course' OR remote_course_id IS NOT NULL)
+           AND ($1::text[] IS NULL OR remote_course_id = ANY($1::text[]))`,
+        [courseIds.length ? courseIds : null],
+      )).rows
+      : [];
+    const localProfiles = caps.has_profile_projections
+      ? (await db.query(
+        `SELECT id, remote_course_id, remote_profile_id, external_offering_id, local_course_id,
+                mode, status, last_revision, source_updated_at, deleted_at
+         FROM course_profile_projections
+         WHERE ($1::text[] IS NULL OR remote_course_id = ANY($1::text[]))
+           AND ($2::text[] IS NULL OR remote_profile_id = ANY($2::text[]))`,
+        [courseIds.length ? courseIds : null, profileIds.length ? profileIds : null],
+      )).rows
+      : [];
+    const localUnits = caps.has_unit_projections && caps.has_profile_projections
+      ? (await db.query(
+        `SELECT u.id, u.profile_projection_id, u.local_course_id, u.unit_type, u.remote_unit_id,
+                u.file_count, u.is_published, u.last_revision, u.source_updated_at, u.deleted_at,
+                p.remote_profile_id, p.remote_course_id
+         FROM course_unit_projections u
+         JOIN course_profile_projections p ON p.id = u.profile_projection_id
+         WHERE ($1::text[] IS NULL OR p.remote_course_id = ANY($1::text[]))
+           AND ($2::text[] IS NULL OR p.remote_profile_id = ANY($2::text[]))`,
+        [courseIds.length ? courseIds : null, profileIds.length ? profileIds : null],
+      )).rows
+      : [];
+    const localFiles = caps.has_file_projections && caps.has_unit_projections && caps.has_profile_projections
+      ? (await db.query(
+        `SELECT f.id, f.profile_projection_id, f.unit_projection_id, f.remote_file_id,
+                f.is_published, f.last_revision, f.source_updated_at, f.deleted_at,
+                u.remote_unit_id, p.remote_profile_id, p.remote_course_id, p.local_course_id
+         FROM course_file_projections f
+         JOIN course_unit_projections u ON u.id = f.unit_projection_id
+         JOIN course_profile_projections p ON p.id = f.profile_projection_id
+         WHERE ($1::text[] IS NULL OR p.remote_course_id = ANY($1::text[]))
+           AND ($2::text[] IS NULL OR p.remote_profile_id = ANY($2::text[]))`,
+        [courseIds.length ? courseIds : null, profileIds.length ? profileIds : null],
+      )).rows
+      : [];
+
+    const localCourseByRemote = new Map(localCourses.map((c) => [String(c.remote_course_id), c]));
+    const localProfileByRemote = new Map(localProfiles.map((p) => [String(p.remote_profile_id), p]));
+    const localUnitByKey = new Map(
+      localUnits.map((u) => [`${u.remote_profile_id}:${u.unit_type || "lesson"}:${u.remote_unit_id}`, u]),
+    );
+    const localFileByKey = new Map(
+      localFiles.map((f) => [`${f.remote_profile_id}:${f.remote_file_id}`, f]),
+    );
+    const localUnitCountByProfId = new Map();
+    for (const u of localUnits) {
+      if (!u.deleted_at) {
+        const key = String(u.profile_projection_id);
+        localUnitCountByProfId.set(key, (localUnitCountByProfId.get(key) || 0) + 1);
+      }
+    }
+    const localFileCountByProfId = new Map();
+    for (const f of localFiles) {
+      if (!f.deleted_at) {
+        const key = String(f.profile_projection_id);
+        localFileCountByProfId.set(key, (localFileCountByProfId.get(key) || 0) + 1);
+      }
+    }
+
+    const driftedRemoteCourseIds = new Set();
+    const curriculumLocalCourseIds = new Set();
+    const curriculumRemoteCourseIds = new Set();
+
+    for (const rc of remoteCourses) {
+      const rcid = String(rc.courseId ?? rc.remoteCourseId ?? rc.remote_course_id ?? rc.id ?? "").trim();
+      if (!rcid) continue;
+      const localCourse = localCourseByRemote.get(rcid) || null;
+      const remRev = Number(rc.syncRevision ?? rc.revision ?? rc.lastRevision ?? rc.last_revision ?? rc.sourceRevision ?? 1);
+      const remUpdated = rc.sourceUpdatedAt ?? rc.source_updated_at ?? rc.updatedAt ?? rc.updated_at;
+      const remDeleted = Boolean(rc.deleted || rc.deletedAt || rc.deleted_at || rc.status === "tombstoned");
+      const revBehind = isRemoteNewerRevision(localCourse, remRev, remUpdated);
+      const tombMismatch = localCourse ? remDeleted !== Boolean(localCourse.tombstoned_at) : !remDeleted;
+      const remotePub = rc.isPublished != null
+        ? Boolean(rc.isPublished)
+        : (rc.status != null ? String(rc.status).toLowerCase() === "published" : null);
+      const pubMismatch = Boolean(localCourse && remotePub != null && remotePub !== (localCourse.status === "published"));
+      if (!localCourse || revBehind || tombMismatch || pubMismatch) {
+        if (!localCourse && remDeleted) continue;
+        summaryCounts.content_course_drift += 1;
+        driftedRemoteCourseIds.add(rcid);
+        curriculumRemoteCourseIds.add(rcid);
+        if (localCourse?.id) curriculumLocalCourseIds.add(Number(localCourse.id));
+        actions.push({
+          correlationId: corr,
+          category: "content_course_drift",
+          actionTaken: dryRun ? "planned_catalog_backfill" : "pending_catalog_backfill",
+          sourceSystem: TARGET_SYSTEM,
+          localCourseId: localCourse ? Number(localCourse.id) : null,
+          externalCourseId: `course:${rcid}`,
+          details: {
+            remoteCourseId: rcid,
+            localRevision: localCourse ? Number(localCourse.sync_revision || 0) : null,
+            remoteRevision: remRev,
+          },
+        });
+      }
+    }
+
+    for (const rp of remoteProfiles) {
+      const rpid = String(rp.profileId ?? rp.remoteProfileId ?? rp.remote_profile_id ?? rp.id ?? "").trim();
+      const rcid = String(rp.courseId ?? rp.remoteCourseId ?? rp.remote_course_id ?? "").trim();
+      if (!rpid) continue;
+      const localProf = localProfileByRemote.get(rpid) || null;
+      const remRev = Number(rp.syncRevision ?? rp.revision ?? rp.lastRevision ?? rp.last_revision ?? 1);
+      const remUpdated = rp.sourceUpdatedAt ?? rp.source_updated_at ?? rp.updatedAt;
+      const remDeleted = Boolean(rp.deleted || rp.deletedAt || rp.deleted_at || rp.status === "tombstoned");
+      const statusMismatch = Boolean(localProf && rp.status && String(rp.status).toLowerCase() !== String(localProf.status || "").toLowerCase());
+      const revBehind = isRemoteNewerRevision(localProf, remRev, remUpdated);
+      const tombMismatch = localProf ? remDeleted !== Boolean(localProf.deleted_at) : !remDeleted;
+      const resolvedRcId = rcid || (localProf?.remote_course_id ? String(localProf.remote_course_id) : "");
+
+      if (!localProf || revBehind || tombMismatch || statusMismatch) {
+        if (!localProf && remDeleted) continue;
+        summaryCounts.content_profile_drift += 1;
+        if (resolvedRcId) {
+          driftedRemoteCourseIds.add(resolvedRcId);
+          curriculumRemoteCourseIds.add(resolvedRcId);
+        }
+        if (localProf?.local_course_id) curriculumLocalCourseIds.add(Number(localProf.local_course_id));
+        actions.push({
+          correlationId: corr,
+          category: "content_profile_drift",
+          actionTaken: dryRun ? "planned_profile_sync" : "pending_profile_sync",
+          sourceSystem: TARGET_SYSTEM,
+          localCourseId: localProf ? Number(localProf.local_course_id) : null,
+          externalCourseId: `profile:${rpid}`,
+          details: {
+            remoteProfileId: rpid,
+            remoteCourseId: resolvedRcId || null,
+            localRevision: localProf ? Number(localProf.last_revision || 0) : null,
+            remoteRevision: remRev,
+          },
+        });
+      }
+
+      if (localProf && !remDeleted && caps.has_unit_projections && remoteUnits.length === 0 && rp.activeUnitCount != null) {
+        const localUnitCnt = localUnitCountByProfId.get(String(localProf.id)) || 0;
+        if (Number(rp.activeUnitCount) !== localUnitCnt) {
+          summaryCounts.content_unit_drift += 1;
+          if (resolvedRcId) curriculumRemoteCourseIds.add(resolvedRcId);
+          if (localProf.local_course_id) curriculumLocalCourseIds.add(Number(localProf.local_course_id));
+          actions.push({
+            correlationId: corr,
+            category: "content_unit_drift",
+            actionTaken: dryRun ? "planned_curriculum_backfill" : "pending_curriculum_backfill",
+            sourceSystem: TARGET_SYSTEM,
+            localCourseId: Number(localProf.local_course_id),
+            externalCourseId: `profile:${rpid}`,
+            details: {
+              remoteProfileId: rpid,
+              localUnitCount: localUnitCnt,
+              remoteUnitCount: Number(rp.activeUnitCount),
+            },
+          });
+        }
+      }
+
+      if (localProf && !remDeleted && caps.has_file_projections && remoteFiles.length === 0 && rp.activeFilePlacementCount != null) {
+        const localFileCnt = localFileCountByProfId.get(String(localProf.id)) || 0;
+        if (Number(rp.activeFilePlacementCount) !== localFileCnt) {
+          summaryCounts.content_file_drift += 1;
+          if (resolvedRcId) curriculumRemoteCourseIds.add(resolvedRcId);
+          if (localProf.local_course_id) curriculumLocalCourseIds.add(Number(localProf.local_course_id));
+          actions.push({
+            correlationId: corr,
+            category: "content_file_drift",
+            actionTaken: dryRun ? "planned_file_backfill" : "pending_file_backfill",
+            sourceSystem: TARGET_SYSTEM,
+            localCourseId: Number(localProf.local_course_id),
+            externalCourseId: `profile:${rpid}`,
+            details: {
+              remoteProfileId: rpid,
+              localFileCount: localFileCnt,
+              remoteFileCount: Number(rp.activeFilePlacementCount),
+            },
+          });
+        }
+      }
+    }
+
+    for (const ru of remoteUnits) {
+      const rpid = String(ru.profileId ?? ru.remoteProfileId ?? ru.remote_profile_id ?? "").trim();
+      const ruid = String(ru.unitId ?? ru.remoteUnitId ?? ru.remote_unit_id ?? ru.id ?? "").trim();
+      const uType = String(ru.unitType ?? ru.unit_type ?? "lesson").toLowerCase() === "class_session" ? "class_session" : "lesson";
+      if (!rpid || !ruid) continue;
+      const localProf = localProfileByRemote.get(rpid) || null;
+      const localUnit = localUnitByKey.get(`${rpid}:${uType}:${ruid}`) || null;
+      const remRev = Number(ru.revision ?? ru.lastRevision ?? ru.last_revision ?? 1);
+      const remUpdated = ru.sourceUpdatedAt ?? ru.source_updated_at ?? ru.updatedAt;
+      const remDeleted = Boolean(ru.deleted || ru.deletedAt || ru.deleted_at);
+      const remFileCount = ru.fileCount ?? ru.file_count ?? null;
+      const revBehind = isRemoteNewerRevision(localUnit, remRev, remUpdated);
+      const tombMismatch = localUnit ? remDeleted !== Boolean(localUnit.deleted_at) : !remDeleted;
+      const fileCountMismatch = localUnit && remFileCount != null && Number(remFileCount) !== Number(localUnit.file_count || 0);
+      if (!localUnit || revBehind || tombMismatch || fileCountMismatch) {
+        if (!localUnit && remDeleted) continue;
+        summaryCounts.content_unit_drift += 1;
+        if (localProf?.local_course_id) curriculumLocalCourseIds.add(Number(localProf.local_course_id));
+        if (localProf?.remote_course_id) {
+          driftedRemoteCourseIds.add(String(localProf.remote_course_id));
+          curriculumRemoteCourseIds.add(String(localProf.remote_course_id));
+        }
+        actions.push({
+          correlationId: corr,
+          category: "content_unit_drift",
+          actionTaken: dryRun ? "planned_curriculum_backfill" : "pending_curriculum_backfill",
+          sourceSystem: TARGET_SYSTEM,
+          localCourseId: localProf ? Number(localProf.local_course_id) : null,
+          externalCourseId: `profile:${rpid}`,
+          details: { remoteProfileId: rpid, remoteUnitId: ruid, unitType: uType, remoteRevision: remRev },
+        });
+      }
+    }
+
+    for (const rf of remoteFiles) {
+      const rpid = String(rf.profileId ?? rf.remoteProfileId ?? rf.remote_profile_id ?? "").trim();
+      const rfid = String(rf.fileId ?? rf.remoteFileId ?? rf.remote_file_id ?? rf.id ?? "").trim();
+      if (!rpid || !rfid) continue;
+      const localProf = localProfileByRemote.get(rpid) || null;
+      const localFile = localFileByKey.get(`${rpid}:${rfid}`) || null;
+      const remRev = Number(rf.revision ?? rf.lastRevision ?? rf.last_revision ?? 1);
+      const remUpdated = rf.sourceUpdatedAt ?? rf.source_updated_at ?? rf.updatedAt;
+      const remDeleted = Boolean(rf.deleted || rf.deletedAt || rf.deleted_at);
+      const revBehind = isRemoteNewerRevision(localFile, remRev, remUpdated);
+      const tombMismatch = localFile ? remDeleted !== Boolean(localFile.deleted_at) : !remDeleted;
+      if (!localFile || revBehind || tombMismatch) {
+        if (!localFile && remDeleted) continue;
+        summaryCounts.content_file_drift += 1;
+        if (localProf?.local_course_id) curriculumLocalCourseIds.add(Number(localProf.local_course_id));
+        if (localProf?.remote_course_id) curriculumRemoteCourseIds.add(String(localProf.remote_course_id));
+        actions.push({
+          correlationId: corr,
+          category: "content_file_drift",
+          actionTaken: dryRun ? "planned_file_backfill" : "pending_file_backfill",
+          sourceSystem: TARGET_SYSTEM,
+          localCourseId: localProf ? Number(localProf.local_course_id) : null,
+          externalCourseId: `profile:${rpid}`,
+          details: { remoteProfileId: rpid, remoteFileId: rfid, remoteRevision: remRev },
+        });
+      }
+    }
+
+    const totalContentDrift = summaryCounts.content_course_drift
+      + summaryCounts.content_profile_drift
+      + summaryCounts.content_unit_drift
+      + summaryCounts.content_file_drift;
+
+    if (!dryRun && totalContentDrift > 0) {
+      if (isContentSyncKillSwitchActive(env)) {
+        actions.push({
+          correlationId: corr,
+          category: "content_repair",
+          actionTaken: "skipped_due_to_content_sync_kill_switch",
+          sourceSystem: TARGET_SYSTEM,
+          details: { totalContentDrift },
+        });
+      } else if (catalogSync) {
+        if (driftedRemoteCourseIds.size > 0 && typeof catalogSync.runCatalogBackfill === "function") {
+          const backfillRes = await catalogSync.runCatalogBackfill({
+            reset: courseIds.length > 0,
+            correlationId: corr,
+            maxPages: 50,
+          });
+          summaryCounts.repaired_content_courses += Number(backfillRes?.coursesApplied || 0);
+          if (caps.has_profile_projections) {
+            const resolvedCourses = await db.query(
+              `SELECT DISTINCT local_course_id, remote_course_id FROM course_profile_projections
+               WHERE remote_course_id = ANY($1::text[])`,
+              [Array.from(driftedRemoteCourseIds)],
+            );
+            for (const r of resolvedCourses.rows) {
+              if (r.local_course_id != null) curriculumLocalCourseIds.add(Number(r.local_course_id));
+              if (r.remote_course_id != null) curriculumRemoteCourseIds.add(String(r.remote_course_id));
+            }
+          }
+        }
+        if (curriculumLocalCourseIds.size > 0 && caps.has_profile_projections) {
+          const missingRc = await db.query(
+            `SELECT DISTINCT remote_course_id FROM course_profile_projections WHERE local_course_id = ANY($1::bigint[])`,
+            [Array.from(curriculumLocalCourseIds)],
+          );
+          for (const r of missingRc.rows) {
+            if (r.remote_course_id) curriculumRemoteCourseIds.add(String(r.remote_course_id));
+          }
+        }
+        if (curriculumRemoteCourseIds.size > 0 && typeof catalogSync.runCurriculumBackfill === "function") {
+          for (const rcId of curriculumRemoteCourseIds) {
+            const currRes = await catalogSync.runCurriculumBackfill({
+              remoteCourseId: rcId,
+              correlationId: corr,
+            });
+            summaryCounts.repaired_content_curriculum += Number(currRes?.unitsApplied || 0);
+          }
+        }
+      }
+    }
+
+    return { skipped: false };
+  }
+
+  async function reconcileProgressDomain({
+    caps,
+    dryRun,
+    limit,
+    corr,
+    userIds,
+    externalUserIds,
+    courseIds,
+    profileIds,
+    explicitlyRequested,
+    summaryCounts,
+    actions,
+  }) {
+    if (!caps.has_progress_projections) {
+      return { skipped: true, reason: "learning_projection_schema_missing" };
+    }
+    if (!client || (typeof client.isConfigured === "function" && !client.isConfigured())) {
+      if (explicitlyRequested) {
+        throw new CourseApiError(
+          503,
+          "COURSE_LMS_NOT_CONFIGURED",
+          "CSCA-Course integration credentials are not configured.",
+        );
+      }
+      return { skipped: true, reason: "client_not_configured" };
+    }
+    if (typeof client.fetchLearningReconciliationSnapshot !== "function") {
+      return { skipped: true, reason: "learning_snapshot_method_missing" };
+    }
+
+    let remoteLearning;
+    try {
+      remoteLearning = await client.fetchLearningReconciliationSnapshot({
+        userIds,
+        externalUserIds,
+        courseIds,
+        profileIds,
+        limit,
+        correlationId: corr,
+        maxTransportAttempts: explicitlyRequested ? undefined : 1,
+      }) || {};
+    } catch (error) {
+      const status = error?.status ?? error?.httpStatus ?? null;
+      if (!explicitlyRequested && (status === 404 || status === 501)) {
+        integrationLog.warn("reconcile_learning_endpoint_unsupported", { status }, corr);
+        return { skipped: true, reason: "remote_endpoint_not_found" };
+      }
+      throw error;
+    }
+
+    const directProgress = Array.isArray(remoteLearning.progress)
+      ? remoteLearning.progress
+      : (Array.isArray(remoteLearning.progressEntries) ? remoteLearning.progressEntries : []);
+    const directAssessments = Array.isArray(remoteLearning.assessments) ? remoteLearning.assessments : [];
+    const remoteVwpList = Array.isArray(remoteLearning.videoWatchProgress) ? remoteLearning.videoWatchProgress : [];
+    const remoteSeqList = Array.isArray(remoteLearning.sequentialUnitCompletions)
+      ? remoteLearning.sequentialUnitCompletions
+      : [];
+    const remoteQuizAttempts = Array.isArray(remoteLearning.quizAttempts) ? remoteLearning.quizAttempts : [];
+    const remoteAssignments = Array.isArray(remoteLearning.assignmentSubmissions)
+      ? remoteLearning.assignmentSubmissions
+      : [];
+
+    const vwpByUnitKey = new Map();
+    for (const v of remoteVwpList) {
+      const uidPart = String(v.userId ?? v.user_id ?? "").trim();
+      const unitPart = v.classSessionId != null
+        ? `class_session:${v.classSessionId}`
+        : v.lessonId != null
+          ? `lesson:${v.lessonId}`
+          : null;
+      if (uidPart && unitPart) {
+        vwpByUnitKey.set(`${uidPart}:${unitPart}`, v);
+      }
+    }
+
+    const synthesizedProgress = [];
+    for (const seq of remoteSeqList) {
+      const unitsArr = Array.isArray(seq?.units) ? seq.units : [];
+      for (const u of unitsArr) {
+        const uType = String(u.unitType ?? u.unit_type ?? "lesson").toLowerCase() === "class_session" ? "class_session" : "lesson";
+        const uId = String(u.unitId ?? u.id ?? "").trim();
+        if (!uId) continue;
+        const vwp = vwpByUnitKey.get(`${String(seq.userId ?? "")}:${uType}:${uId}`) || null;
+        synthesizedProgress.push({
+          userId: seq.userId,
+          externalUserIds: seq.externalUserIds,
+          courseId: seq.courseId,
+          profileId: seq.profileId,
+          unitType: uType,
+          unitId: uId,
+          watchedSeconds: vwp?.watchedSeconds ?? 0,
+          lastPositionSeconds: vwp?.lastPositionSeconds ?? 0,
+          completionPct: Number(u.progressPercent ?? vwp?.completionPercent ?? 0),
+          isVideoCompleted: Boolean(u.isVideoCompleted ?? vwp?.isCompleted),
+          isQuizCompleted: Boolean(u.isQuizCompleted),
+          isUnitCompleted: Boolean(u.isCompleted),
+          isUnlocked: !Boolean(u.isLocked),
+          courseCompletionPct: seq.courseCompletionPct ?? null,
+          revision: Number(vwp?.syncRevision ?? 1),
+          updatedAt: vwp?.updatedAt ?? remoteLearning.checkedAt ?? null,
+        });
+      }
+    }
+    const remoteProgress = directProgress.length > 0 ? directProgress : synthesizedProgress;
+
+    const synthesizedAssessments = [
+      ...remoteQuizAttempts.map((q) => ({
+        itemType: "quiz",
+        itemId: q.quizId ?? q.quiz_id,
+        remoteAttemptOrSubId: q.id,
+        userId: q.userId ?? q.user_id,
+        externalUserIds: q.externalUserIds,
+        courseId: q.courseId ?? q.course_id,
+        profileId: q.profileId ?? q.video_course_profile_id ?? null,
+        unitType: q.classSessionId != null ? "class_session" : "lesson",
+        unitId: q.classSessionId ?? q.lessonId ?? null,
+        status: q.status || "in_progress",
+        attemptCount: Number(q.attemptNumber ?? 1),
+        score: q.score ?? null,
+        maxScore: q.maxScore ?? null,
+        revision: Number(q.syncRevision ?? 1),
+        updatedAt: q.updatedAt ?? q.submittedAt ?? q.startedAt ?? null,
+      })),
+      ...remoteAssignments.map((s) => ({
+        itemType: "assignment",
+        itemId: s.assignmentId ?? s.assignment_id,
+        remoteAttemptOrSubId: s.id,
+        userId: s.userId ?? s.user_id,
+        externalUserIds: s.externalUserIds,
+        courseId: s.courseId ?? s.course_id,
+        profileId: s.profileId ?? s.video_course_profile_id ?? null,
+        unitType: s.classSessionId != null ? "class_session" : "lesson",
+        unitId: s.classSessionId ?? s.lessonId ?? null,
+        status: s.status || "submitted",
+        score: s.latestScore ?? null,
+        gradedAt: s.gradedAt ?? null,
+        revision: Number(s.syncRevision ?? s.revision ?? 1),
+        updatedAt: s.gradedAt ?? s.submittedAt ?? null,
+      })),
+    ];
+    const remoteAssessments = directAssessments.length > 0 ? directAssessments : synthesizedAssessments;
+    const remoteNotes = Array.isArray(remoteLearning.notes) ? remoteLearning.notes : [];
+    const remoteBookmarks = Array.isArray(remoteLearning.bookmarks) ? remoteLearning.bookmarks : [];
+    const remoteQaThreads = Array.isArray(remoteLearning.qaThreads)
+      ? remoteLearning.qaThreads
+      : (Array.isArray(remoteLearning.qa_threads) ? remoteLearning.qa_threads : []);
+
+    const profiles = caps.has_profile_projections
+      ? (await db.query(
+        `SELECT id, remote_profile_id, remote_course_id, local_course_id, mode, deleted_at
+         FROM course_profile_projections`,
+      )).rows
+      : [];
+    const profileByRemoteId = new Map(profiles.map((p) => [String(p.remote_profile_id), p]));
+    const profilesByRemoteCourseId = new Map();
+    for (const p of profiles) {
+      if (p.deleted_at) continue;
+      const rcid = String(p.remote_course_id || "").trim();
+      if (!rcid) continue;
+      if (!profilesByRemoteCourseId.has(rcid)) profilesByRemoteCourseId.set(rcid, []);
+      profilesByRemoteCourseId.get(rcid).push(p);
+    }
+
+    const allExtIds = new Set(externalUserIds);
+    for (const list of [remoteProgress, remoteAssessments, remoteNotes, remoteBookmarks, remoteQaThreads]) {
+      for (const item of list) {
+        const extCandidates = [
+          item.externalUserId,
+          item.external_user_id,
+          item.authorExternalUserId,
+          item.author_external_user_id,
+          ...(Array.isArray(item.externalUserIds) ? item.externalUserIds : []),
+        ];
+        for (const ext of extCandidates) {
+          if (ext) allExtIds.add(String(ext).trim());
+        }
+      }
+    }
+    const extUserToLocalId = await resolveLocalUserIdMap(db, Array.from(allExtIds), userIds);
+
+    function resolveItemUserAndProfile(item) {
+      const uTypeHint = item.unitType
+        ? String(item.unitType).toLowerCase()
+        : (item.classSessionId != null ? "class_session" : "lesson");
+      let rpid = String(item.profileId ?? item.remoteProfileId ?? item.remote_profile_id ?? "").trim();
+      let prof = rpid ? profileByRemoteId.get(rpid) : null;
+      if (!prof) {
+        const rcidHint = String(item.courseId ?? item.remoteCourseId ?? item.remote_course_id ?? "").trim();
+        const courseProfs = rcidHint ? (profilesByRemoteCourseId.get(rcidHint) || []) : [];
+        if (courseProfs.length === 1) {
+          prof = courseProfs[0];
+        } else if (courseProfs.length > 1) {
+          prof = courseProfs.find((p) => (
+            uTypeHint === "class_session"
+              ? String(p.mode || "").toUpperCase() === "MIRROR"
+              : String(p.mode || "").toUpperCase() !== "MIRROR"
+          )) || courseProfs[0];
+        }
+        if (prof) rpid = String(prof.remote_profile_id);
+      }
+
+      const extCandidates = [
+        item.externalUserId,
+        item.external_user_id,
+        item.authorExternalUserId,
+        item.author_external_user_id,
+        ...(Array.isArray(item.externalUserIds) ? item.externalUserIds : []),
+      ]
+        .map((val) => (val != null ? String(val).trim() : ""))
+        .filter(Boolean);
+
+      let uid = null;
+      let extUid = extCandidates[0] || null;
+      for (const candidate of extCandidates) {
+        const resolved = extUserToLocalId.get(candidate);
+        if (resolved) {
+          uid = resolved;
+          extUid = candidate;
+          break;
+        }
+      }
+      if (!uid && extUid && extUid.startsWith("moly:")) {
+        const parsedFromExt = Number(extUid.slice(5));
+        if (Number.isSafeInteger(parsedFromExt) && parsedFromExt > 0 && (!userIds.length || userIds.includes(parsedFromExt))) {
+          uid = parsedFromExt;
+        }
+      }
+      if (!uid && !Array.isArray(item.externalUserIds) && extCandidates.length === 0) {
+        const directUid = Number(item.userId ?? item.user_id ?? item.authorUserId ?? item.author_user_id);
+        if (
+          Number.isSafeInteger(directUid)
+          && directUid > 0
+          && (userIds.length === 0 || userIds.includes(directUid))
+        ) {
+          uid = directUid;
+        }
+      }
+      return { rpid, prof, uid, extUid };
+    }
+
+    const localProgressMap = new Map(
+      (await db.query("SELECT * FROM course_progress_projections")).rows.map((r) => [
+        `${r.user_id}:${r.profile_projection_id}:${r.unit_type}:${r.remote_unit_id}`,
+        r,
+      ]),
+    );
+    const localAssessMap = caps.has_assessment_projections
+      ? new Map(
+        (await db.query("SELECT * FROM course_assessment_projections")).rows.map((r) => [
+          `${r.user_id}:${r.profile_projection_id}:${r.item_type}:${r.remote_item_id}`,
+          r,
+        ]),
+      )
+      : new Map();
+    const localNoteMap = caps.has_note_projections
+      ? new Map(
+        (await db.query("SELECT * FROM course_note_projections")).rows.map((r) => [
+          `${r.profile_projection_id}:${r.remote_note_id}`,
+          r,
+        ]),
+      )
+      : new Map();
+    const localBookmarkMap = caps.has_bookmark_projections
+      ? new Map(
+        (await db.query("SELECT * FROM course_bookmark_projections")).rows.map((r) => [
+          `${r.profile_projection_id}:${r.remote_bookmark_id}`,
+          r,
+        ]),
+      )
+      : new Map();
+    const localQaMap = caps.has_qa_thread_projections
+      ? new Map(
+        (await db.query("SELECT * FROM course_qa_thread_projections")).rows.map((r) => [
+          `${r.profile_projection_id}:${r.remote_thread_id}`,
+          r,
+        ]),
+      )
+      : new Map();
+
+    const toRepair = { progress: [], assessments: [], notes: [], bookmarks: [], qaThreads: [] };
+
+    for (const item of remoteProgress) {
+      const { rpid, prof, uid, extUid } = resolveItemUserAndProfile(item);
+      const uType = String(item.unitType ?? item.unit_type ?? "lesson").toLowerCase() === "class_session" ? "class_session" : "lesson";
+      const ruid = String(item.unitId ?? item.remoteUnitId ?? item.remote_unit_id ?? "").trim();
+      if (!prof || !uid || !ruid) continue;
+
+      const localRow = localProgressMap.get(`${uid}:${prof.id}:${uType}:${ruid}`) || null;
+      const remRev = Number(item.revision ?? item.lastRevision ?? item.last_revision ?? 1);
+      const remUpdated = item.sourceUpdatedAt ?? item.source_updated_at ?? item.updatedAt;
+      const remPct = Number(item.completionPct ?? item.completion_pct ?? 0);
+      const remWatched = Number(item.watchedSeconds ?? item.watched_seconds ?? 0);
+      const remCompleted = Boolean(item.isUnitCompleted ?? item.is_unit_completed);
+      const revBehind = isRemoteNewerRevision(localRow, remRev, remUpdated);
+      const monotonicAhead = Boolean(
+        localRow && (
+          remPct > Number(localRow.completion_pct || 0)
+          || remWatched > Number(localRow.watched_seconds || 0)
+          || (remCompleted && !localRow.is_unit_completed)
+        ),
+      );
+      if (!localRow || revBehind || monotonicAhead) {
+        summaryCounts.progress_unit_drift += 1;
+        toRepair.progress.push({
+          userId: uid,
+          profileProjectionId: Number(prof.id),
+          localCourseId: Number(prof.local_course_id),
+          unitType: uType,
+          remoteUnitId: ruid,
+          watchedSeconds: remWatched,
+          lastPositionSeconds: Number(item.lastPositionSeconds ?? item.last_position_seconds ?? 0),
+          completionPct: remPct,
+          isVideoCompleted: Boolean(item.isVideoCompleted ?? item.is_video_completed),
+          isQuizCompleted: Boolean(item.isQuizCompleted ?? item.is_quiz_completed),
+          isUnitCompleted: remCompleted,
+          isUnlocked: item.isUnlocked ?? item.is_unlocked ?? true,
+          courseCompletionPct: item.courseCompletionPct ?? item.course_completion_pct ?? null,
+          lastUnitId: item.lastUnitId ?? item.last_unit_id ?? null,
+          syncRevision: remRev,
+          sourceUpdatedAt: remUpdated || now().toISOString(),
+        });
+        actions.push({
+          correlationId: corr,
+          category: "progress_unit_drift",
+          actionTaken: dryRun ? "planned_progress_upsert" : "pending_progress_upsert",
+          sourceSystem: TARGET_SYSTEM,
+          userId: uid,
+          localCourseId: Number(prof.local_course_id),
+          externalUserId: extUid || `moly:${uid}`,
+          externalCourseId: `profile:${rpid}`,
+          details: { remoteUnitId: ruid, remoteRevision: remRev },
+        });
+      }
+    }
+
+    for (const item of remoteAssessments) {
+      const { rpid, prof, uid, extUid } = resolveItemUserAndProfile(item);
+      const uType = String(item.unitType ?? item.unit_type ?? (item.classSessionId != null ? "class_session" : "lesson")).toLowerCase() === "class_session" ? "class_session" : "lesson";
+      const ruid = String(item.unitId ?? item.remoteUnitId ?? item.remote_unit_id ?? item.classSessionId ?? item.lessonId ?? "").trim();
+      const itemType = String(item.itemType ?? item.item_type ?? "quiz").toLowerCase() === "assignment" ? "assignment" : "quiz";
+      const itemId = String(item.itemId ?? item.remoteItemId ?? item.remote_item_id ?? "").trim();
+      if (!prof || !uid || !ruid || !itemId) continue;
+
+      const localRow = localAssessMap.get(`${uid}:${prof.id}:${itemType}:${itemId}`) || null;
+      const remRev = Number(item.revision ?? item.syncRevision ?? item.lastRevision ?? item.last_revision ?? 1);
+      const remUpdated = item.sourceUpdatedAt ?? item.source_updated_at ?? item.updatedAt;
+      const remDeleted = toIso(item.deletedAt ?? item.deleted_at);
+      const revBehind = isRemoteNewerRevision(localRow, remRev, remUpdated);
+      const tombMismatch = localRow ? Boolean(remDeleted) !== Boolean(localRow.deleted_at) : Boolean(remDeleted);
+      if (!localRow || revBehind || tombMismatch) {
+        if (!localRow && remDeleted) continue;
+        summaryCounts.progress_assessment_drift += 1;
+        toRepair.assessments.push({
+          userId: uid,
+          profileProjectionId: Number(prof.id),
+          unitType: uType,
+          remoteUnitId: ruid,
+          itemType,
+          remoteItemId: itemId,
+          remoteAttemptOrSubId: item.remoteAttemptOrSubId ?? item.remote_attempt_or_sub_id ?? null,
+          status: item.status || "in_progress",
+          attemptCount: Number(item.attemptCount ?? item.attempt_count ?? 0),
+          maxAttempts: item.maxAttempts ?? item.max_attempts ?? null,
+          score: item.score ?? null,
+          maxScore: item.maxScore ?? item.max_score ?? null,
+          canViewSolution: Boolean(item.canViewSolution ?? item.can_view_solution),
+          gradedAt: item.gradedAt ?? item.graded_at ?? null,
+          deletedAt: remDeleted,
+          metadata: item.metadata || {},
+          syncRevision: remRev,
+          sourceUpdatedAt: remUpdated || now().toISOString(),
+        });
+        actions.push({
+          correlationId: corr,
+          category: "progress_assessment_drift",
+          actionTaken: dryRun ? "planned_assessment_upsert" : "pending_assessment_upsert",
+          sourceSystem: TARGET_SYSTEM,
+          userId: uid,
+          localCourseId: Number(prof.local_course_id),
+          externalUserId: extUid || `moly:${uid}`,
+          externalCourseId: `profile:${rpid}`,
+          details: { itemType, remoteItemId: itemId, remoteRevision: remRev },
+        });
+      }
+    }
+
+    for (const item of remoteNotes) {
+      const { prof, uid } = resolveItemUserAndProfile(item);
+      const uType = String(item.unitType ?? item.unit_type ?? (item.classSessionId != null ? "class_session" : "lesson")).toLowerCase() === "class_session" ? "class_session" : "lesson";
+      const ruid = String(item.unitId ?? item.remoteUnitId ?? item.remote_unit_id ?? item.classSessionId ?? item.lessonId ?? "").trim();
+      const noteId = String(item.noteId ?? item.remoteNoteId ?? item.remote_note_id ?? item.id ?? "").trim();
+      if (!prof || !uid || !ruid || !noteId) continue;
+
+      const localRow = localNoteMap.get(`${prof.id}:${noteId}`) || null;
+      const remRev = Number(item.revision ?? item.syncRevision ?? item.lastRevision ?? item.last_revision ?? 1);
+      const remUpdated = item.sourceUpdatedAt ?? item.source_updated_at ?? item.updatedAt;
+      const remDeleted = toIso(item.deletedAt ?? item.deleted_at);
+      if (!localRow || isRemoteNewerRevision(localRow, remRev, remUpdated) || (localRow && Boolean(remDeleted) !== Boolean(localRow.deleted_at))) {
+        if (!localRow && remDeleted) continue;
+        summaryCounts.progress_note_drift += 1;
+        toRepair.notes.push({
+          userId: uid,
+          profileProjectionId: Number(prof.id),
+          unitType: uType,
+          remoteUnitId: ruid,
+          remoteNoteId: noteId,
+          timestampSeconds: Number(item.timestampSeconds ?? item.timestamp_seconds ?? 0),
+          content: item.content !== undefined ? String(item.content) : String(localRow?.content ?? ""),
+          deletedAt: remDeleted,
+          syncRevision: remRev,
+          sourceUpdatedAt: remUpdated || now().toISOString(),
+        });
+        actions.push({
+          correlationId: corr,
+          category: "progress_note_drift",
+          actionTaken: dryRun ? "planned_note_upsert" : "pending_note_upsert",
+          sourceSystem: TARGET_SYSTEM,
+          userId: uid,
+          localCourseId: Number(prof.local_course_id),
+          details: { remoteNoteId: noteId, remoteRevision: remRev },
+        });
+      }
+    }
+
+    for (const item of remoteBookmarks) {
+      const { prof, uid } = resolveItemUserAndProfile(item);
+      const uType = String(item.unitType ?? item.unit_type ?? (item.classSessionId != null ? "class_session" : "lesson")).toLowerCase() === "class_session" ? "class_session" : "lesson";
+      const ruid = String(item.unitId ?? item.remoteUnitId ?? item.remote_unit_id ?? item.classSessionId ?? item.lessonId ?? "").trim();
+      const bmId = String(item.bookmarkId ?? item.remoteBookmarkId ?? item.remote_bookmark_id ?? item.id ?? "").trim();
+      if (!prof || !uid || !ruid || !bmId) continue;
+
+      const localRow = localBookmarkMap.get(`${prof.id}:${bmId}`) || null;
+      const remRev = Number(item.revision ?? item.syncRevision ?? item.lastRevision ?? item.last_revision ?? 1);
+      const remUpdated = item.sourceUpdatedAt ?? item.source_updated_at ?? item.updatedAt;
+      const remDeleted = toIso(item.deletedAt ?? item.deleted_at);
+      if (!localRow || isRemoteNewerRevision(localRow, remRev, remUpdated) || (localRow && Boolean(remDeleted) !== Boolean(localRow.deleted_at))) {
+        if (!localRow && remDeleted) continue;
+        summaryCounts.progress_bookmark_drift += 1;
+        toRepair.bookmarks.push({
+          userId: uid,
+          profileProjectionId: Number(prof.id),
+          unitType: uType,
+          remoteUnitId: ruid,
+          remoteBookmarkId: bmId,
+          videoAssetId: item.videoAssetId ?? item.video_asset_id ?? null,
+          timestampSeconds: Number(item.timestampSeconds ?? item.timestamp_seconds ?? 0),
+          label: String(item.label || ""),
+          deletedAt: remDeleted,
+          syncRevision: remRev,
+          sourceUpdatedAt: remUpdated || now().toISOString(),
+        });
+        actions.push({
+          correlationId: corr,
+          category: "progress_bookmark_drift",
+          actionTaken: dryRun ? "planned_bookmark_upsert" : "pending_bookmark_upsert",
+          sourceSystem: TARGET_SYSTEM,
+          userId: uid,
+          localCourseId: Number(prof.local_course_id),
+          details: { remoteBookmarkId: bmId, remoteRevision: remRev },
+        });
+      }
+    }
+
+    for (const item of remoteQaThreads) {
+      const { prof, uid, extUid } = resolveItemUserAndProfile(item);
+      const uType = String(item.unitType ?? item.unit_type ?? (item.classSessionId != null ? "class_session" : "lesson")).toLowerCase() === "class_session" ? "class_session" : "lesson";
+      const ruid = String(item.unitId ?? item.remoteUnitId ?? item.remote_unit_id ?? item.classSessionId ?? item.lessonId ?? "").trim();
+      const threadId = String(item.threadId ?? item.remoteThreadId ?? item.remote_thread_id ?? item.id ?? "").trim();
+      if (!prof || !ruid || !threadId) continue;
+
+      const localRow = localQaMap.get(`${prof.id}:${threadId}`) || null;
+      const remRev = Number(item.revision ?? item.syncRevision ?? item.lastRevision ?? item.last_revision ?? 1);
+      const remUpdated = item.sourceUpdatedAt ?? item.source_updated_at ?? item.updatedAt;
+      const remDeleted = toIso(item.deletedAt ?? item.deleted_at);
+      if (!localRow || isRemoteNewerRevision(localRow, remRev, remUpdated) || (localRow && Boolean(remDeleted) !== Boolean(localRow.deleted_at))) {
+        if (!localRow && remDeleted) continue;
+        summaryCounts.progress_qa_drift += 1;
+        toRepair.qaThreads.push({
+          profileProjectionId: Number(prof.id),
+          unitType: uType,
+          remoteUnitId: ruid,
+          remoteThreadId: threadId,
+          authorExternalUserId: extUid,
+          authorUserId: uid,
+          authorName: item.authorName ?? item.author_name ?? localRow?.author_name ?? null,
+          authorRole: item.authorRole ?? item.author_role ?? localRow?.author_role ?? null,
+          title: item.title ? String(item.title) : String(localRow?.title || "Câu hỏi bài học"),
+          status: item.status || "open",
+          isPinned: Boolean(item.isPinned ?? item.is_pinned),
+          messageCount: Number(item.messageCount ?? item.message_count ?? (Array.isArray(item.messages) ? item.messages.length : 0)),
+          messages: Array.isArray(item.messages) ? item.messages : (Array.isArray(item.messagesJson) ? item.messagesJson : []),
+          unread: Boolean(item.unread),
+          lastMessageAt: item.lastMessageAt ?? item.last_message_at ?? null,
+          deletedAt: remDeleted,
+          syncRevision: remRev,
+          sourceUpdatedAt: remUpdated || now().toISOString(),
+        });
+        actions.push({
+          correlationId: corr,
+          category: "progress_qa_drift",
+          actionTaken: dryRun ? "planned_qa_upsert" : "pending_qa_upsert",
+          sourceSystem: TARGET_SYSTEM,
+          userId: uid ?? null,
+          localCourseId: Number(prof.local_course_id),
+          details: { remoteThreadId: threadId, remoteRevision: remRev },
+        });
+      }
+    }
+
+    const totalLearningRepairs = toRepair.progress.length
+      + toRepair.assessments.length
+      + toRepair.notes.length
+      + toRepair.bookmarks.length
+      + toRepair.qaThreads.length;
+
+    if (!dryRun && totalLearningRepairs > 0) {
+      await withTx(async (txClient) => {
+        for (const p of toRepair.progress) {
+          const r = await upsertLearningProgressProjectionTx(txClient, { ...p, now });
+          if (r?.action === "updated") summaryCounts.repaired_progress += 1;
+        }
+        for (const a of toRepair.assessments) {
+          const r = await upsertAssessmentProjectionTx(txClient, { ...a, now });
+          if (["inserted", "updated", "tombstoned"].includes(r?.action)) summaryCounts.repaired_assessments += 1;
+        }
+        for (const n of toRepair.notes) {
+          const r = await upsertNoteProjectionTx(txClient, { ...n, now });
+          if (["inserted", "updated", "tombstoned"].includes(r?.action)) summaryCounts.repaired_notes += 1;
+        }
+        for (const b of toRepair.bookmarks) {
+          const r = await upsertBookmarkProjectionTx(txClient, { ...b, now });
+          if (["inserted", "updated", "tombstoned"].includes(r?.action)) summaryCounts.repaired_bookmarks += 1;
+        }
+        for (const q of toRepair.qaThreads) {
+          const r = await upsertQaThreadProjectionTx(txClient, { ...q, now });
+          if (["inserted", "updated", "tombstoned"].includes(r?.action)) summaryCounts.repaired_qa_threads += 1;
+        }
+      });
+    }
+
+    return { skipped: false };
+  }
+
+  /**
+   * Executes 3-way reconciliation between Moly Studio and CSCA-Course across
+   * entitlement, content, and progress domains. Allows `dryRun: true` diagnostics
+   * when only `mutations_repair` kill switch is active; blocks `!dryRun` writes.
+   */
+  async function runReconciliation({
+    dryRun = true,
+    triggerMode = "manual",
+    triggeredBy = null,
+    scopeFilter = {},
+    domains = null,
+    userIds = null,
+    courseIds = null,
+    profileIds = null,
+    correlationId = null,
+    limit = 500,
+    staleMinutes = staleThresholdMinutes,
+    dispatchRepairs = true,
+  } = {}) {
+    const startMs = Date.now();
+    const corr = resolveCorrelationId(correlationId);
+    const explicitDomainsInput = domains ?? scopeFilter?.domains;
+    const hasExplicitDomains = Array.isArray(explicitDomainsInput) && explicitDomainsInput.length > 0;
+    const activeDomains = normalizeDomains(explicitDomainsInput);
+    const parsedUserFilter = scopeFilter?.userId != null ? Number(scopeFilter.userId) : null;
+    const normalizedUserIds = toPositiveIntList(userIds, scopeFilter?.userIds, Number.isSafeInteger(parsedUserFilter) ? parsedUserFilter : null);
+    const extUserFilter = scopeFilter?.externalUserId
+      || (Number.isSafeInteger(parsedUserFilter) && parsedUserFilter > 0 ? `moly:${parsedUserFilter}` : null);
+    const normalizedExtUserIds = toStringList(scopeFilter?.externalUserIds, extUserFilter);
+    const normalizedCourseIds = toStringList(courseIds, scopeFilter?.courseIds, scopeFilter?.remoteCourseId);
+    const normalizedProfileIds = toStringList(profileIds, scopeFilter?.profileIds, scopeFilter?.profileId);
+    const extCourseFilter = scopeFilter?.externalCourseId || null;
+    const mutationsRepairPaused = isMutationsRepairKillSwitchActive(env);
+
+    const runRow = await recordRunStart({
+      corr,
+      triggerMode,
+      dryRun,
+      triggeredBy,
+      scopeFilter: {
+        domains: activeDomains,
+        ...(extUserFilter ? { externalUserId: extUserFilter } : {}),
+        ...(normalizedUserIds.length ? { userIds: normalizedUserIds } : {}),
+        ...(extCourseFilter ? { externalCourseId: extCourseFilter } : {}),
+        ...(normalizedCourseIds.length ? { courseIds: normalizedCourseIds } : {}),
+        ...(normalizedProfileIds.length ? { profileIds: normalizedProfileIds } : {}),
+        staleMinutes,
+      },
+    });
+
+    if (isIntegrationKillSwitchActive(env)) {
+      recordMetric("moly.reconciliation.blocked_kill_switch");
+      integrationLog.warn("reconciliation_blocked_kill_switch", { dryRun, triggerMode }, corr);
+      await finalizeRun(runRow?.id, {
+        status: "aborted_kill_switch",
+        summaryCounts: { blocked_by_kill_switch: true, domains: activeDomains },
+        errorCode: "INTEGRATION_KILL_SWITCH_ACTIVE",
+        errorMessage: "Course integration sync is disabled by emergency kill switch.",
+      });
+      throw new CourseApiError(
+        503,
+        "INTEGRATION_KILL_SWITCH_ACTIVE",
+        "Course integration sync is disabled by emergency kill switch.",
+      );
+    }
+
+    if (!dryRun && mutationsRepairPaused) {
+      recordMetric("moly.reconciliation.blocked_kill_switch");
+      integrationLog.warn("reconciliation_blocked_mutations_repair_kill_switch", { dryRun, triggerMode }, corr);
+      await finalizeRun(runRow?.id, {
+        status: "aborted_kill_switch",
+        summaryCounts: { blocked_by_kill_switch: true, mutations_repair_paused: true, domains: activeDomains },
+        errorCode: "MUTATIONS_REPAIR_KILL_SWITCH_ACTIVE",
+        errorMessage: "Reconciliation repair writes are paused by mutations/repair kill switch.",
+      });
+      throw new CourseApiError(
+        503,
+        "MUTATIONS_REPAIR_KILL_SWITCH_ACTIVE",
+        "Reconciliation repair writes are paused by mutations/repair kill switch.",
+      );
+    }
+
+    const caps = await schemaCaps(db);
+    const actions = [];
+    const repairedOutboxIds = [];
+    const summaryCounts = createEmptySummaryCounts(mutationsRepairPaused);
+
+    async function hasV2ReconciliationContext(domain) {
+      if (catalogSync) return true;
+      const posture = readRolloutPosture(env);
+      if (domain === "content" && posture.catalogConsumerEnabled) return true;
+      if (domain === "progress" && (posture.catalogConsumerEnabled || posture.delegatedLearningEnabled)) {
+        return true;
+      }
+      const checks = [];
+      if (caps.has_profile_projections) checks.push("EXISTS(SELECT 1 FROM course_profile_projections)");
+      if (caps.has_progress_projections) checks.push("EXISTS(SELECT 1 FROM course_progress_projections)");
+      if (caps.has_checkpoints) checks.push("EXISTS(SELECT 1 FROM course_sync_checkpoints)");
+      if (caps.has_courses && caps.has_course_v2_cols) {
+        checks.push("EXISTS(SELECT 1 FROM courses WHERE content_origin = 'csca_course' OR remote_course_id IS NOT NULL)");
+      }
+      if (checks.length === 0) return false;
+      const activeRes = await db.query(`SELECT (${checks.join(" OR ")}) AS active`);
+      return Boolean(activeRes.rows[0]?.active);
+    }
+
+    try {
+      if (activeDomains.includes("entitlement")) {
+        await reconcileEntitlementDomain({
+          caps,
+          dryRun,
+          limit,
+          staleMinutes,
+          corr,
+          extUserFilter,
+          extCourseFilter,
+          parsedUserFilter,
+          userIdsFilter: normalizedUserIds,
+          summaryCounts,
+          actions,
+          repairedOutboxIds,
+        });
+      }
+      if (activeDomains.includes("content") && (hasExplicitDomains || await hasV2ReconciliationContext("content"))) {
+        await reconcileContentDomain({
+          caps,
+          dryRun,
+          limit,
+          corr,
+          courseIds: normalizedCourseIds,
+          profileIds: normalizedProfileIds,
+          explicitlyRequested: hasExplicitDomains,
+          summaryCounts,
+          actions,
+        });
+      }
+      if (activeDomains.includes("progress") && (hasExplicitDomains || await hasV2ReconciliationContext("progress"))) {
+        await reconcileProgressDomain({
+          caps,
+          dryRun,
+          limit,
+          corr,
+          userIds: normalizedUserIds,
+          externalUserIds: normalizedExtUserIds,
+          courseIds: normalizedCourseIds,
+          profileIds: normalizedProfileIds,
+          explicitlyRequested: hasExplicitDomains,
+          summaryCounts,
+          actions,
+        });
+      }
+    } catch (error) {
+      await finalizeRun(runRow?.id, {
+        status: "failed",
+        errorCode: error?.errorCode || error?.code || "RECONCILIATION_SNAPSHOT_FAILED",
+        errorMessage: error?.message || "Failed to execute course reconciliation.",
+      });
+      throw error;
+    }
 
     summaryCounts.total_discrepancies = (
       summaryCounts.local_active_remote_missing
@@ -994,7 +2186,50 @@ function createCourseReconciliationService({
       + summaryCounts.identity_missing_or_conflict
       + summaryCounts.stale_pending_event
       + summaryCounts.dead_letter_event
+      + summaryCounts.content_course_drift
+      + summaryCounts.content_profile_drift
+      + summaryCounts.content_unit_drift
+      + summaryCounts.content_file_drift
+      + summaryCounts.progress_unit_drift
+      + summaryCounts.progress_assessment_drift
+      + summaryCounts.progress_note_drift
+      + summaryCounts.progress_bookmark_drift
+      + summaryCounts.progress_qa_drift
     );
+
+    const byDomain = {
+      entitlement: {
+        discrepancies: summaryCounts.local_active_remote_missing
+          + summaryCounts.local_revoked_remote_active
+          + summaryCounts.remote_active_unknown_on_moly
+          + summaryCounts.missing_course_mapping
+          + summaryCounts.identity_missing_or_conflict
+          + summaryCounts.stale_pending_event
+          + summaryCounts.dead_letter_event,
+        repaired_grant: summaryCounts.repaired_grant,
+        repaired_revoke: summaryCounts.repaired_revoke,
+      },
+      content: {
+        course_drift: summaryCounts.content_course_drift,
+        profile_drift: summaryCounts.content_profile_drift,
+        unit_drift: summaryCounts.content_unit_drift,
+        file_drift: summaryCounts.content_file_drift,
+        repaired_courses: summaryCounts.repaired_content_courses,
+        repaired_curriculum: summaryCounts.repaired_content_curriculum,
+      },
+      progress: {
+        unit_drift: summaryCounts.progress_unit_drift,
+        assessment_drift: summaryCounts.progress_assessment_drift,
+        note_drift: summaryCounts.progress_note_drift,
+        bookmark_drift: summaryCounts.progress_bookmark_drift,
+        qa_drift: summaryCounts.progress_qa_drift,
+        repaired_progress: summaryCounts.repaired_progress,
+        repaired_assessments: summaryCounts.repaired_assessments,
+        repaired_notes: summaryCounts.repaired_notes,
+        repaired_bookmarks: summaryCounts.repaired_bookmarks,
+        repaired_qa_threads: summaryCounts.repaired_qa_threads,
+      },
+    };
 
     let dispatchBatch = null;
     if (!dryRun && dispatchRepairs && repairedOutboxIds.length > 0 && outbox && typeof outbox.processAvailableOutboxJobs === "function") {
@@ -1023,14 +2258,25 @@ function createCourseReconciliationService({
     const durationMs = Date.now() - startMs;
     observeMetricLatency("moly.reconciliation.run_ms", durationMs);
     recordMetric("moly.reconciliation.runs");
-    if (summaryCounts.repaired_grant + summaryCounts.repaired_revoke > 0) {
-      recordMetric("moly.reconciliation.repairs_enqueued", summaryCounts.repaired_grant + summaryCounts.repaired_revoke);
+    const totalRepaired = summaryCounts.repaired_grant
+      + summaryCounts.repaired_revoke
+      + summaryCounts.repaired_content_courses
+      + summaryCounts.repaired_content_curriculum
+      + summaryCounts.repaired_progress
+      + summaryCounts.repaired_assessments
+      + summaryCounts.repaired_notes
+      + summaryCounts.repaired_bookmarks
+      + summaryCounts.repaired_qa_threads;
+    if (totalRepaired > 0) {
+      recordMetric("moly.reconciliation.repairs_enqueued", totalRepaired);
     }
 
     const finalized = await finalizeRun(runRow?.id, {
       status: "completed",
       summaryCounts: {
         ...summaryCounts,
+        domains: activeDomains,
+        by_domain: byDomain,
         durationMs,
         repairedOutboxCount: repairedOutboxIds.length,
       },
@@ -1042,6 +2288,7 @@ function createCourseReconciliationService({
       {
         runId: finalized?.id ?? null,
         dryRun: Boolean(dryRun),
+        domains: activeDomains,
         triggerMode,
         summaryCounts,
         durationMs,
@@ -1053,7 +2300,8 @@ function createCourseReconciliationService({
       run: finalized,
       correlationId: corr,
       dryRun: Boolean(dryRun),
-      summary: summaryCounts,
+      domains: activeDomains,
+      summary: { ...summaryCounts, by_domain: byDomain },
       repairedOutboxIds,
       dispatchBatch,
       actions,
@@ -1244,6 +2492,8 @@ function createCourseReconciliationService({
 
     let unmappedCourses = [];
     if (caps.has_mappings && caps.has_video_pkg_courses && caps.has_video_packages) {
+      const mappingCols = await detectMappingSchemaColumns(db);
+      const activePred = buildActiveOfferingMappingSqlPredicate("ecm", mappingCols);
       unmappedCourses = (await db.query(
         `SELECT DISTINCT c.id AS local_course_id, c.title AS local_course_title, c.slug AS local_course_slug,
                 vp.id AS video_package_id, vp.name AS video_package_name
@@ -1253,17 +2503,72 @@ function createCourseReconciliationService({
          WHERE NOT EXISTS (
            SELECT 1 FROM external_course_mappings ecm
            WHERE ecm.local_course_id = c.id
-             AND ecm.status = 'active'
+             AND ${activePred}
          )
          ORDER BY c.id ASC
          LIMIT 100`,
       )).rows;
     }
 
+    let v2InboxCounts = {};
+    let v2InboxAttentionItems = [];
+    let v2InboxStaleCount = 0;
+    if (caps.has_v2_inbox) {
+      const countRows = (await db.query(
+        "SELECT status, COUNT(*)::int AS count FROM moly_course_sync_inbox GROUP BY status",
+      )).rows;
+      v2InboxCounts = Object.fromEntries(countRows.map((r) => [r.status, r.count]));
+      v2InboxStaleCount = Number((await db.query(
+        `SELECT COUNT(*)::int AS count
+         FROM moly_course_sync_inbox
+         WHERE status IN ('pending', 'processing', 'failed')
+           AND created_at <= $1::timestamptz`,
+        [staleThreshold],
+      )).rows[0]?.count || 0);
+      v2InboxAttentionItems = (await db.query(
+        `SELECT id, event_id, correlation_id, event_type, aggregate_type, aggregate_id,
+                aggregate_revision, status, attempt_count, max_attempts, next_retry_at,
+                last_error_code, last_error_message, source_updated_at, created_at, updated_at
+         FROM moly_course_sync_inbox
+         WHERE status IN ('failed', 'dead_letter', 'ignored', 'pending')
+         ORDER BY (status = 'dead_letter') DESC, (status = 'failed') DESC, id DESC
+         LIMIT $1`,
+        [safeLimit],
+      )).rows;
+    }
+
+    const checkpoints = caps.has_checkpoints
+      ? (await db.query(
+        `SELECT stream_name, source_system, last_cursor, after_entity_id, high_water_revision,
+                snapshot_anchor_revision, high_water_updated_at, sync_status,
+                last_error_code, last_error_message, last_synced_at, updated_at
+         FROM course_sync_checkpoints
+         ORDER BY stream_name ASC`,
+      )).rows
+      : [];
+
     const reconciliationRuns = await listReconciliationRuns({ limit: 15, includeActions: true });
+    const latestReconciliationRun = reconciliationRuns[0] || null;
+    const killSwitches = getKillSwitchesSnapshot(env);
+    const rolloutFlags = readRolloutPosture(env);
+
+    const driftMetrics = {
+      openConflicts: Number(conflictCounts.open || 0) + Number(conflictCounts.in_review || 0),
+      outboxStalePending: stalePendingCount,
+      outboxDeadLetter: Number(outboxCounts.dead_letter || 0),
+      v2InboxFailed: Number(v2InboxCounts.failed || 0),
+      v2InboxDeadLetter: Number(v2InboxCounts.dead_letter || 0),
+      v2InboxIgnored: Number(v2InboxCounts.ignored || 0),
+      v2InboxStalePending: v2InboxStaleCount,
+      unmappedCourses: unmappedCourses.length,
+      latestRunStatus: latestReconciliationRun?.status || null,
+      latestRunDiscrepancies: Number(latestReconciliationRun?.summary_counts?.total_discrepancies || 0),
+    };
 
     return {
-      killSwitchActive: isIntegrationKillSwitchActive(env),
+      killSwitchActive: killSwitches.global,
+      killSwitches,
+      rolloutFlags,
       metrics: getIntegrationMetricsSnapshot(),
       outboxCounts,
       stalePendingCount,
@@ -1271,7 +2576,247 @@ function createCourseReconciliationService({
       outboxItems,
       conflicts,
       unmappedCourses,
+      v2InboxCounts,
+      v2InboxAttentionItems,
+      checkpoints,
       reconciliationRuns,
+      latestReconciliationRun,
+      driftMetrics,
+    };
+  }
+
+  /**
+   * Per-subject targeted recovery combining entitlement outbox retry,
+   * v2 inbox replay, and scoped 3-way reconciliation.
+   */
+  async function retrySubjectSync({
+    userId = null,
+    externalUserId = null,
+    courseId = null,
+    localCourseId = null,
+    remoteCourseId = null,
+    profileId = null,
+    remoteProfileId = null,
+    domains = null,
+    dryRun = false,
+    actorId = null,
+    correlationId = null,
+  } = {}) {
+    const corr = resolveCorrelationId(correlationId);
+    if (isIntegrationKillSwitchActive(env)) {
+      throw new CourseApiError(
+        503,
+        "INTEGRATION_KILL_SWITCH_ACTIVE",
+        "Course integration sync is disabled by emergency kill switch.",
+      );
+    }
+    if (!dryRun && isMutationsRepairKillSwitchActive(env)) {
+      throw new CourseApiError(
+        503,
+        "MUTATIONS_REPAIR_KILL_SWITCH_ACTIVE",
+        "Subject repair writes are paused by mutations/repair kill switch.",
+      );
+    }
+
+    const parsedUserId = userId != null && Number.isSafeInteger(Number(userId)) && Number(userId) > 0
+      ? Number(userId)
+      : null;
+    const rawExtUser = typeof externalUserId === "string" && externalUserId.trim()
+      ? externalUserId.trim()
+      : (parsedUserId ? `moly:${parsedUserId}` : null);
+    const resolvedUidFromExt = !parsedUserId && rawExtUser?.startsWith("moly:")
+      ? (Number.isSafeInteger(Number(rawExtUser.slice(5))) ? Number(rawExtUser.slice(5)) : null)
+      : parsedUserId;
+
+    const rawCourseId = courseId ?? localCourseId ?? null;
+    const rawRemoteCourseId = typeof remoteCourseId === "string" && remoteCourseId.trim()
+      ? remoteCourseId.trim()
+      : (rawCourseId != null && !Number.isSafeInteger(Number(rawCourseId)) ? String(rawCourseId).trim() : null);
+    const numericLocalCourse = rawCourseId != null && Number.isSafeInteger(Number(rawCourseId)) && Number(rawCourseId) > 0
+      ? Number(rawCourseId)
+      : null;
+    const rawProfileId = String(profileId ?? remoteProfileId ?? "").trim() || null;
+
+    if (!resolvedUidFromExt && !rawExtUser && !numericLocalCourse && !rawRemoteCourseId && !rawProfileId) {
+      throw new CourseApiError(
+        422,
+        "VALIDATION_ERROR",
+        "At least one subject identifier (userId, externalUserId, courseId, or profileId) is required.",
+      );
+    }
+
+    const activeDomains = normalizeDomains(domains);
+    const caps = await schemaCaps(db);
+
+    const localCourseIds = new Set(numericLocalCourse ? [numericLocalCourse] : []);
+    const remoteCourseIds = new Set(rawRemoteCourseId ? [rawRemoteCourseId] : []);
+    const remoteProfileIds = new Set(rawProfileId ? [rawProfileId] : []);
+    const externalOfferings = new Set(rawProfileId ? [`profile:${rawProfileId}`] : []);
+
+    if (caps.has_profile_projections) {
+      const profRes = await db.query(
+        `SELECT local_course_id, remote_course_id, remote_profile_id, external_offering_id
+         FROM course_profile_projections
+         WHERE ($1::bigint IS NOT NULL AND local_course_id = $1)
+            OR ($2::text IS NOT NULL AND remote_course_id = $2)
+            OR ($3::text IS NOT NULL AND remote_profile_id = $3)`,
+        [numericLocalCourse, rawRemoteCourseId, rawProfileId],
+      );
+      for (const r of profRes.rows) {
+        if (r.local_course_id != null) localCourseIds.add(Number(r.local_course_id));
+        if (r.remote_course_id) remoteCourseIds.add(String(r.remote_course_id));
+        if (r.remote_profile_id) remoteProfileIds.add(String(r.remote_profile_id));
+        if (r.external_offering_id) externalOfferings.add(String(r.external_offering_id));
+      }
+    }
+
+    if (caps.has_courses && caps.has_course_v2_cols && (numericLocalCourse || rawRemoteCourseId)) {
+      const cRes = await db.query(
+        `SELECT id, remote_course_id FROM courses
+         WHERE ($1::bigint IS NOT NULL AND id = $1)
+            OR ($2::text IS NOT NULL AND remote_course_id = $2)`,
+        [numericLocalCourse, rawRemoteCourseId],
+      );
+      for (const r of cRes.rows) {
+        localCourseIds.add(Number(r.id));
+        if (r.remote_course_id) remoteCourseIds.add(String(r.remote_course_id));
+      }
+    }
+
+    if (numericLocalCourse) externalOfferings.add(`moly:${numericLocalCourse}`);
+    const offeringList = Array.from(externalOfferings);
+
+    const outboxRetry = { matched: 0, retriedIds: [], processed: [], errors: [] };
+    if (activeDomains.includes("entitlement") && caps.has_outbox) {
+      const outboxRows = (await db.query(
+        `SELECT id, status, event_type, external_course_id
+         FROM integration_outbox
+         WHERE status IN ('pending', 'failed', 'dead_letter')
+           AND ($1::int IS NULL OR user_id = $1)
+           AND ($2::text[] IS NULL OR external_course_id = ANY($2::text[]))
+         ORDER BY id ASC
+         LIMIT 25`,
+        [resolvedUidFromExt, offeringList.length ? offeringList : null],
+      )).rows;
+      outboxRetry.matched = outboxRows.length;
+      if (!dryRun && outbox) {
+        let hadPending = false;
+        for (const row of outboxRows) {
+          if (row.status === "pending") {
+            hadPending = true;
+            continue;
+          }
+          if (typeof outbox.retryOutboxItem === "function") {
+            try {
+              await outbox.retryOutboxItem({
+                outboxId: row.id,
+                actorId,
+                correlationId: corr,
+                dispatchNow: true,
+              });
+              outboxRetry.retriedIds.push(Number(row.id));
+            } catch (err) {
+              outboxRetry.errors.push({
+                outboxId: Number(row.id),
+                code: err?.errorCode || err?.code || "OUTBOX_RETRY_FAILED",
+                message: err?.message || "Outbox retry failed.",
+              });
+            }
+          }
+        }
+        if (hadPending && typeof outbox.processAvailableOutboxJobs === "function") {
+          const proc = await outbox.processAvailableOutboxJobs({
+            workerId: `subject-retry:${actorId ?? "admin"}`,
+            limit: 25,
+          });
+          outboxRetry.processed = proc?.dispatched || [];
+        }
+      }
+    }
+
+    const inboxReplay = { matched: 0, retriedIds: [], skippedReason: null, errors: [] };
+    if (caps.has_v2_inbox) {
+      const subjectTokens = toStringList(
+        resolvedUidFromExt != null ? String(resolvedUidFromExt) : null,
+        rawExtUser,
+        Array.from(remoteCourseIds),
+        Array.from(remoteProfileIds),
+      );
+      const inboxRows = (await db.query(
+        `SELECT id, status, event_type, aggregate_type, aggregate_id
+         FROM moly_course_sync_inbox
+         WHERE status IN ('pending', 'failed', 'dead_letter')
+           AND (
+             aggregate_id = ANY($1::text[])
+             OR COALESCE(payload->>'userId', '') = ANY($1::text[])
+             OR COALESCE(payload->>'externalUserId', '') = ANY($1::text[])
+             OR COALESCE(payload->>'courseId', '') = ANY($1::text[])
+             OR COALESCE(payload->>'profileId', '') = ANY($1::text[])
+           )
+         ORDER BY aggregate_revision ASC, id ASC
+         LIMIT 25`,
+        [subjectTokens],
+      )).rows;
+      inboxReplay.matched = inboxRows.length;
+      if (!dryRun) {
+        if (isContentSyncKillSwitchActive(env)) {
+          inboxReplay.skippedReason = "SYNC_KILL_SWITCH_ACTIVE";
+        } else if (catalogSync && typeof catalogSync.retryInboxItem === "function") {
+          for (const row of inboxRows) {
+            try {
+              await catalogSync.retryInboxItem(row.id, {
+                actorId,
+                correlationId: corr,
+                dispatchNow: true,
+              });
+              inboxReplay.retriedIds.push(Number(row.id));
+            } catch (err) {
+              inboxReplay.errors.push({
+                inboxId: Number(row.id),
+                code: err?.errorCode || err?.code || "INBOX_RETRY_FAILED",
+                message: err?.message || "Inbox retry failed.",
+              });
+            }
+          }
+        }
+      }
+    }
+
+    let reconciliation = null;
+    if (client && typeof client.isConfigured === "function" && client.isConfigured()) {
+      reconciliation = await runReconciliation({
+        dryRun,
+        triggerMode: "api",
+        triggeredBy: actorId,
+        correlationId: corr,
+        domains: activeDomains,
+        scopeFilter: {
+          ...(resolvedUidFromExt ? { userId: resolvedUidFromExt } : {}),
+          ...(rawExtUser ? { externalUserId: rawExtUser } : {}),
+          ...(offeringList.length === 1 ? { externalCourseId: offeringList[0] } : {}),
+          courseIds: Array.from(remoteCourseIds),
+          profileIds: Array.from(remoteProfileIds),
+        },
+        dispatchRepairs: !dryRun,
+      });
+    } else {
+      reconciliation = { skipped: true, reason: "COURSE_LMS_NOT_CONFIGURED" };
+    }
+
+    return {
+      dryRun: Boolean(dryRun),
+      correlationId: corr,
+      domains: activeDomains,
+      target: {
+        userId: resolvedUidFromExt,
+        externalUserId: rawExtUser,
+        localCourseIds: Array.from(localCourseIds),
+        remoteCourseIds: Array.from(remoteCourseIds),
+        profileIds: Array.from(remoteProfileIds),
+      },
+      outboxRetry,
+      inboxReplay,
+      reconciliation,
     };
   }
 
@@ -1280,6 +2825,7 @@ function createCourseReconciliationService({
     listReconciliationRuns,
     resolveIntegrationConflict,
     listAdminOperationsOverview,
+    retrySubjectSync,
   };
 }
 

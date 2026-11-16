@@ -4,40 +4,70 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 
 type MobilePdfViewerProps = {
-  url: string;
+  url?: string;
+  data?: ArrayBuffer | Uint8Array | null;
   title: string;
+  className?: string;
+  scrollContainerOnly?: boolean;
   onReady?: () => void;
   onError?: (message: string) => void;
 };
 
-export default function MobilePdfViewer({ url, title, onReady, onError }: MobilePdfViewerProps) {
+export default function MobilePdfViewer({
+  url,
+  data,
+  title,
+  className = '',
+  scrollContainerOnly = false,
+  onReady,
+  onError,
+}: MobilePdfViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const documentRef = useRef<any>(null);
   const renderTaskRef = useRef<any>(null);
+  const onReadyRef = useRef(onReady);
+  const onErrorRef = useRef(onError);
   const [pageNumber, setPageNumber] = useState(1);
   const [pageCount, setPageCount] = useState(0);
   const [pageLoading, setPageLoading] = useState(true);
 
   useEffect(() => {
+    onReadyRef.current = onReady;
+  }, [onReady]);
+
+  useEffect(() => {
+    onErrorRef.current = onError;
+  }, [onError]);
+
+  useEffect(() => {
+    if (!data && !url) return undefined;
     let active = true;
     let loadingTask: any;
 
     const loadDocument = async () => {
       try {
         setPageLoading(true);
+        setPageCount(0);
         const pdfjs = await import('pdfjs-dist');
         pdfjs.GlobalWorkerOptions.workerSrc = new URL(
           'pdfjs-dist/build/pdf.worker.min.mjs',
           import.meta.url,
         ).toString();
-        loadingTask = pdfjs.getDocument({
-          url,
-          rangeChunkSize: 1024 * 1024,
-          disableRange: false,
-          disableStream: true,
-          disableAutoFetch: true,
-        });
+        const source = data
+          ? {
+              data: data instanceof Uint8Array
+                ? data.slice()
+                : new Uint8Array(data.slice(0)),
+            }
+          : {
+              url,
+              rangeChunkSize: 1024 * 1024,
+              disableRange: false,
+              disableStream: true,
+              disableAutoFetch: true,
+            };
+        loadingTask = pdfjs.getDocument(source);
         const pdf = await loadingTask.promise;
         if (!active) {
           await pdf.destroy();
@@ -48,7 +78,8 @@ export default function MobilePdfViewer({ url, title, onReady, onError }: Mobile
         setPageNumber(1);
       } catch (error) {
         if (!active) return;
-        onError?.(error instanceof Error ? error.message : 'Không mở được PDF trên điện thoại.');
+        setPageLoading(false);
+        onErrorRef.current?.(error instanceof Error ? error.message : 'Không mở được PDF trên điện thoại.');
       }
     };
 
@@ -60,7 +91,7 @@ export default function MobilePdfViewer({ url, title, onReady, onError }: Mobile
       documentRef.current?.destroy?.();
       documentRef.current = null;
     };
-  }, [onError, url]);
+  }, [data, url]);
 
   const renderPage = useCallback(async () => {
     const pdf = documentRef.current;
@@ -90,12 +121,12 @@ export default function MobilePdfViewer({ url, title, onReady, onError }: Mobile
       await renderTask.promise;
       page.cleanup();
       setPageLoading(false);
-      onReady?.();
+      onReadyRef.current?.();
     } catch (error: any) {
       if (error?.name === 'RenderingCancelledException') return;
-      onError?.(error instanceof Error ? error.message : 'Không render được trang PDF.');
+      onErrorRef.current?.(error instanceof Error ? error.message : 'Không render được trang PDF.');
     }
-  }, [onError, onReady, pageCount, pageNumber]);
+  }, [pageCount, pageNumber]);
 
   useEffect(() => {
     renderPage();
@@ -107,11 +138,15 @@ export default function MobilePdfViewer({ url, title, onReady, onError }: Mobile
   const goToPage = (nextPage: number) => {
     if (!pageCount) return;
     setPageNumber(Math.min(pageCount, Math.max(1, Math.trunc(nextPage) || 1)));
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (scrollContainerOnly) {
+      containerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   };
 
   return (
-    <div className="flex min-h-[calc(100svh-6rem)] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-slate-200 shadow-sm">
+    <div className={`flex min-h-[calc(100svh-6rem)] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-slate-200 shadow-sm ${className}`}>
       <div className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-slate-200 bg-white px-2 py-2 shadow-sm">
         <button type="button" onClick={() => goToPage(pageNumber - 1)} disabled={pageNumber <= 1 || pageLoading} className="inline-flex h-10 items-center gap-1 rounded-xl border border-slate-200 px-3 text-sm font-bold text-slate-700 disabled:opacity-40">
           <FiChevronLeft /> Trước

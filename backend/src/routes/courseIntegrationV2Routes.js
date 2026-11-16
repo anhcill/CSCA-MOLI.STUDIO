@@ -1,6 +1,6 @@
 const express = require("express");
 const { createCourseInboundAuth } = require("../middleware/courseInboundAuth");
-const { isCatalogSyncKillSwitchActive } = require("../utils/integrationLogger");
+const { isContentSyncKillSwitchActive, isIntegrationKillSwitchActive } = require("../utils/integrationLogger");
 
 /**
  * Signed inbound v2 integration endpoints mounted under `/api/integrations/v2`
@@ -16,11 +16,13 @@ function createCourseIntegrationV2Routes({
 
   router.post("/events/ingest", verifyInbound, async (req, res) => {
     const corr = req.courseInbound?.correlationId || null;
-    if (isCatalogSyncKillSwitchActive(env)) {
+    if (isContentSyncKillSwitchActive(env)) {
+      const globalBlocked = isIntegrationKillSwitchActive(env);
+      const code = globalBlocked ? "INTEGRATION_KILL_SWITCH_ACTIVE" : "SYNC_KILL_SWITCH_ACTIVE";
       return res.status(503).json({
         success: false,
-        code: "SYNC_KILL_SWITCH_ACTIVE",
-        errorCode: "SYNC_KILL_SWITCH_ACTIVE",
+        code,
+        errorCode: code,
         message: "Course catalog sync ingestion is temporarily paused by kill switch.",
         ...(corr ? { correlation_id: corr } : {}),
       });

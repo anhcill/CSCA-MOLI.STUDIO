@@ -4,6 +4,7 @@ const { CourseIntegrationClientError } = require("./courseIntegrationClient");
 const {
   createIntegrationLogger,
   isIntegrationKillSwitchActive,
+  isMutationsRepairKillSwitchActive,
   observeMetricLatency,
   recordMetric,
   resolveCorrelationId,
@@ -35,14 +36,13 @@ function toIso(value) {
   return Number.isFinite(date.getTime()) ? date.toISOString() : null;
 }
 
+const {
+  queryOfferingMappings,
+  resolveOfferingIdFromMapping,
+} = require("../utils/courseMappingResolver");
+
 function normalizeMolyOfferingId(row) {
-  if (!row) return null;
-  const candidate = row.source_system === "moly"
-    ? row.external_course_id
-    : row.metadata?.moly_external_course_id;
-  if (typeof candidate !== "string") return null;
-  const trimmed = candidate.trim();
-  return trimmed.startsWith("moly:") && trimmed.length > 5 ? trimmed : null;
+  return resolveOfferingIdFromMapping(row);
 }
 
 /**
@@ -108,21 +108,11 @@ function createCourseOutboxSyncService({
       ? Number(videoPackageId)
       : null;
 
-    const rows = (await runner.query(
-      `SELECT id, source_system, external_course_id, local_course_id, local_video_package_id, status, metadata
-       FROM external_course_mappings
-       WHERE local_course_id = ANY($1::bigint[])
-         AND (
-           source_system = 'moly'
-           OR (source_system = 'csca-course' AND (metadata ? 'moly_external_course_id'))
-         )
-       ORDER BY
-         (local_video_package_id IS NOT NULL AND local_video_package_id = $2) DESC,
-         (local_video_package_id IS NULL) DESC,
-         (source_system = 'moly') DESC,
-         id ASC`,
-      [uniqueIds, pkgId],
-    )).rows;
+    const rows = await queryOfferingMappings(runner, {
+      localCourseIds: uniqueIds,
+      activeOnly: false,
+      videoPackageId: pkgId,
+    });
 
     const packageScopeDisabled = [];
     const resolved = [];
@@ -458,8 +448,8 @@ function createCourseOutboxSyncService({
          AND target_system = $2
          AND event_type = 'entitlement.granted'
          AND (
-           ($3::int IS NOT NULL AND transaction_id = $3)
-           OR ($4::bigint IS NOT NULL AND entitlement_id = $4)
+           ($4::bigint IS NOT NULL AND entitlement_id = $4)
+           OR ($4::bigint IS NULL AND $3::int IS NOT NULL AND transaction_id = $3)
          )
        ORDER BY id ASC`,
       [SOURCE_SYSTEM, TARGET_SYSTEM, txId, entId],
@@ -694,9 +684,12 @@ function createCourseOutboxSyncService({
    * Claims and dispatches one ready outbox job (FOR UPDATE SKIP LOCKED + expired-lease recovery).
    */
   async function dispatchNextOutboxJob({ workerId = "moly-outbox-worker", leaseSeconds = 120 } = {}) {
-    if (isIntegrationKillSwitchActive(env)) {
+    if (isMutationsRepairKillSwitchActive(env)) {
       recordMetric("moly.outbox.dispatch_halted_kill_switch");
-      integrationLog.warn("outbox_dispatch_halted_kill_switch", { workerId });
+      integrationLog.warn("outbox_dispatch_halted_kill_switch", {
+        workerId,
+        domain: isIntegrationKillSwitchActive(env) ? "global" : "mutations_repair",
+      });
       return null;
     }
     if (!client || typeof client.provisionUser !== "function") {
@@ -733,7 +726,11 @@ function createCourseOutboxSyncService({
              OR o.user_id NOT IN (SELECT user_id FROM blocked_users)
            )
          ORDER BY
-           CASE WHEN o.event_type = 'user.provisioned' THEN 0 ELSE 1 END,
+           CASE
+             WHEN o.event_type = 'user.provisioned' THEN 0
+             WHEN o.event_type = 'entitlement.granted' THEN 1
+             ELSE 2
+           END,
            o.next_retry_at ASC,
            o.id ASC
          LIMIT 1
@@ -1009,14 +1006,16 @@ function createCourseOutboxSyncService({
     reconcileBefore = true,
     reconcileAfter = false,
   } = {}) {
-    if (isIntegrationKillSwitchActive(env)) {
+    if (isMutationsRepairKillSwitchActive(env)) {
       recordMetric("moly.outbox.batch_halted_kill_switch");
-      integrationLog.warn("outbox_batch_halted_kill_switch", { workerId, limit });
+      const killSwitchDomain = isIntegrationKillSwitchActive(env) ? "global" : "mutations_repair";
+      integrationLog.warn("outbox_batch_halted_kill_switch", { workerId, limit, domain: killSwitchDomain });
       return {
         dispatched: [],
         reconciledBefore: [],
         reconciledAfter: [],
         haltedByKillSwitch: true,
+        killSwitchDomain,
       };
     }
     if (!(await hasIntegrationTables(db))) {
@@ -1035,12 +1034,15 @@ function createCourseOutboxSyncService({
   }
 
   async function retryOutboxItem({ outboxId, actorId = null, correlationId = null, dispatchNow = false } = {}) {
-    if (isIntegrationKillSwitchActive(env)) {
+    if (isMutationsRepairKillSwitchActive(env)) {
       recordMetric("moly.outbox.manual_retry_blocked_kill_switch");
+      const isGlobal = isIntegrationKillSwitchActive(env);
       throw new CourseApiError(
         503,
-        "INTEGRATION_KILL_SWITCH_ACTIVE",
-        "Course integration sync is disabled by emergency kill switch.",
+        isGlobal ? "INTEGRATION_KILL_SWITCH_ACTIVE" : "MUTATIONS_REPAIR_KILL_SWITCH_ACTIVE",
+        isGlobal
+          ? "Course integration sync is disabled by emergency kill switch."
+          : "Outbox mutations and repair actions are temporarily paused by kill switch.",
       );
     }
     const id = Number(outboxId);
@@ -1135,7 +1137,7 @@ function createCourseOutboxSyncService({
   }
 
   function kickSync() {
-    if (isIntegrationKillSwitchActive(env)) {
+    if (isMutationsRepairKillSwitchActive(env)) {
       recordMetric("moly.outbox.kick_halted_kill_switch");
       return Promise.resolve(null);
     }

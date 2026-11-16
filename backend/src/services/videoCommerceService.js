@@ -1,6 +1,7 @@
 const { CourseApiError } = require('../utils/courseResponses');
 const { positiveId, productType, normalizeDraft, mapProduct, configurationIssues } = require('../utils/videoCommerceContract');
 const { evaluateVideoAccess } = require('../utils/videoEntitlements');
+const { syncProfileCheckoutReadyForCourses } = require('../utils/profileCheckoutReady');
 
 function createVideoCommerceService(repository) {
   const dto = (row, type) => {
@@ -43,6 +44,13 @@ function createVideoCommerceService(repository) {
       const draft = normalizeDraft(type, { ...(previous ? mapProduct(previous, type) : {}), ...input });
       await validateReferences(type, draft, client);
       const saved = await repository.writeDraft(type, draft, actorId, client, id);
+      const affectedCourseIds = [...(previous?.course_ids || []), ...(draft.courseIds || [])];
+      if (type === 'combo' && (draft.videoPackageId || previous?.video_package_id)) {
+        const videoPkgId = draft.videoPackageId || previous?.video_package_id;
+        const videoRow = await repository.find('video', videoPkgId, client);
+        if (videoRow?.course_ids?.length) affectedCourseIds.push(...videoRow.course_ids);
+      }
+      await syncProfileCheckoutReadyForCourses(client, affectedCourseIds);
       const result = dto(saved, type);
       await repository.audit({ actorId, type, id: result.id, before: previous ? mapProduct(previous, type) : null, after: result }, client);
       return result;

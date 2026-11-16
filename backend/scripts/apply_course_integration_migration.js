@@ -13,6 +13,7 @@ const MIGRATION_FILES = [
   path.join(__dirname, "../../database/migrations/079_moly_sso_browser_transactions.sql"),
   path.join(__dirname, "../../database/migrations/080_moly_integration_day5_ops.sql"),
   path.join(__dirname, "../../database/migrations/081_moly_course_full_sync_foundation.sql"),
+  path.join(__dirname, "../../database/migrations/082_moly_course_sync_day5_7.sql"),
 ];
 
 const TABLES = [
@@ -35,6 +36,8 @@ const TABLES = [
   "course_progress_projections",
   "course_assessment_projections",
   "course_note_projections",
+  "course_bookmark_projections",
+  "course_qa_thread_projections",
   "moly_trusted_browser_devices",
 ];
 

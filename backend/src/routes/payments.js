@@ -12,6 +12,7 @@ const db = require('../config/database');
 const coinService = require('../services/coinService');
 const { isVideoPayment } = require('../utils/videoPaymentIdentity');
 const { bankNameFromBin } = require('../utils/vietqrBanks');
+const courseIntegrationRuntime = require('../services/courseIntegrationRuntime');
 const {
   canAccessSubject,
   hasAllSubjects,
@@ -928,6 +929,61 @@ router.post('/create', authenticate, async (req, res) => {
           : 'Bạn đang có gói VIP đang hoạt động, không cần mua thêm gói VIP.',
         currentTier: activeTier,
       });
+    }
+
+    // Prevent double-selling when the VIP package covers synced/mapped courses with external ownership or conflicts.
+    const pkgCaps = (await db.query(
+      `SELECT
+         to_regclass('course_package_access') IS NOT NULL AS has_pkg_access,
+         to_regclass('courses') IS NOT NULL AS has_courses,
+         EXISTS (
+           SELECT 1 FROM pg_attribute
+           WHERE attrelid = to_regclass('courses')
+             AND NOT attisdropped
+             AND attname = 'content_origin'
+         ) AS has_origin`,
+    )).rows[0] || {};
+    if (pkgCaps.has_pkg_access && pkgCaps.has_courses) {
+      const originSelect = pkgCaps.has_origin
+        ? `COALESCE(c.content_origin, 'moly_native') AS content_origin`
+        : `'moly_native'::text AS content_origin`;
+      const linkedRows = (await db.query(
+        `SELECT c.id, c.subject_code, c.status, ${originSelect}
+         FROM course_package_access cpa
+         JOIN courses c ON c.id = cpa.course_id
+         WHERE cpa.package_id = $1`,
+        [pkg.id],
+      )).rows;
+      const applicableCourseIds = linkedRows
+        .filter((r) => selectedSubjects.includes('*') || selectedSubjects.includes(r.subject_code))
+        .map((r) => Number(r.id))
+        .filter((id) => Number.isSafeInteger(id) && id > 0);
+      if (applicableCourseIds.length > 0 && courseIntegrationRuntime?.ownership) {
+        const pkgOwnership = await courseIntegrationRuntime.ownership.evaluatePackageOwnership(userId, {
+          courseIds: applicableCourseIds,
+          refreshFromCourse: false,
+        });
+        if (
+          pkgOwnership.blockCode === 'EXTERNAL_GRANT_BLOCKED'
+          || pkgOwnership.blockCode === 'PENDING_SYNC'
+          || pkgOwnership.blockCode === 'IDENTITY_VERIFICATION_REQUIRED'
+          || (Array.isArray(pkgOwnership.externalOwnedCourseIds) && pkgOwnership.externalOwnedCourseIds.length > 0)
+        ) {
+          const overlapCode = ['EXTERNAL_GRANT_BLOCKED', 'PENDING_SYNC', 'IDENTITY_VERIFICATION_REQUIRED'].includes(pkgOwnership.blockCode)
+            ? pkgOwnership.blockCode
+            : 'ALREADY_OWNED';
+          return res.status(409).json({
+            success: false,
+            code: overlapCode,
+            message: pkgOwnership.label || 'Gói chứa khóa học đã được sở hữu hoặc đang đồng bộ quyền.',
+            data: {
+              overlappingCourseIds: pkgOwnership.externalOwnedCourseIds || [],
+              blockedCourseIds: pkgOwnership.blockedCourseIds || [],
+              pendingSyncCourseIds: pkgOwnership.pendingSyncCourseIds || [],
+            },
+          });
+        }
+      }
     }
 
     const effectivePrice = getEffectivePackagePrice(pkg, selectedSubjects);

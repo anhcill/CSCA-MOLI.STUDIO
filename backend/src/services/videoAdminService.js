@@ -3,6 +3,7 @@ const { CourseApiError } = require('../utils/courseResponses');
 const { positiveId, productType, normalizeDraft, mapProduct, configurationIssues } = require('../utils/videoCommerceContract');
 const { resolveSelectedSubjects, normalizeTier } = require('../utils/vipEntitlements');
 const { preserveLegacyVip, recalculateVideoVip } = require('./videoVipSummary');
+const { syncProfileCheckoutReadyForCourses } = require('../utils/profileCheckoutReady');
 
 const fail = (code, message, status=422) => { throw new CourseApiError(status,code,message); };
 const table = type => productType(type)==='video'?'video_packages':'combo_packages';
@@ -111,11 +112,21 @@ function createVideoAdminService({db,repository,payments,recalculateVip,sendRigh
       if(!prices || typeof prices!=='object' || Array.isArray(prices) || Object.entries(prices).some(([s,v])=>!video?.allowedSubjects?.includes(s)||!integer(v)))fail('INVALID_SUBJECT_PRICES','Invalid subject prices.');
       const saved=await repository.writeDraft(type,{...data,status:'draft'},actor,client,id);
       await client.query(`UPDATE ${table(type)} SET renewal_mode=$2,subject_prices=$3::jsonb WHERE id=$1`,[saved.id,renewal,JSON.stringify(prices)]);
+      if(status==='active' && configurationIssues({...data,type}).length)fail('PRODUCT_NOT_CONFIGURED','Configure price, duration and package contents before publishing.');
+      await client.query(`UPDATE ${table(type)} SET status=$2 WHERE id=$1`,[saved.id,status]);
+      const affectedCourseIds = [
+        ...(previous?.course_ids || []),
+        ...(data.courseIds || []),
+        ...(video?.courseIds || []),
+      ];
+      if (type === 'combo' && previous?.video_package_id && Number(previous.video_package_id) !== Number(data.videoPackageId)) {
+        const prevVideo = await repository.find('video', previous.video_package_id, client);
+        if (prevVideo?.course_ids?.length) affectedCourseIds.push(...prevVideo.course_ids);
+      }
+      await syncProfileCheckoutReadyForCourses(client, affectedCourseIds);
       if(status==='active') {
-        if(configurationIssues({...data,type}).length)fail('PRODUCT_NOT_CONFIGURED','Configure price, duration and package contents before publishing.');
-        await client.query(`UPDATE ${table(type)} SET status='active' WHERE id=$1`,[saved.id]);
         for(const subject of video?.requiresSubjectChoice?video.allowedSubjects:[null])await payments.productSnapshot(client,{type,productId:Number(saved.id),selectedSubjectCode:subject});
-      } else await client.query(`UPDATE ${table(type)} SET status=$2 WHERE id=$1`,[saved.id,status]);
+      }
       const result=await enrich(await repository.find(type,saved.id,client),type,client);
       await audit(client,actor,'product_saved',type,saved.id,{before:previous?mapProduct(previous,type):null,after:result});
       return result;

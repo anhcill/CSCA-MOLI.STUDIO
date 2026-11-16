@@ -1,9 +1,10 @@
 const express = require("express");
 const { sendData, sendCourseError, CourseApiError } = require("../utils/courseResponses");
 const { getIntegrationMetricsSnapshot } = require("../utils/integrationLogger");
+const { runContractProbe } = require("../utils/integrationReadiness");
 
 /**
- * Creates admin router for manual external course mappings and Day 5 operations in Moly Studio.
+ * Creates admin router for manual external course mappings and Days 5-10 operations in Moly Studio.
  */
 function createCourseIntegrationAdminRoutes({
   service,
@@ -12,6 +13,9 @@ function createCourseIntegrationAdminRoutes({
   reconciliation = null,
   catalogSync = null,
   db = null,
+  client = null,
+  env = process.env,
+  workerStatus = null,
   authenticate,
   authorizeAnyPermission,
 }) {
@@ -200,6 +204,11 @@ function createCourseIntegrationAdminRoutes({
           dryRun: req.body?.dryRun !== false,
           triggerMode: "api",
           triggeredBy: req.user?.id ?? null,
+          domains: req.body?.domains ?? null,
+          userIds: req.body?.userIds ?? null,
+          courseIds: req.body?.courseIds ?? null,
+          profileIds: req.body?.profileIds ?? null,
+          limit: req.body?.limit ?? 500,
           scopeFilter: req.body?.scopeFilter || {},
           correlationId: req.headers["x-correlation-id"] || req.body?.correlationId || null,
           dispatchRepairs: req.body?.dispatchRepairs !== false,
@@ -207,6 +216,28 @@ function createCourseIntegrationAdminRoutes({
         }),
       ),
     );
+
+    if (typeof reconciliation.retrySubjectSync === "function") {
+      router.post(
+        "/ops/retry-subject",
+        authorizeAnyPermission("users.manage"),
+        handle((req) =>
+          reconciliation.retrySubjectSync({
+            userId: req.body?.userId ?? null,
+            externalUserId: req.body?.externalUserId ?? null,
+            courseId: req.body?.courseId ?? null,
+            localCourseId: req.body?.localCourseId ?? null,
+            remoteCourseId: req.body?.remoteCourseId ?? null,
+            profileId: req.body?.profileId ?? null,
+            remoteProfileId: req.body?.remoteProfileId ?? null,
+            domains: req.body?.domains ?? null,
+            dryRun: Boolean(req.body?.dryRun),
+            actorId: req.user?.id ?? null,
+            correlationId: req.headers["x-correlation-id"] || req.body?.correlationId || null,
+          }),
+        ),
+      );
+    }
 
     router.get(
       "/reconcile/runs",
@@ -219,6 +250,19 @@ function createCourseIntegrationAdminRoutes({
     );
   }
 
+  router.get(
+    "/ops/contract-probe",
+    handle((req) =>
+      runContractProbe({
+        db,
+        client,
+        env,
+        workerStatus: typeof workerStatus === "function" ? workerStatus() : workerStatus,
+        correlationId: req.headers["x-correlation-id"] || null,
+      }),
+    ),
+  );
+
   if (catalogSync) {
     router.post(
       "/catalog/backfill",
@@ -230,6 +274,21 @@ function createCourseIntegrationAdminRoutes({
         }),
       ),
     );
+
+    if (typeof catalogSync.retryInboxItem === "function") {
+      router.post(
+        "/catalog/inbox/:id/retry",
+        authorizeAnyPermission("content.manage", "users.manage"),
+        handle((req) =>
+          catalogSync.retryInboxItem(req.params.id, {
+            actorId: req.user?.id ?? null,
+            correlationId: req.headers["x-correlation-id"] || req.body?.correlationId || null,
+            dispatchNow: req.body?.dispatchNow !== false,
+            force: Boolean(req.body?.force),
+          }),
+        ),
+      );
+    }
 
     if (typeof catalogSync.runCurriculumBackfill === "function") {
       router.post(

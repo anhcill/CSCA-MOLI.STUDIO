@@ -1,6 +1,8 @@
 # Moly Studio <-> CSCA-Course Integration Runbook, Railway Env Guide & Rollout Order (Day 5)
 
 > **Security notice**: This document intentionally lists **environment variable names only**. Never commit real tokens, HMAC secrets, passwords, JWT keys, `linkToken`, PKCE `codeVerifier`, or payment payloads to git or logs.
+>
+> **Day 8–10 Full Sync v2 Supplement**: For v2 catalog/curriculum sync (`081`–`082` Moly / `083`–`084` Course), split kill switches (`Global`, `Content Sync`, `Delegated Learning`, `Mutations / Repair`), Admin Ops v2 Inbox & Per-Subject Recovery, frontend `NEXT_PUBLIC_*` rollout defaults, SLA probe & Playwright two-origin E2E instructions, and the production **Go/No-Go Checklist**, see [MOLY_COURSE_DAY8_10_RUNBOOK_AND_GO_NO_GO.md](./MOLY_COURSE_DAY8_10_RUNBOOK_AND_GO_NO_GO.md).
 
 ---
 
@@ -113,6 +115,9 @@ Reconciliation **never** auto-merges or auto-links conflicting accounts.
 | `COURSE_INTEGRATION_RECONCILE_INTERVAL_MS` | Optional | Scheduled reconciliation interval (default `300000`) |
 | `COURSE_INTEGRATION_RECONCILE_AUTO_REPAIR` | Optional | Keep `false` initially so scheduled ticks run dry-run until verified |
 | `COURSE_INTEGRATION_SYNC_DISABLED` | Emergency | Set `false` normally; `true` activates immediate Kill Switch |
+| `COURSE_CATALOG_SYNC_DISABLED` | Emergency | Set `false` normally; `true` freezes Day 8–10 catalog/content sync |
+| `COURSE_CATALOG_PULL_DISABLED` | Gated | Set `true` / `COURSE_CATALOG_PULL_INTERVAL_MS=0` until v2 contract probe passes |
+| `CSCA_BUNNY_STREAM_ENABLED` | Gated | Server-only Bunny Stream toggle (`false` default until credentials ready) |
 
 ### 2.2 CSCA-Course Backend & Worker Services (`WebsiteReactVCK-master`)
 | Variable Name | Required | Purpose & Safe Default |
@@ -130,6 +135,8 @@ Reconciliation **never** auto-merges or auto-links conflicting accounts.
 | `MOLY_OUTBOUND_MAX_TRANSPORT_ATTEMPTS` | Optional | Transport retries (`2`) |
 | `MOLY_SSO_TTL_SECONDS` | Optional | Short-lived SSO ticket TTL (`90`) |
 | `MOLY_INTEGRATION_SYNC_DISABLED` | Emergency | Set `false` normally; `true` activates immediate Kill Switch on API + Worker |
+| `COURSE_CATALOG_SYNC_DISABLED` | Emergency | Set `false` normally; `true` freezes Day 8–10 catalog sync on Course |
+| `COURSE_CATALOG_SYNC_WORKER_ENABLED` | Gated | Keep `false` until migrations `083`–`084` & contract probe pass |
 
 ---
 

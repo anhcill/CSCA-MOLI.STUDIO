@@ -50,17 +50,74 @@ function resolveCorrelationId(candidate) {
   return crypto.randomUUID();
 }
 
+function isTruthyEnvFlag(env, keys = []) {
+  for (const key of keys) {
+    if (String(env?.[key] || "").trim().toLowerCase() === "true") {
+      return true;
+    }
+  }
+  return false;
+}
+
 function isIntegrationKillSwitchActive(env = process.env) {
-  const disabledFlag = String(env?.COURSE_INTEGRATION_SYNC_DISABLED || "").trim().toLowerCase();
-  const killFlag = String(env?.COURSE_INTEGRATION_KILL_SWITCH || "").trim().toLowerCase();
-  return disabledFlag === "true" || killFlag === "true";
+  return isTruthyEnvFlag(env, ["COURSE_INTEGRATION_SYNC_DISABLED", "COURSE_INTEGRATION_KILL_SWITCH"]);
+}
+
+function isContentSyncKillSwitchActive(env = process.env) {
+  if (isIntegrationKillSwitchActive(env)) return true;
+  return isTruthyEnvFlag(env, [
+    "COURSE_CONTENT_SYNC_DISABLED",
+    "COURSE_CATALOG_SYNC_DISABLED",
+    "COURSE_CATALOG_PULL_DISABLED",
+  ]);
 }
 
 function isCatalogSyncKillSwitchActive(env = process.env) {
+  return isContentSyncKillSwitchActive(env);
+}
+
+function isDelegatedLearningKillSwitchActive(env = process.env) {
   if (isIntegrationKillSwitchActive(env)) return true;
-  const disabledFlag = String(env?.COURSE_CATALOG_SYNC_DISABLED || "").trim().toLowerCase();
-  const pullDisabledFlag = String(env?.COURSE_CATALOG_PULL_DISABLED || "").trim().toLowerCase();
-  return disabledFlag === "true" || pullDisabledFlag === "true";
+  return isTruthyEnvFlag(env, [
+    "COURSE_DELEGATED_LEARNING_DISABLED",
+    "DELEGATED_LEARNING_KILL_SWITCH",
+    "MOLY_DELEGATED_LEARNING_DISABLED",
+  ]);
+}
+
+function isMutationsRepairKillSwitchActive(env = process.env) {
+  if (isIntegrationKillSwitchActive(env)) return true;
+  return isTruthyEnvFlag(env, [
+    "COURSE_MUTATIONS_REPAIR_DISABLED",
+    "COURSE_REPAIR_MUTATIONS_DISABLED",
+    "REPAIR_MUTATIONS_KILL_SWITCH",
+  ]);
+}
+
+function getKillSwitchesSnapshot(env = process.env) {
+  return {
+    global: isIntegrationKillSwitchActive(env),
+    contentSync: isContentSyncKillSwitchActive(env),
+    delegatedLearning: isDelegatedLearningKillSwitchActive(env),
+    mutationsRepair: isMutationsRepairKillSwitchActive(env),
+  };
+}
+
+function readRolloutPosture(env = process.env) {
+  const rawPullInterval = Number.parseInt(String(env?.COURSE_CATALOG_PULL_INTERVAL_MS || "0"), 10);
+  const coursesRaw = String(env?.CSCA_COURSES_ENABLED ?? "true").trim().toLowerCase();
+  return {
+    coursesEnabled: coursesRaw === "true",
+    courseIntegrationWorkerEnabled: isTruthyEnvFlag(env, ["COURSE_INTEGRATION_WORKER_ENABLED"]),
+    courseCatalogPullIntervalMs: Number.isFinite(rawPullInterval) && rawPullInterval > 0 ? rawPullInterval : 0,
+    reconcileAutoRepairEnabled: isTruthyEnvFlag(env, ["COURSE_INTEGRATION_RECONCILE_AUTO_REPAIR"]),
+    catalogConsumerEnabled: isTruthyEnvFlag(env, ["COURSE_CATALOG_CONSUMER_ENABLED"]),
+    delegatedLearningEnabled: isTruthyEnvFlag(env, ["COURSE_DELEGATED_LEARNING_ENABLED"]),
+    courseCatalogSalesEnabled: isTruthyEnvFlag(env, ["COURSE_CATALOG_SALES_ENABLED"]),
+    videoCommerceEnabled: isTruthyEnvFlag(env, ["CSCA_VIDEO_COMMERCE_ENABLED"]),
+    videoCommerceSalesEnabled: isTruthyEnvFlag(env, ["CSCA_VIDEO_COMMERCE_SALES_ENABLED"]),
+    bunnyStreamEnabled: isTruthyEnvFlag(env, ["CSCA_BUNNY_STREAM_ENABLED"]),
+  };
 }
 
 const metricsCounters = new Map();
@@ -83,7 +140,7 @@ function observeMetricLatency(name, durationMs) {
   });
 }
 
-function getIntegrationMetricsSnapshot() {
+function getIntegrationMetricsSnapshot(env = process.env) {
   const counters = {};
   for (const [k, v] of metricsCounters.entries()) {
     counters[k] = v;
@@ -98,7 +155,8 @@ function getIntegrationMetricsSnapshot() {
     };
   }
   return {
-    killSwitchActive: isIntegrationKillSwitchActive(),
+    killSwitchActive: isIntegrationKillSwitchActive(env),
+    killSwitches: getKillSwitchesSnapshot(env),
     counters,
     latencies,
   };
@@ -143,7 +201,12 @@ module.exports = {
   redactSensitiveData,
   resolveCorrelationId,
   isIntegrationKillSwitchActive,
+  isContentSyncKillSwitchActive,
   isCatalogSyncKillSwitchActive,
+  isDelegatedLearningKillSwitchActive,
+  isMutationsRepairKillSwitchActive,
+  getKillSwitchesSnapshot,
+  readRolloutPosture,
   recordMetric,
   observeMetricLatency,
   getIntegrationMetricsSnapshot,

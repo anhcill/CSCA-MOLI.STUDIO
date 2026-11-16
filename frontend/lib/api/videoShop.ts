@@ -13,6 +13,7 @@ export interface Page<T> {
 
 export type ShopProduct = Omit<VideoCommerceProductDto, 'canPurchase'> & {
   canPurchase: boolean;
+  purchaseBlockReason?: string | null;
   renewalMode: VideoRenewalMode;
   subjectPrices: Record<string, number>;
   video: VideoPackageDto | null;

@@ -2,8 +2,10 @@ const crypto = require("crypto");
 const { CourseApiError } = require("../utils/courseResponses");
 const {
   createIntegrationLogger,
-  isCatalogSyncKillSwitchActive,
+  isContentSyncKillSwitchActive,
+  isDelegatedLearningKillSwitchActive,
   isIntegrationKillSwitchActive,
+  isMutationsRepairKillSwitchActive,
   observeMetricLatency,
   recordMetric,
   resolveCorrelationId,
@@ -173,26 +175,10 @@ function createCourseIntegrationClient({
     return cfg;
   }
 
-  async function postSigned(
-    routePath,
-    payload,
-    {
-      apiVersion = "v1",
-      correlationId,
-      idempotencyKey,
-      requireIdempotencyKey = true,
-      maxTransportAttempts,
-      timeoutMs,
-      validateData,
-    } = {},
-  ) {
-    const integrationLog = logger && logger !== console && typeof logger.info === "function"
-      ? logger
-      : createIntegrationLogger({ component: "course-client", env });
-    const reqCorr = resolveCorrelationId(correlationId ?? payload?.correlation_id);
+  function assertDomainKillSwitch(killSwitchDomain, integrationLog, routePath, reqCorr, method = "POST") {
     if (isIntegrationKillSwitchActive(env)) {
       recordMetric("moly.client.blocked_kill_switch");
-      integrationLog.warn("client_blocked_kill_switch", { routePath }, reqCorr);
+      integrationLog.warn("client_blocked_kill_switch", { routePath, method, domain: "global" }, reqCorr);
       throw new CourseIntegrationClientError(
         503,
         "INTEGRATION_KILL_SWITCH_ACTIVE",
@@ -200,16 +186,81 @@ function createCourseIntegrationClient({
         { retryable: true },
       );
     }
+    if (killSwitchDomain === "content_sync" && isContentSyncKillSwitchActive(env)) {
+      recordMetric("moly.client.blocked_kill_switch");
+      integrationLog.warn("client_blocked_kill_switch", { routePath, method, domain: "content_sync" }, reqCorr);
+      throw new CourseIntegrationClientError(
+        503,
+        "SYNC_KILL_SWITCH_ACTIVE",
+        "Catalog sync pull is disabled by content sync kill switch.",
+        { retryable: true },
+      );
+    }
+    if (
+      (killSwitchDomain === "delegated_learning" || killSwitchDomain === "delegated_mutation")
+      && isDelegatedLearningKillSwitchActive(env)
+    ) {
+      recordMetric("moly.client.blocked_kill_switch");
+      integrationLog.warn("client_blocked_kill_switch", { routePath, method, domain: "delegated_learning" }, reqCorr);
+      throw new CourseIntegrationClientError(
+        503,
+        "DELEGATED_LEARNING_KILL_SWITCH_ACTIVE",
+        "Delegated CSCA-Course learning is temporarily paused by kill switch.",
+        { retryable: true },
+      );
+    }
+    if (
+      (killSwitchDomain === "mutations_repair" || killSwitchDomain === "delegated_mutation")
+      && isMutationsRepairKillSwitchActive(env)
+    ) {
+      recordMetric("moly.client.blocked_kill_switch");
+      integrationLog.warn("client_blocked_kill_switch", { routePath, method, domain: "mutations_repair" }, reqCorr);
+      throw new CourseIntegrationClientError(
+        503,
+        "MUTATIONS_REPAIR_KILL_SWITCH_ACTIVE",
+        "Integration write mutations and repairs are temporarily paused by kill switch.",
+        { retryable: true },
+      );
+    }
+  }
+
+  async function postSigned(
+    routePath,
+    payload,
+    {
+      apiVersion = "v1",
+      method = "POST",
+      correlationId,
+      idempotencyKey,
+      requireIdempotencyKey = true,
+      extraHeaders = {},
+      maxTransportAttempts,
+      timeoutMs,
+      validateData,
+      killSwitchDomain = null,
+    } = {},
+  ) {
+    const normalizedMethod = String(method || "POST").toUpperCase();
+    const effectivePayload =
+      (normalizedMethod === "DELETE" || normalizedMethod === "PATCH")
+      && (payload === undefined || payload === null)
+        ? {}
+        : payload;
+    const integrationLog = logger && logger !== console && typeof logger.info === "function"
+      ? logger
+      : createIntegrationLogger({ component: "course-client", env });
+    const reqCorr = resolveCorrelationId(correlationId ?? effectivePayload?.correlation_id);
+    assertDomainKillSwitch(killSwitchDomain, integrationLog, routePath, reqCorr, normalizedMethod);
     const callStartMs = Date.now();
     const cfg = assertConfigured();
-    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    if (!effectivePayload || typeof effectivePayload !== "object" || Array.isArray(effectivePayload)) {
       throw new CourseIntegrationClientError(422, "VALIDATION_ERROR", "Integration payload must be an object.");
     }
-    const corr = String(correlationId ?? payload.correlation_id ?? "").trim();
+    const corr = String(correlationId ?? effectivePayload.correlation_id ?? "").trim();
     if (!corr || corr.length > 128) {
       throw new CourseIntegrationClientError(422, "VALIDATION_ERROR", "Valid correlation_id is required.");
     }
-    const idem = idempotencyKey !== undefined ? idempotencyKey : payload.idempotency_key ?? null;
+    const idem = idempotencyKey !== undefined ? idempotencyKey : effectivePayload.idempotency_key ?? null;
     const normalizedIdem = idem === null || idem === undefined || String(idem).trim() === ""
       ? null
       : String(idem).trim();
@@ -229,7 +280,7 @@ function createCourseIntegrationClient({
     const resolvedVersion = String(apiVersion || "v1").replace(/^\/+|\/+$/g, "");
     const url = `${cfg.baseUrl}/api/integrations/${resolvedVersion}${routePath}`;
     // Serialize body once per logical command; compute fresh timestamp/signature per attempt.
-    const rawBody = JSON.stringify(payload);
+    const rawBody = JSON.stringify(effectivePayload);
 
     let lastError = null;
     for (let attempt = 1; attempt <= attempts; attempt += 1) {
@@ -240,7 +291,9 @@ function createCourseIntegrationClient({
         secret: cfg.hmacSecret,
       });
 
+      const safeExtraHeaders = extraHeaders && typeof extraHeaders === "object" ? extraHeaders : {};
       const headers = {
+        ...safeExtraHeaders,
         Authorization: `Bearer ${cfg.serviceToken}`,
         "X-Integration-Key": cfg.integrationKey,
         "X-Event-Timestamp": timestamp,
@@ -256,7 +309,7 @@ function createCourseIntegrationClient({
       let response;
       try {
         response = await fetchImpl(url, {
-          method: "POST",
+          method: normalizedMethod,
           headers,
           body: rawBody,
           signal: AbortSignal.timeout(requestTimeoutMs),
@@ -379,22 +432,14 @@ function createCourseIntegrationClient({
       timeoutMs,
       validateData,
       extraHeaders = {},
+      killSwitchDomain = null,
     } = {},
   ) {
     const integrationLog = logger && logger !== console && typeof logger.info === "function"
       ? logger
       : createIntegrationLogger({ component: "course-client", env });
     const reqCorr = resolveCorrelationId(correlationId);
-    if (isCatalogSyncKillSwitchActive(env)) {
-      recordMetric("moly.client.blocked_kill_switch");
-      integrationLog.warn("client_blocked_kill_switch", { routePath, method: "GET" }, reqCorr);
-      throw new CourseIntegrationClientError(
-        503,
-        "SYNC_KILL_SWITCH_ACTIVE",
-        "Catalog sync pull is disabled by kill switch.",
-        { retryable: true },
-      );
-    }
+    assertDomainKillSwitch(killSwitchDomain, integrationLog, routePath, reqCorr, "GET");
     const callStartMs = Date.now();
     const cfg = assertConfigured();
 
@@ -506,8 +551,14 @@ function createCourseIntegrationClient({
       lastError = new CourseIntegrationClientError(
         response.status,
         remoteCode,
-        String(parsedBody.message || `Course request failed (${response.status}).`),
-        { retryable, errorCode: remoteCode },
+        sanitizeSafeErrorMessage(response.status, parsedBody),
+        {
+          retryable,
+          errorCode: remoteCode,
+          details: parsedBody.details && typeof parsedBody.details === "object"
+            ? { errorCode: remoteCode, details: parsedBody.details }
+            : { errorCode: remoteCode },
+        },
       );
       if (retryable && attempt < attempts) {
         await sleep(cfg.retryBaseDelayMs * (2 ** (attempt - 1)));
@@ -544,6 +595,7 @@ function createCourseIntegrationClient({
       {
         ...opts,
         apiVersion: "v2",
+        killSwitchDomain: "content_sync",
         correlationId,
         validateData: (resBody) => Boolean(
           resBody.data
@@ -558,6 +610,7 @@ function createCourseIntegrationClient({
   function provisionUser(payload, opts = {}) {
     return postSigned("/users/provision", payload, {
       ...opts,
+      killSwitchDomain: "mutations_repair",
       requireIdempotencyKey: true,
       validateData: (body) => Boolean(body.data && typeof body.data === "object" && !Array.isArray(body.data)),
     });
@@ -566,6 +619,7 @@ function createCourseIntegrationClient({
   function grantEntitlement(payload, opts = {}) {
     return postSigned("/entitlements/grant", payload, {
       ...opts,
+      killSwitchDomain: "mutations_repair",
       requireIdempotencyKey: true,
       validateData: (body) => Boolean(body.data && typeof body.data === "object" && !Array.isArray(body.data)),
     });
@@ -574,6 +628,7 @@ function createCourseIntegrationClient({
   function revokeEntitlement(payload, opts = {}) {
     return postSigned("/entitlements/revoke", payload, {
       ...opts,
+      killSwitchDomain: "mutations_repair",
       requireIdempotencyKey: true,
       validateData: (body) => Boolean(body.data && typeof body.data === "object" && !Array.isArray(body.data)),
     });
@@ -615,7 +670,18 @@ function createCourseIntegrationClient({
     });
   }
 
-  function exchangeSsoCode({ code, nonce, codeVerifier = null, consumerSystem = "moly", consumeIp = null, correlationId = null }, opts = {}) {
+  function exchangeSsoCode(
+    {
+      code,
+      nonce,
+      codeVerifier = null,
+      consumerSystem = "moly",
+      consumeIp = null,
+      correlationId = null,
+      deviceSlotProof = null,
+    },
+    opts = {},
+  ) {
     if (!code || !nonce) {
       throw new CourseIntegrationClientError(422, "VALIDATION_ERROR", "code and nonce are required.");
     }
@@ -627,8 +693,18 @@ function createCourseIntegrationClient({
       consume_ip: consumeIp,
       correlation_id: correlationId,
     };
+    const proofHeader = typeof deviceSlotProof === "string" && deviceSlotProof.trim()
+      ? deviceSlotProof.trim()
+      : deviceSlotProof && typeof deviceSlotProof === "object"
+        ? Buffer.from(JSON.stringify(deviceSlotProof), "utf8").toString("base64url")
+        : null;
+    const extraHeaders = {
+      ...(opts.extraHeaders && typeof opts.extraHeaders === "object" ? opts.extraHeaders : {}),
+      ...(proofHeader ? { "X-Device-Slot-Proof": proofHeader } : {}),
+    };
     return postSigned("/sso/exchange", body, {
       ...opts,
+      extraHeaders,
       correlationId,
       idempotencyKey: null,
       requireIdempotencyKey: false,
@@ -708,6 +784,7 @@ function createCourseIntegrationClient({
       },
       {
         apiVersion: "v2",
+        killSwitchDomain: "content_sync",
         correlationId,
         maxTransportAttempts,
         timeoutMs,
@@ -720,8 +797,11 @@ function createCourseIntegrationClient({
     externalUserId,
     courseId = null,
     profileId,
-    scopes = ["workspace:read", "video:play"],
+    scopes = ["workspace:read", "video:play", "progress:write"],
     ttlSeconds = 300,
+    deviceSlotProof = null,
+    clientIp = null,
+    userAgent = "",
     metadata = {},
     idempotencyKey = null,
     correlationId,
@@ -730,6 +810,12 @@ function createCourseIntegrationClient({
   } = {}) {
     const corr = resolveCorrelationId(correlationId);
     const effectiveIdemKey = idempotencyKey || `dls:${externalUserId}:${profileId}:${crypto.randomUUID()}`;
+    const proofHeader = typeof deviceSlotProof === "string" && deviceSlotProof.trim()
+      ? deviceSlotProof.trim()
+      : deviceSlotProof && typeof deviceSlotProof === "object"
+        ? Buffer.from(JSON.stringify(deviceSlotProof), "utf8").toString("base64url")
+        : null;
+    const extraHeaders = proofHeader ? { "X-Device-Slot-Proof": proofHeader } : {};
     return postSigned(
       "/learning/sessions",
       {
@@ -738,11 +824,15 @@ function createCourseIntegrationClient({
         profileId: String(profileId),
         scopes,
         ttlSeconds,
+        ...(clientIp ? { clientIp: String(clientIp) } : {}),
+        ...(userAgent ? { userAgent: String(userAgent).slice(0, 1000) } : {}),
         metadata,
       },
       {
         apiVersion: "v2",
+        killSwitchDomain: "delegated_learning",
         idempotencyKey: effectiveIdemKey,
+        extraHeaders,
         correlationId: corr,
         maxTransportAttempts,
         timeoutMs,
@@ -765,6 +855,7 @@ function createCourseIntegrationClient({
       { unitId: unitId ?? undefined },
       {
         apiVersion: "v2",
+        killSwitchDomain: "delegated_learning",
         correlationId,
         maxTransportAttempts,
         timeoutMs,
@@ -789,6 +880,7 @@ function createCourseIntegrationClient({
       {},
       {
         apiVersion: "v2",
+        killSwitchDomain: "delegated_learning",
         correlationId,
         maxTransportAttempts,
         timeoutMs,
@@ -812,10 +904,674 @@ function createCourseIntegrationClient({
       {},
       {
         apiVersion: "v2",
+        killSwitchDomain: "delegated_learning",
         correlationId,
         maxTransportAttempts,
         timeoutMs,
         validateData: (body) => Boolean(body && body.success === true && body.data && body.data.activeUnit),
+      },
+    ).then((res) => res.payload.data);
+  }
+
+  async function requestDelegatedPlaybackToken({
+    sessionToken,
+    videoId,
+    unitId = null,
+    profileId = null,
+    ttlSeconds = 60,
+    deviceSlotProof = null,
+    clientIp = null,
+    userAgent = "",
+    correlationId,
+    maxTransportAttempts = 1,
+    timeoutMs,
+  } = {}) {
+    const vid = encodeURIComponent(String(videoId || "").trim());
+    const proofHeader = typeof deviceSlotProof === "string" && deviceSlotProof.trim()
+      ? deviceSlotProof.trim()
+      : deviceSlotProof && typeof deviceSlotProof === "object"
+        ? Buffer.from(JSON.stringify(deviceSlotProof), "utf8").toString("base64url")
+        : null;
+    const extraHeaders = {
+      "X-Delegated-Session": String(sessionToken || ""),
+      ...(proofHeader ? { "X-Device-Slot-Proof": proofHeader } : {}),
+    };
+    return postSigned(
+      `/learning/videos/${vid}/playback-token`,
+      {
+        ...(unitId != null ? { unitId: String(unitId) } : {}),
+        ...(profileId != null ? { profileId: String(profileId) } : {}),
+        ttlSeconds,
+        ...(clientIp ? { clientIp: String(clientIp) } : {}),
+        ...(userAgent ? { userAgent: String(userAgent).slice(0, 1000) } : {}),
+      },
+      {
+        apiVersion: "v2",
+        killSwitchDomain: "delegated_learning",
+        idempotencyKey: null,
+        requireIdempotencyKey: false,
+        extraHeaders,
+        correlationId: resolveCorrelationId(correlationId),
+        maxTransportAttempts,
+        timeoutMs,
+        validateData: (body) => Boolean(body && body.success === true && body.data && typeof body.data.embedUrl === "string"),
+      },
+    ).then((res) => res.payload.data);
+  }
+
+  async function sendDelegatedVideoProgress({
+    sessionToken,
+    videoId,
+    unitId = null,
+    profileId = null,
+    currentTimeSeconds = 0,
+    watchedDeltaSeconds = 0,
+    durationSeconds = null,
+    clientSequence = null,
+    eventTimestamp = null,
+    correlationId,
+    maxTransportAttempts = 1,
+    timeoutMs,
+  } = {}) {
+    const vid = encodeURIComponent(String(videoId || "").trim());
+    return postSigned(
+      `/learning/videos/${vid}/progress`,
+      {
+        ...(unitId != null ? { unitId: String(unitId) } : {}),
+        ...(profileId != null ? { profileId: String(profileId) } : {}),
+        currentTimeSeconds: Number(currentTimeSeconds || 0),
+        watchedDeltaSeconds: Number(watchedDeltaSeconds || 0),
+        ...(durationSeconds != null ? { durationSeconds: Number(durationSeconds) } : {}),
+        ...(clientSequence != null ? { clientSequence: Number(clientSequence) } : {}),
+        ...(eventTimestamp ? { eventTimestamp: String(eventTimestamp) } : {}),
+      },
+      {
+        apiVersion: "v2",
+        killSwitchDomain: "delegated_mutation",
+        method: "PUT",
+        idempotencyKey: null,
+        requireIdempotencyKey: false,
+        extraHeaders: { "X-Delegated-Session": String(sessionToken || "") },
+        correlationId: resolveCorrelationId(correlationId),
+        maxTransportAttempts,
+        timeoutMs,
+        validateData: (body) => Boolean(body && body.success === true && body.data && typeof body.data.completionPercent === "number"),
+      },
+    ).then((res) => res.payload.data);
+  }
+
+  function delegatedGet(routePath, {
+    sessionToken,
+    queryParams = {},
+    correlationId,
+    maxTransportAttempts = 1,
+    timeoutMs,
+    validateData,
+  } = {}) {
+    return getSigned(routePath, queryParams, {
+      apiVersion: "v2",
+      killSwitchDomain: "delegated_learning",
+      correlationId: resolveCorrelationId(correlationId),
+      maxTransportAttempts,
+      timeoutMs,
+      extraHeaders: sessionToken ? { "X-Delegated-Session": String(sessionToken) } : {},
+      validateData: validateData || ((body) => Boolean(body && body.success === true && body.data !== undefined)),
+    }).then((res) => res.payload.data);
+  }
+
+  function delegatedMutate(routePath, payload, {
+    sessionToken,
+    method = "POST",
+    idempotencyKey = null,
+    correlationId,
+    maxTransportAttempts = 1,
+    timeoutMs,
+    validateData,
+  } = {}) {
+    const resolvedIdemKey = idempotencyKey && String(idempotencyKey).trim()
+      ? String(idempotencyKey).trim()
+      : crypto.randomUUID();
+    return postSigned(routePath, payload, {
+      apiVersion: "v2",
+      killSwitchDomain: "delegated_mutation",
+      method,
+      idempotencyKey: resolvedIdemKey,
+      requireIdempotencyKey: true,
+      extraHeaders: { "X-Delegated-Session": String(sessionToken || "") },
+      correlationId: resolveCorrelationId(correlationId),
+      maxTransportAttempts,
+      timeoutMs,
+      validateData: validateData || ((body) => Boolean(body && body.success === true && body.data !== undefined)),
+    }).then((res) => res.payload.data);
+  }
+
+  // Day 5: Signed delegated file streaming / metadata
+  async function streamDelegatedFile({
+    sessionToken = null,
+    fileId,
+    unitId = null,
+    profileId = null,
+    disposition = "inline",
+    mode = "stream",
+    rangeHeader = null,
+    correlationId,
+    maxTransportAttempts = 1,
+    timeoutMs,
+  } = {}) {
+    const fid = encodeURIComponent(String(fileId || "").trim());
+    const normalizedMode = String(mode || "stream").toLowerCase() === "metadata" ? "metadata" : "stream";
+    const normalizedDisp = String(disposition || "inline").toLowerCase() === "attachment" ? "attachment" : "inline";
+    const queryParams = {
+      ...(unitId != null ? { unitId: String(unitId) } : {}),
+      ...(profileId != null ? { profileId: String(profileId) } : {}),
+      disposition: normalizedDisp,
+      mode: normalizedMode,
+    };
+
+    if (normalizedMode === "metadata") {
+      return delegatedGet(`/learning/files/${fid}/stream`, {
+        sessionToken,
+        queryParams,
+        correlationId,
+        maxTransportAttempts,
+        timeoutMs,
+      });
+    }
+
+    const integrationLog = logger && logger !== console && typeof logger.info === "function"
+      ? logger
+      : createIntegrationLogger({ component: "course-client", env });
+    const reqCorr = resolveCorrelationId(correlationId);
+    assertDomainKillSwitch("delegated_learning", integrationLog, `/learning/files/${fid}/stream`, reqCorr, "GET");
+    const callStartMs = Date.now();
+    const cfg = assertConfigured();
+
+    const search = new URLSearchParams();
+    for (const [k, v] of Object.entries(queryParams)) {
+      if (v !== undefined && v !== null && v !== "") search.set(k, String(v));
+    }
+    const qs = search.toString();
+    const basePath = `/api/integrations/v2/learning/files/${fid}/stream${qs ? `?${qs}` : ""}`;
+    const parsedBase = new URL(cfg.baseUrl);
+    const originalUrl = `${parsedBase.pathname.replace(/\/+$/, "")}${basePath}`;
+    const url = `${parsedBase.origin}${originalUrl}`;
+
+    const attempts = parsePositiveInt(
+      maxTransportAttempts ?? cfg.maxTransportAttempts,
+      1,
+      { min: 1, max: 5 },
+    );
+    const requestTimeoutMs = parsePositiveInt(timeoutMs ?? cfg.timeoutMs, cfg.timeoutMs, {
+      min: MIN_TIMEOUT_MS,
+      max: MAX_TIMEOUT_MS,
+    });
+
+    let lastError = null;
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      const timestamp = new Date(now()).toISOString();
+      const signature = buildMolyGetSignature({
+        timestamp,
+        method: "GET",
+        originalUrl,
+        secret: cfg.hmacSecret,
+      });
+
+      const headers = {
+        Authorization: `Bearer ${cfg.serviceToken}`,
+        "X-Integration-Key": cfg.integrationKey,
+        "X-Event-Timestamp": timestamp,
+        "X-Correlation-ID": reqCorr,
+        "X-Signature": signature,
+        Accept: "*/*",
+      };
+      if (sessionToken) headers["X-Delegated-Session"] = String(sessionToken);
+      if (rangeHeader) headers.Range = String(rangeHeader);
+
+      let response;
+      try {
+        response = await fetchImpl(url, {
+          method: "GET",
+          headers,
+          signal: AbortSignal.timeout(requestTimeoutMs),
+          redirect: "error",
+        });
+      } catch (err) {
+        const isTimeout = err?.name === "TimeoutError" || err?.name === "AbortError" || err?.code === "ETIMEDOUT";
+        lastError = new CourseIntegrationClientError(
+          isTimeout ? 504 : 503,
+          isTimeout ? "COURSE_LMS_TIMEOUT" : "COURSE_LMS_NETWORK_ERROR",
+          isTimeout ? "Timed out streaming file from CSCA-Course." : "Failed to stream file from CSCA-Course.",
+          { retryable: true },
+        );
+        if (attempt < attempts) {
+          await sleep(cfg.retryBaseDelayMs * (2 ** (attempt - 1)));
+          continue;
+        }
+        throw lastError;
+      }
+
+      if (response.status === 200 || response.status === 206) {
+        const arrayBuf = await response.arrayBuffer();
+        const bodyBuffer = Buffer.from(arrayBuf);
+        const resHeaders = {};
+        if (response.headers && typeof response.headers.forEach === "function") {
+          response.headers.forEach((value, key) => {
+            resHeaders[String(key).toLowerCase()] = value;
+          });
+        }
+        observeMetricLatency("moly.client.http_ms", Date.now() - callStartMs);
+        recordMetric("moly.client.http_ok");
+        return {
+          status: response.status,
+          headers: resHeaders,
+          bodyBufferOrStream: bodyBuffer,
+          bodyBuffer,
+        };
+      }
+
+      let parsedBody = null;
+      try {
+        parsedBody = await response.json();
+      } catch {
+        parsedBody = null;
+      }
+      if (!parsedBody || typeof parsedBody !== "object" || Array.isArray(parsedBody)) {
+        lastError = new CourseIntegrationClientError(
+          502,
+          "COURSE_LMS_INVALID_RESPONSE",
+          `Invalid file stream error response from CSCA-Course (${response.status}).`,
+          { retryable: response.status >= 500 || response.status === 429 },
+        );
+      } else {
+        const remoteCode = String(parsedBody.errorCode || parsedBody.code || `HTTP_${response.status}`);
+        const retryable = TRANSIENT_HTTP_STATUSES.has(response.status) || response.status >= 500;
+        lastError = new CourseIntegrationClientError(
+          response.status,
+          remoteCode,
+          sanitizeSafeErrorMessage(response.status, parsedBody),
+          {
+            retryable,
+            errorCode: remoteCode,
+            details: parsedBody.details && typeof parsedBody.details === "object"
+              ? { errorCode: remoteCode, details: parsedBody.details }
+              : { errorCode: remoteCode },
+          },
+        );
+      }
+      if (lastError.retryable && attempt < attempts) {
+        await sleep(cfg.retryBaseDelayMs * (2 ** (attempt - 1)));
+        continue;
+      }
+      throw lastError;
+    }
+
+    throw lastError || new CourseIntegrationClientError(502, "COURSE_LMS_REQUEST_FAILED", "File stream failed.", { retryable: true });
+  }
+
+  // Day 6: Quizzes & Assignments
+  function fetchDelegatedQuiz({ sessionToken, profileId, unitId, quizId, correlationId, maxTransportAttempts = 1, timeoutMs } = {}) {
+    const pid = encodeURIComponent(String(profileId || "").trim());
+    const uid = encodeURIComponent(String(unitId || "").trim());
+    const qid = encodeURIComponent(String(quizId || "").trim());
+    return delegatedGet(`/learning/offerings/${pid}/units/${uid}/quizzes/${qid}`, {
+      sessionToken,
+      correlationId,
+      maxTransportAttempts,
+      timeoutMs,
+    });
+  }
+
+  function startDelegatedQuizAttempt({ sessionToken, quizId, profileId = null, unitId = null, newAttempt = false, idempotencyKey = null, correlationId, maxTransportAttempts = 1, timeoutMs } = {}) {
+    const qid = encodeURIComponent(String(quizId || "").trim());
+    return delegatedMutate(
+      `/learning/quizzes/${qid}/attempts/start`,
+      {
+        ...(profileId != null ? { profileId: String(profileId) } : {}),
+        ...(unitId != null ? { unitId: String(unitId) } : {}),
+        newAttempt: Boolean(newAttempt),
+      },
+      { sessionToken, method: "POST", idempotencyKey, correlationId, maxTransportAttempts, timeoutMs },
+    );
+  }
+
+  function saveDelegatedQuizAnswers({ sessionToken, attemptId, profileId = null, answers = undefined, questionId = undefined, answer = undefined, idempotencyKey = null, correlationId, maxTransportAttempts = 1, timeoutMs } = {}) {
+    const aid = encodeURIComponent(String(attemptId || "").trim());
+    return delegatedMutate(
+      `/learning/quizzes/attempts/${aid}/answers`,
+      {
+        ...(profileId != null ? { profileId: String(profileId) } : {}),
+        ...(answers !== undefined ? { answers } : {}),
+        ...(questionId !== undefined ? { questionId } : {}),
+        ...(answer !== undefined ? { answer } : {}),
+      },
+      { sessionToken, method: "PUT", idempotencyKey, correlationId, maxTransportAttempts, timeoutMs },
+    );
+  }
+
+  function submitDelegatedQuizAttempt({ sessionToken, attemptId, profileId = null, idempotencyKey = null, correlationId, maxTransportAttempts = 1, timeoutMs } = {}) {
+    const aid = encodeURIComponent(String(attemptId || "").trim());
+    return delegatedMutate(
+      `/learning/quizzes/attempts/${aid}/submit`,
+      {
+        ...(profileId != null ? { profileId: String(profileId) } : {}),
+      },
+      { sessionToken, method: "POST", idempotencyKey, correlationId, maxTransportAttempts, timeoutMs },
+    );
+  }
+
+  function fetchDelegatedAssignment({ sessionToken, profileId, unitId, assignmentId, correlationId, maxTransportAttempts = 1, timeoutMs } = {}) {
+    const pid = encodeURIComponent(String(profileId || "").trim());
+    const uid = encodeURIComponent(String(unitId || "").trim());
+    const asid = encodeURIComponent(String(assignmentId || "").trim());
+    return delegatedGet(`/learning/offerings/${pid}/units/${uid}/assignments/${asid}`, {
+      sessionToken,
+      correlationId,
+      maxTransportAttempts,
+      timeoutMs,
+    });
+  }
+
+  function uploadDelegatedAssignmentAsset({
+    sessionToken,
+    assignmentId,
+    profileId = null,
+    unitId = null,
+    assetKind = "file",
+    originalFilename,
+    mimeType,
+    sizeBytes,
+    contentBase64,
+    idempotencyKey = null,
+    correlationId,
+    maxTransportAttempts = 1,
+    timeoutMs,
+  } = {}) {
+    const asid = encodeURIComponent(String(assignmentId || "").trim());
+    return delegatedMutate(
+      `/learning/assignments/${asid}/submission-assets`,
+      {
+        ...(profileId != null ? { profileId: String(profileId) } : {}),
+        ...(unitId != null ? { unitId: String(unitId) } : {}),
+        assetKind: String(assetKind || "file"),
+        originalFilename: String(originalFilename || "submission.bin"),
+        mimeType: String(mimeType || "application/octet-stream"),
+        sizeBytes: Math.max(0, Number(sizeBytes || 0)),
+        contentBase64: String(contentBase64 || ""),
+      },
+      { sessionToken, method: "POST", idempotencyKey, correlationId, maxTransportAttempts, timeoutMs },
+    );
+  }
+
+  function submitDelegatedAssignment({
+    sessionToken,
+    assignmentId,
+    profileId = null,
+    unitId = null,
+    contentText = undefined,
+    fileAssetIds = undefined,
+    audioAssetId = undefined,
+    idempotencyKey = null,
+    correlationId,
+    maxTransportAttempts = 1,
+    timeoutMs,
+  } = {}) {
+    const asid = encodeURIComponent(String(assignmentId || "").trim());
+    return delegatedMutate(
+      `/learning/assignments/${asid}/submit`,
+      {
+        ...(profileId != null ? { profileId: String(profileId) } : {}),
+        ...(unitId != null ? { unitId: String(unitId) } : {}),
+        ...(contentText !== undefined ? { contentText } : {}),
+        ...(fileAssetIds !== undefined ? { fileAssetIds } : {}),
+        ...(audioAssetId !== undefined ? { audioAssetId } : {}),
+      },
+      { sessionToken, method: "POST", idempotencyKey, correlationId, maxTransportAttempts, timeoutMs },
+    );
+  }
+
+  // Day 7: Notes, Bookmarks & Q&A
+  function listDelegatedNotes({ sessionToken, profileId, unitId, correlationId, maxTransportAttempts = 1, timeoutMs } = {}) {
+    const pid = encodeURIComponent(String(profileId || "").trim());
+    const uid = encodeURIComponent(String(unitId || "").trim());
+    return delegatedGet(`/learning/offerings/${pid}/units/${uid}/notes`, {
+      sessionToken,
+      correlationId,
+      maxTransportAttempts,
+      timeoutMs,
+    });
+  }
+
+  function createDelegatedNote({ sessionToken, profileId, unitId, timestampSeconds = 0, content, idempotencyKey = null, correlationId, maxTransportAttempts = 1, timeoutMs } = {}) {
+    const pid = encodeURIComponent(String(profileId || "").trim());
+    const uid = encodeURIComponent(String(unitId || "").trim());
+    return delegatedMutate(
+      `/learning/offerings/${pid}/units/${uid}/notes`,
+      {
+        timestampSeconds: Math.max(0, Math.round(Number(timestampSeconds || 0))),
+        content: String(content || ""),
+      },
+      { sessionToken, method: "POST", idempotencyKey, correlationId, maxTransportAttempts, timeoutMs },
+    );
+  }
+
+  function updateDelegatedNote({ sessionToken, profileId, unitId, noteId, timestampSeconds = undefined, content = undefined, expectedRevision = undefined, idempotencyKey = null, correlationId, maxTransportAttempts = 1, timeoutMs } = {}) {
+    const pid = encodeURIComponent(String(profileId || "").trim());
+    const uid = encodeURIComponent(String(unitId || "").trim());
+    const nid = encodeURIComponent(String(noteId || "").trim());
+    return delegatedMutate(
+      `/learning/offerings/${pid}/units/${uid}/notes/${nid}`,
+      {
+        ...(timestampSeconds !== undefined ? { timestampSeconds: Math.max(0, Math.round(Number(timestampSeconds || 0))) } : {}),
+        ...(content !== undefined ? { content: String(content) } : {}),
+        ...(expectedRevision !== undefined ? { expectedRevision: Number(expectedRevision) } : {}),
+      },
+      { sessionToken, method: "PUT", idempotencyKey, correlationId, maxTransportAttempts, timeoutMs },
+    );
+  }
+
+  function deleteDelegatedNote({ sessionToken, profileId, unitId, noteId, expectedRevision = undefined, idempotencyKey = null, correlationId, maxTransportAttempts = 1, timeoutMs } = {}) {
+    const pid = encodeURIComponent(String(profileId || "").trim());
+    const uid = encodeURIComponent(String(unitId || "").trim());
+    const nid = encodeURIComponent(String(noteId || "").trim());
+    return delegatedMutate(
+      `/learning/offerings/${pid}/units/${uid}/notes/${nid}`,
+      expectedRevision !== undefined ? { expectedRevision: Number(expectedRevision) } : {},
+      { sessionToken, method: "DELETE", idempotencyKey, correlationId, maxTransportAttempts, timeoutMs },
+    );
+  }
+
+  function listDelegatedBookmarks({ sessionToken, profileId, unitId, correlationId, maxTransportAttempts = 1, timeoutMs } = {}) {
+    const pid = encodeURIComponent(String(profileId || "").trim());
+    const uid = encodeURIComponent(String(unitId || "").trim());
+    return delegatedGet(`/learning/offerings/${pid}/units/${uid}/bookmarks`, {
+      sessionToken,
+      correlationId,
+      maxTransportAttempts,
+      timeoutMs,
+    });
+  }
+
+  function createDelegatedBookmark({ sessionToken, profileId, unitId, videoAssetId = null, timestampSeconds = 0, label = "", idempotencyKey = null, correlationId, maxTransportAttempts = 1, timeoutMs } = {}) {
+    const pid = encodeURIComponent(String(profileId || "").trim());
+    const uid = encodeURIComponent(String(unitId || "").trim());
+    return delegatedMutate(
+      `/learning/offerings/${pid}/units/${uid}/bookmarks`,
+      {
+        ...(videoAssetId != null ? { videoAssetId: String(videoAssetId) } : {}),
+        timestampSeconds: Math.max(0, Math.round(Number(timestampSeconds || 0))),
+        label: String(label || ""),
+      },
+      { sessionToken, method: "POST", idempotencyKey, correlationId, maxTransportAttempts, timeoutMs },
+    );
+  }
+
+  function deleteDelegatedBookmark({ sessionToken, profileId, unitId, bookmarkId, idempotencyKey = null, correlationId, maxTransportAttempts = 1, timeoutMs } = {}) {
+    const pid = encodeURIComponent(String(profileId || "").trim());
+    const uid = encodeURIComponent(String(unitId || "").trim());
+    const bid = encodeURIComponent(String(bookmarkId || "").trim());
+    return delegatedMutate(
+      `/learning/offerings/${pid}/units/${uid}/bookmarks/${bid}`,
+      {},
+      { sessionToken, method: "DELETE", idempotencyKey, correlationId, maxTransportAttempts, timeoutMs },
+    );
+  }
+
+  function listDelegatedQaThreads({ sessionToken, profileId, unitId, correlationId, maxTransportAttempts = 1, timeoutMs } = {}) {
+    const pid = encodeURIComponent(String(profileId || "").trim());
+    const uid = encodeURIComponent(String(unitId || "").trim());
+    return delegatedGet(`/learning/offerings/${pid}/units/${uid}/qa`, {
+      sessionToken,
+      correlationId,
+      maxTransportAttempts,
+      timeoutMs,
+    });
+  }
+
+  function createDelegatedQaThread({ sessionToken, profileId, unitId, title, body, idempotencyKey = null, correlationId, maxTransportAttempts = 1, timeoutMs } = {}) {
+    const pid = encodeURIComponent(String(profileId || "").trim());
+    const uid = encodeURIComponent(String(unitId || "").trim());
+    return delegatedMutate(
+      `/learning/offerings/${pid}/units/${uid}/qa`,
+      { title: String(title || ""), body: String(body || "") },
+      { sessionToken, method: "POST", idempotencyKey, correlationId, maxTransportAttempts, timeoutMs },
+    );
+  }
+
+  function replyDelegatedQaThread({
+    sessionToken,
+    profileId = null,
+    unitId = null,
+    threadId,
+    body,
+    expectedRevision = undefined,
+    idempotencyKey = null,
+    correlationId,
+    maxTransportAttempts = 1,
+    timeoutMs,
+  } = {}) {
+    const tid = encodeURIComponent(String(threadId || "").trim());
+    return delegatedMutate(
+      `/learning/qa/threads/${tid}/replies`,
+      {
+        ...(profileId != null && String(profileId).trim() ? { profileId: String(profileId).trim() } : {}),
+        ...(unitId != null && String(unitId).trim() ? { unitId: String(unitId).trim() } : {}),
+        body: String(body || ""),
+        ...(expectedRevision !== undefined && expectedRevision !== null ? { expectedRevision: Number(expectedRevision) } : {}),
+      },
+      { sessionToken, method: "POST", idempotencyKey, correlationId, maxTransportAttempts, timeoutMs },
+    );
+  }
+
+  function updateDelegatedQaThreadStatus({
+    sessionToken,
+    profileId = null,
+    unitId = null,
+    threadId,
+    status,
+    isPinned = undefined,
+    markRead = undefined,
+    expectedRevision = undefined,
+    idempotencyKey = null,
+    correlationId,
+    maxTransportAttempts = 1,
+    timeoutMs,
+  } = {}) {
+    const tid = encodeURIComponent(String(threadId || "").trim());
+    return delegatedMutate(
+      `/learning/qa/threads/${tid}/status`,
+      {
+        ...(profileId != null && String(profileId).trim() ? { profileId: String(profileId).trim() } : {}),
+        ...(unitId != null && String(unitId).trim() ? { unitId: String(unitId).trim() } : {}),
+        ...(status !== undefined ? { status: String(status) } : {}),
+        ...(isPinned !== undefined ? { isPinned: Boolean(isPinned) } : {}),
+        ...(markRead !== undefined ? { markRead: Boolean(markRead) } : {}),
+        ...(expectedRevision !== undefined && expectedRevision !== null ? { expectedRevision: Number(expectedRevision) } : {}),
+      },
+      { sessionToken, method: "PATCH", idempotencyKey, correlationId, maxTransportAttempts, timeoutMs },
+    );
+  }
+
+  async function probeCourseContract({
+    correlationId = null,
+    maxTransportAttempts = 1,
+    timeoutMs,
+  } = {}) {
+    return getSigned(
+      "/health",
+      {},
+      {
+        apiVersion: "v2",
+        correlationId: resolveCorrelationId(correlationId),
+        maxTransportAttempts,
+        timeoutMs,
+        validateData: (body) => Boolean(body && typeof body === "object" && !Array.isArray(body)),
+      },
+    ).then((res) => ({
+      httpStatus: res.httpStatus,
+      ...(res.payload?.data && typeof res.payload.data === "object" ? res.payload.data : res.payload),
+    }));
+  }
+
+  async function fetchContentReconciliationSnapshot({
+    courseIds = [],
+    profileIds = [],
+    limit = 200,
+    cursor = null,
+    correlationId = null,
+    maxTransportAttempts,
+    timeoutMs,
+  } = {}) {
+    const cleanCourseIds = (courseIds || []).map((v) => String(v || "").trim()).filter(Boolean);
+    const cleanProfileIds = (profileIds || []).map((v) => String(v || "").trim()).filter(Boolean);
+    return getSigned(
+      "/reconciliation/content-state",
+      {
+        courseIds: cleanCourseIds.length ? cleanCourseIds.join(",") : undefined,
+        profileIds: cleanProfileIds.length ? cleanProfileIds.join(",") : undefined,
+        limit,
+        cursor: cursor ?? undefined,
+      },
+      {
+        apiVersion: "v2",
+        correlationId: resolveCorrelationId(correlationId),
+        maxTransportAttempts,
+        timeoutMs,
+        validateData: (body) => Boolean(body && body.success === true && body.data && typeof body.data === "object"),
+      },
+    ).then((res) => res.payload.data);
+  }
+
+  async function fetchLearningReconciliationSnapshot({
+    userIds = [],
+    externalUserIds = [],
+    courseIds = [],
+    profileIds = [],
+    limit = 200,
+    cursor = null,
+    correlationId = null,
+    maxTransportAttempts,
+    timeoutMs,
+  } = {}) {
+    const cleanUserIds = (userIds || []).map((v) => String(v || "").trim()).filter(Boolean);
+    const cleanExtUserIds = (externalUserIds || []).map((v) => String(v || "").trim()).filter(Boolean);
+    const cleanCourseIds = (courseIds || []).map((v) => String(v || "").trim()).filter(Boolean);
+    const cleanProfileIds = (profileIds || []).map((v) => String(v || "").trim()).filter(Boolean);
+    return getSigned(
+      "/reconciliation/learning-state",
+      {
+        userIds: cleanUserIds.length ? cleanUserIds.join(",") : undefined,
+        externalUserIds: cleanExtUserIds.length ? cleanExtUserIds.join(",") : undefined,
+        courseIds: cleanCourseIds.length ? cleanCourseIds.join(",") : undefined,
+        profileIds: cleanProfileIds.length ? cleanProfileIds.join(",") : undefined,
+        limit,
+        cursor: cursor ?? undefined,
+      },
+      {
+        apiVersion: "v2",
+        correlationId: resolveCorrelationId(correlationId),
+        maxTransportAttempts,
+        timeoutMs,
+        validateData: (body) => Boolean(body && body.success === true && body.data && typeof body.data === "object"),
       },
     ).then((res) => res.payload.data);
   }
@@ -829,12 +1585,36 @@ function createCourseIntegrationClient({
     revokeEntitlement,
     queryOwnership,
     queryReconciliationSnapshot,
+    probeCourseContract,
+    fetchContentReconciliationSnapshot,
+    fetchLearningReconciliationSnapshot,
     fetchCatalogCourses,
     fetchCourseCurriculum,
     mintDelegatedLearningSession,
     fetchDelegatedWorkspace,
     fetchDelegatedUnit,
     fetchPublicPreviewUnit,
+    requestDelegatedPlaybackToken,
+    sendDelegatedVideoProgress,
+    streamDelegatedFile,
+    fetchDelegatedQuiz,
+    startDelegatedQuizAttempt,
+    saveDelegatedQuizAnswers,
+    submitDelegatedQuizAttempt,
+    fetchDelegatedAssignment,
+    uploadDelegatedAssignmentAsset,
+    submitDelegatedAssignment,
+    listDelegatedNotes,
+    createDelegatedNote,
+    updateDelegatedNote,
+    deleteDelegatedNote,
+    listDelegatedBookmarks,
+    createDelegatedBookmark,
+    deleteDelegatedBookmark,
+    listDelegatedQaThreads,
+    createDelegatedQaThread,
+    replyDelegatedQaThread,
+    updateDelegatedQaThreadStatus,
     getSigned,
     getEventStatuses,
     exchangeSsoCode,

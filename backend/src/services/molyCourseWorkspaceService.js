@@ -1,13 +1,93 @@
 const { CourseApiError } = require("../utils/courseResponses");
 const { resolveCorrelationId } = require("../utils/integrationLogger");
+const { ensureMolyTrustedDevice, MolyDeviceError } = require("./molyTrustedDeviceService");
+const { upsertLearningProgressProjectionTx } = require("./molyCourseCatalogSyncService");
+const { createMolyCourseLearningActionsService } = require("./molyCourseLearningActionsService");
 
-const ALLOWED_CLIENT_DELEGATED_SCOPES = Object.freeze(["workspace:read", "video:play", "file:view", "file:download"]);
+const ALLOWED_CLIENT_DELEGATED_SCOPES = Object.freeze([
+  "workspace:read",
+  "video:play",
+  "progress:write",
+  "file:view",
+  "file:download",
+  "quiz:attempt",
+  "assignment:submit",
+  "notes:rw",
+  "bookmarks:rw",
+  "qa:rw",
+]);
+
+function extractClientIp(req) {
+  if (!req) return null;
+  const fwd = typeof req.get === "function" ? req.get("x-forwarded-for") : req.headers?.["x-forwarded-for"];
+  const raw = fwd ? String(fwd).split(",")[0].trim() : String(req.ip || req.socket?.remoteAddress || "").trim();
+  return raw ? raw.replace(/^::ffff:/, "").slice(0, 64) : null;
+}
+
+function extractUserAgent(req) {
+  if (!req) return "";
+  const ua = typeof req.get === "function" ? req.get("user-agent") : req.headers?.["user-agent"];
+  return typeof ua === "string" ? ua.slice(0, 1000) : "";
+}
+
+function mapUpstreamError(error) {
+  if (
+    error instanceof CourseApiError &&
+    !(error.details && typeof error.details === "object" && error.details.details && typeof error.details.details === "object")
+  ) {
+    return error;
+  }
+  if (error instanceof MolyDeviceError) {
+    return new CourseApiError(error.status, error.code, error.message, error.details);
+  }
+  if (error && typeof error.status === "number" && error.code) {
+    const rawDetails = error.details && typeof error.details === "object"
+      ? (error.details.details && typeof error.details.details === "object" ? error.details.details : error.details)
+      : undefined;
+    return new CourseApiError(error.status, error.code, error.message, rawDetails);
+  }
+  return error;
+}
 
 function createMolyCourseWorkspaceService({
   db,
   client = null,
   ownership = null,
 } = {}) {
+  const delegatedSessionCache = new Map();
+
+  async function withTx(work) {
+    if (typeof db.transaction === "function") return db.transaction(work);
+    if (db.pool && typeof db.pool.connect === "function") {
+      const conn = await db.pool.connect();
+      try {
+        await conn.query("BEGIN");
+        const val = await work(conn);
+        await conn.query("COMMIT");
+        return val;
+      } catch (err) {
+        await conn.query("ROLLBACK").catch(() => {});
+        throw err;
+      } finally {
+        conn.release();
+      }
+    }
+    if (typeof db.connect === "function") {
+      const conn = await db.connect();
+      try {
+        await conn.query("BEGIN");
+        const val = await work(conn);
+        await conn.query("COMMIT");
+        return val;
+      } catch (err) {
+        await conn.query("ROLLBACK").catch(() => {});
+        throw err;
+      } finally {
+        if (typeof conn.release === "function") conn.release();
+      }
+    }
+    return work(db);
+  }
   async function hasProjectionTables() {
     const res = await db.query(
       `SELECT
@@ -352,21 +432,159 @@ function createMolyCourseWorkspaceService({
     });
   }
 
-  async function mintUserDelegatedSession({ user, profileRow, correlationId }) {
+  function buildCacheKey(userId, remoteProfileId, deviceTokenHash = null) {
+    return `${userId}:${remoteProfileId}:${deviceTokenHash || "none"}`;
+  }
+
+  function resolveUserScopes(profileRow) {
+    return profileRow.allow_file_download === true
+      ? [...ALLOWED_CLIENT_DELEGATED_SCOPES]
+      : ALLOWED_CLIENT_DELEGATED_SCOPES.filter((scope) => scope !== "file:download");
+  }
+
+  function tryBuildDeviceProofHeader({ deviceCtx, externalUserId }) {
+    if (!deviceCtx || typeof deviceCtx.buildProof !== "function") return null;
+    try {
+      const built = deviceCtx.buildProof({ externalUserId });
+      return built?.proofHeader || null;
+    } catch (err) {
+      if (err instanceof MolyDeviceError && err.code === "DEVICE_PROOF_NOT_CONFIGURED") {
+        return null;
+      }
+      throw err;
+    }
+  }
+
+  async function ensureDeviceContext({ req = null, res = null, user = null } = {}) {
+    if (!req || !user || !user.id) return null;
+    if (user.device_limit_locked_at) {
+      throw new CourseApiError(
+        403,
+        "DEVICE_LIMIT_LOCKED",
+        "Tài khoản đã bị khóa do vượt quá giới hạn thiết bị tin cậy.",
+      );
+    }
+    try {
+      return await ensureMolyTrustedDevice({ req, res, user, db });
+    } catch (err) {
+      throw mapUpstreamError(err);
+    }
+  }
+
+  async function mintUserDelegatedSession({
+    user,
+    profileRow,
+    deviceCtx = null,
+    req = null,
+    correlationId,
+  }) {
     if (!client || typeof client.mintDelegatedLearningSession !== "function") {
       throw new CourseApiError(503, "COURSE_CLIENT_UNAVAILABLE", "Dịch vụ học tập liên kết tạm thời không khả dụng.");
     }
-    const scopes = profileRow.allow_file_download === true
-      ? [...ALLOWED_CLIENT_DELEGATED_SCOPES]
-      : ["workspace:read", "video:play", "file:view"];
-    return client.mintDelegatedLearningSession({
-      externalUserId: `moly:${user.id}`,
-      courseId: String(profileRow.remote_course_id),
-      profileId: String(profileRow.remote_profile_id),
-      scopes,
-      ttlSeconds: 240,
-      correlationId,
+    const scopes = resolveUserScopes(profileRow);
+    const externalUserId = `moly:${user.id}`;
+    const deviceSlotProof = tryBuildDeviceProofHeader({ deviceCtx, externalUserId });
+    const clientIp = deviceCtx?.ipAddress || extractClientIp(req);
+    const userAgent = deviceCtx?.userAgent || extractUserAgent(req);
+    let minted;
+    try {
+      minted = await client.mintDelegatedLearningSession({
+        externalUserId,
+        courseId: String(profileRow.remote_course_id),
+        profileId: String(profileRow.remote_profile_id),
+        scopes,
+        ttlSeconds: 240,
+        ...(deviceSlotProof ? { deviceSlotProof } : {}),
+        ...(clientIp ? { clientIp } : {}),
+        ...(userAgent ? { userAgent } : {}),
+        correlationId,
+      });
+    } catch (err) {
+      throw mapUpstreamError(err);
+    }
+
+    const cacheKey = buildCacheKey(user.id, profileRow.remote_profile_id, deviceCtx?.deviceTokenHash || null);
+    const parsedExp = minted?.expiresAt ? Date.parse(minted.expiresAt) : NaN;
+    delegatedSessionCache.set(cacheKey, {
+      sessionToken: minted.sessionToken,
+      sessionId: minted.sessionId || null,
+      expiresAtMs: Number.isFinite(parsedExp) ? parsedExp : Date.now() + 220 * 1000,
+      scopesKey: scopes.join(","),
     });
+    return minted;
+  }
+
+  async function getOrMintDelegatedSession({
+    user,
+    profileRow,
+    deviceCtx = null,
+    req = null,
+    correlationId,
+    forceRefresh = false,
+  }) {
+    const cacheKey = buildCacheKey(user.id, profileRow.remote_profile_id, deviceCtx?.deviceTokenHash || null);
+    const scopesKey = resolveUserScopes(profileRow).join(",");
+    const cached = !forceRefresh ? delegatedSessionCache.get(cacheKey) : null;
+    if (
+      cached
+      && cached.scopesKey === scopesKey
+      && typeof cached.sessionToken === "string"
+      && cached.expiresAtMs - Date.now() > 20_000
+    ) {
+      return { sessionToken: cached.sessionToken, cached: true };
+    }
+    return mintUserDelegatedSession({ user, profileRow, deviceCtx, req, correlationId });
+  }
+
+  async function executeWithDelegatedSession({
+    user,
+    profileRow,
+    deviceCtx = null,
+    req = null,
+    preferredSessionToken = null,
+    correlationId,
+  }, operation) {
+    let sessionToken = preferredSessionToken && String(preferredSessionToken).trim()
+      ? String(preferredSessionToken).trim()
+      : null;
+    if (!sessionToken) {
+      const minted = await getOrMintDelegatedSession({
+        user,
+        profileRow,
+        deviceCtx,
+        req,
+        correlationId,
+      });
+      sessionToken = minted.sessionToken;
+    }
+
+    try {
+      return await operation(sessionToken);
+    } catch (err) {
+      const code = String(err?.code || err?.errorCode || "").toUpperCase();
+      const shouldRetry = err?.status === 401
+        || code === "DELEGATED_SESSION_EXPIRED"
+        || code === "INVALID_DELEGATED_SESSION"
+        || code === "DELEGATED_SESSION_REVOKED";
+      if (!shouldRetry) {
+        throw mapUpstreamError(err);
+      }
+      const cacheKey = buildCacheKey(user.id, profileRow.remote_profile_id, deviceCtx?.deviceTokenHash || null);
+      delegatedSessionCache.delete(cacheKey);
+      const refreshed = await getOrMintDelegatedSession({
+        user,
+        profileRow,
+        deviceCtx,
+        req,
+        correlationId,
+        forceRefresh: true,
+      });
+      try {
+        return await operation(refreshed.sessionToken);
+      } catch (retryErr) {
+        throw mapUpstreamError(retryErr);
+      }
+    }
   }
 
   async function getExternalCourseWorkspace({
@@ -374,6 +592,8 @@ function createMolyCourseWorkspaceService({
     profileId = null,
     unitId = null,
     user = null,
+    req = null,
+    res = null,
     correlationId = null,
   } = {}) {
     const corr = resolveCorrelationId(correlationId);
@@ -406,13 +626,25 @@ function createMolyCourseWorkspaceService({
     const activeProfileSummary = mapProfileSummary(profileRow);
 
     if (access.entitled) {
-      const minted = await mintUserDelegatedSession({ user, profileRow, correlationId: corr });
-      const liveWs = await client.fetchDelegatedWorkspace({
-        sessionToken: minted.sessionToken,
-        profileId: remoteProfileId,
-        unitId: requestedUnit ? String(requestedUnit.remote_unit_id) : undefined,
+      const deviceCtx = await ensureDeviceContext({ req, res, user });
+      const minted = await mintUserDelegatedSession({
+        user,
+        profileRow,
+        deviceCtx,
+        req,
         correlationId: corr,
       });
+      let liveWs;
+      try {
+        liveWs = await client.fetchDelegatedWorkspace({
+          sessionToken: minted.sessionToken,
+          profileId: remoteProfileId,
+          unitId: requestedUnit ? String(requestedUnit.remote_unit_id) : undefined,
+          correlationId: corr,
+        });
+      } catch (err) {
+        throw mapUpstreamError(err);
+      }
 
       const sidebarUnits = formatSidebarUnits(unitRows, courseRow.slug, remoteProfileId, liveWs?.units || null);
       const activeRemoteId = liveWs?.activeUnit?.id != null
@@ -471,10 +703,10 @@ function createMolyCourseWorkspaceService({
       };
     }
 
-    // Unentitled or unauthenticated: allow ONLY if requested unit is explicitly marked public preview
-    const previewCandidate = requestedUnit && requestedUnit.is_public_preview === true
+    // Unentitled or unauthenticated: allow ONLY if requested unit is explicitly marked published & public preview
+    const previewCandidate = requestedUnit && requestedUnit.is_published === true && requestedUnit.is_public_preview === true
       ? requestedUnit
-      : (!unitId ? unitRows.find((u) => u.is_public_preview === true) || null : null);
+      : (!unitId ? unitRows.find((u) => u.is_published === true && u.is_public_preview === true) || null : null);
 
     if (!previewCandidate) {
       if (!access.authenticated) {
@@ -536,11 +768,174 @@ function createMolyCourseWorkspaceService({
     };
   }
 
+  async function enrichUnitDetailFromProjections({
+    detail,
+    unitRow,
+    profileRow,
+    userId = null,
+    isPublicPreview = false,
+  }) {
+    const unit = detail && typeof detail === "object" ? detail : {};
+    const profileAllowDownload = profileRow.allow_file_download !== false;
+
+    const fileRowsRes = await db.query(
+      `SELECT *
+       FROM course_file_projections
+       WHERE unit_projection_id = $1::bigint
+         AND deleted_at IS NULL
+         AND is_published = TRUE
+       ORDER BY sort_order ASC, id ASC`,
+      [Number(unitRow.id)],
+    ).catch(() => ({ rows: [] }));
+    const fileRows = fileRowsRes.rows || [];
+    const fileMap = new Map(fileRows.map((r) => [String(r.remote_file_id), r]));
+
+    const files = Array.isArray(unit.files)
+      ? unit.files.map((f) => {
+          const fId = String(f?.id ?? f?.fileId ?? f?.remoteFileId ?? "");
+          const proj = fileMap.get(fId) || null;
+          const allowDownload = f?.allowDownload !== undefined
+            ? Boolean(f.allowDownload)
+            : (proj?.allow_download_override != null ? Boolean(proj.allow_download_override) : profileAllowDownload);
+          return {
+            ...f,
+            isSlide: Boolean(f?.isSlide ?? proj?.is_slide ?? false),
+            revision: Number(f?.revision ?? proj?.last_revision ?? 1),
+            updatedAt: f?.updatedAt || (proj?.source_updated_at ? new Date(proj.source_updated_at).toISOString() : null),
+            allowDownload: isPublicPreview ? false : allowDownload,
+            ...(Array.isArray(f?.placements)
+              ? {}
+              : (Array.isArray(proj?.placements_json) ? { placements: proj.placements_json } : {})),
+          };
+        })
+      : fileRows.map((r) => ({
+          id: r.remote_file_id,
+          fileId: r.remote_file_id,
+          title: r.title,
+          fileName: r.original_filename || r.title,
+          originalFilename: r.original_filename || null,
+          mimeType: r.mime_type || null,
+          fileKind: r.file_kind || "document",
+          sizeBytes: r.size_bytes != null ? Number(r.size_bytes) : null,
+          isSlide: Boolean(r.is_slide),
+          allowView: r.allow_view_override != null ? Boolean(r.allow_view_override) : true,
+          allowDownload: isPublicPreview
+            ? false
+            : (r.allow_download_override != null ? Boolean(r.allow_download_override) : profileAllowDownload),
+          placements: Array.isArray(r.placements_json) ? r.placements_json : [],
+          revision: Number(r.last_revision || 1),
+          updatedAt: r.source_updated_at ? new Date(r.source_updated_at).toISOString() : null,
+        }));
+
+    let noteRows = [];
+    if (userId) {
+      const noteRes = await db.query(
+        `SELECT *
+         FROM course_note_projections
+         WHERE user_id = $1::int
+           AND profile_projection_id = $2::bigint
+           AND unit_type = $3::varchar
+           AND remote_unit_id = $4::varchar
+           AND deleted_at IS NULL
+         ORDER BY timestamp_seconds ASC, id ASC`,
+        [Number(userId), Number(profileRow.id), unitRow.unit_type, String(unitRow.remote_unit_id)],
+      ).catch(() => ({ rows: [] }));
+      noteRows = noteRes.rows || [];
+    }
+    const noteMap = new Map(noteRows.map((r) => [String(r.remote_note_id), r]));
+    const notes = Array.isArray(unit.notes)
+      ? unit.notes.map((n) => {
+          const nId = String(n?.id ?? n?.noteId ?? "");
+          const proj = noteMap.get(nId) || null;
+          return {
+            ...n,
+            revision: Number(n?.revision ?? proj?.last_revision ?? 1),
+            updatedAt: n?.updatedAt || (proj?.source_updated_at ? new Date(proj.source_updated_at).toISOString() : null),
+          };
+        })
+      : noteRows.map((r) => ({
+          id: r.remote_note_id,
+          noteId: r.remote_note_id,
+          timestampSeconds: Number(r.timestamp_seconds || 0),
+          content: r.content,
+          revision: Number(r.last_revision || 1),
+          updatedAt: r.source_updated_at ? new Date(r.source_updated_at).toISOString() : null,
+        }));
+
+    let bookmarks = Array.isArray(unit.bookmarks) ? unit.bookmarks : null;
+    if (!bookmarks) {
+      if (userId) {
+        const bmRes = await db.query(
+          `SELECT *
+           FROM course_bookmark_projections
+           WHERE user_id = $1::int
+             AND profile_projection_id = $2::bigint
+             AND unit_type = $3::varchar
+             AND remote_unit_id = $4::varchar
+             AND deleted_at IS NULL
+           ORDER BY timestamp_seconds ASC, id ASC`,
+          [Number(userId), Number(profileRow.id), unitRow.unit_type, String(unitRow.remote_unit_id)],
+        ).catch(() => ({ rows: [] }));
+        bookmarks = (bmRes.rows || []).map((r) => ({
+          id: r.remote_bookmark_id,
+          bookmarkId: r.remote_bookmark_id,
+          videoAssetId: r.video_asset_id || null,
+          timestampSeconds: Number(r.timestamp_seconds || 0),
+          label: r.label || "",
+          revision: Number(r.last_revision || 1),
+          updatedAt: r.source_updated_at ? new Date(r.source_updated_at).toISOString() : null,
+        }));
+      } else {
+        bookmarks = [];
+      }
+    }
+
+    let qaThreads = Array.isArray(unit.qaThreads) ? unit.qaThreads : null;
+    if (!qaThreads) {
+      const qaRes = await db.query(
+        `SELECT *
+         FROM course_qa_thread_projections
+         WHERE profile_projection_id = $1::bigint
+           AND unit_type = $2::varchar
+           AND remote_unit_id = $3::varchar
+           AND deleted_at IS NULL
+         ORDER BY is_pinned DESC, last_message_at DESC NULLS LAST, id DESC`,
+        [Number(profileRow.id), unitRow.unit_type, String(unitRow.remote_unit_id)],
+      ).catch(() => ({ rows: [] }));
+      qaThreads = (qaRes.rows || []).map((r) => ({
+        id: r.remote_thread_id,
+        threadId: r.remote_thread_id,
+        authorExternalUserId: r.author_external_user_id || null,
+        authorName: r.author_name || null,
+        authorRole: r.author_role || null,
+        title: r.title,
+        status: r.status,
+        isPinned: Boolean(r.is_pinned),
+        messageCount: Number(r.message_count || 0),
+        messages: Array.isArray(r.messages_json) ? r.messages_json : [],
+        unread: Boolean(r.unread),
+        lastMessageAt: r.last_message_at ? new Date(r.last_message_at).toISOString() : null,
+        revision: Number(r.last_revision || 1),
+        updatedAt: r.source_updated_at ? new Date(r.source_updated_at).toISOString() : null,
+      }));
+    }
+
+    return {
+      ...unit,
+      files,
+      notes,
+      bookmarks,
+      qaThreads,
+    };
+  }
+
   async function getExternalUnitDetail({
     profileId,
     unitId,
     courseSlugOrId = null,
     user = null,
+    req = null,
+    res = null,
     correlationId = null,
   } = {}) {
     const corr = resolveCorrelationId(correlationId);
@@ -570,15 +965,34 @@ function createMolyCourseWorkspaceService({
     const remoteProfileId = String(profileRow.remote_profile_id);
 
     if (access.entitled) {
-      const minted = await mintUserDelegatedSession({ user, profileRow, correlationId: corr });
-      const detail = await client.fetchDelegatedUnit({
-        sessionToken: minted.sessionToken,
-        profileId: remoteProfileId,
-        unitId: String(unitRow.remote_unit_id),
+      const deviceCtx = await ensureDeviceContext({ req, res, user });
+      const minted = await mintUserDelegatedSession({
+        user,
+        profileRow,
+        deviceCtx,
+        req,
         correlationId: corr,
       });
+      let detail;
+      try {
+        detail = await client.fetchDelegatedUnit({
+          sessionToken: minted.sessionToken,
+          profileId: remoteProfileId,
+          unitId: String(unitRow.remote_unit_id),
+          correlationId: corr,
+        });
+      } catch (err) {
+        throw mapUpstreamError(err);
+      }
+      const enriched = await enrichUnitDetailFromProjections({
+        detail,
+        unitRow,
+        profileRow,
+        userId: Number(user.id),
+        isPublicPreview: false,
+      });
       return {
-        ...detail,
+        ...enriched,
         unitProjectionId: Number(unitRow.id),
         projectionSlug: `u-${unitRow.id}`,
         isPublicPreviewAccess: false,
@@ -589,14 +1003,26 @@ function createMolyCourseWorkspaceService({
       if (!client || typeof client.fetchPublicPreviewUnit !== "function") {
         throw new CourseApiError(503, "COURSE_CLIENT_UNAVAILABLE", "Dịch vụ học thử tạm thời không khả dụng.");
       }
-      const previewData = await client.fetchPublicPreviewUnit({
-        profileId: remoteProfileId,
-        unitId: String(unitRow.remote_unit_id),
-        correlationId: corr,
-      });
+      let previewData;
+      try {
+        previewData = await client.fetchPublicPreviewUnit({
+          profileId: remoteProfileId,
+          unitId: String(unitRow.remote_unit_id),
+          correlationId: corr,
+        });
+      } catch (err) {
+        throw mapUpstreamError(err);
+      }
       const previewActiveUnit = previewData?.activeUnit || previewData || {};
+      const enrichedPreview = await enrichUnitDetailFromProjections({
+        detail: previewActiveUnit,
+        unitRow,
+        profileRow,
+        userId: null,
+        isPublicPreview: true,
+      });
       return {
-        ...previewActiveUnit,
+        ...enrichedPreview,
         unitProjectionId: Number(unitRow.id),
         projectionSlug: `u-${unitRow.id}`,
         isPublicPreviewAccess: true,
@@ -613,9 +1039,238 @@ function createMolyCourseWorkspaceService({
     );
   }
 
+  async function resolveEntitledVideoContext({
+    profileId,
+    unitId,
+    videoId,
+    user = null,
+    req = null,
+    res = null,
+  }) {
+    const cleanVideoId = String(videoId || "").trim();
+    if (!cleanVideoId) {
+      throw new CourseApiError(400, "INVALID_PARAMETER", "videoId is required.");
+    }
+    const caps = await hasProjectionTables();
+    if (!caps.ready) {
+      throw new CourseApiError(503, "CATALOG_SYNC_SCHEMA_MISSING", "Bảng dữ liệu khóa học liên kết chưa sẵn sàng.");
+    }
+    const { profile: profileRow } = await resolveProfileProjection({
+      localCourseId: null,
+      profileId,
+    });
+    const unitRow = await resolveUnitProjection({
+      profileRow,
+      localCourseId: profileRow.local_course_id,
+      unitKey: unitId,
+    });
+    const access = await evaluateLiveUserAccess({
+      user,
+      localCourseId: profileRow.local_course_id,
+    });
+    if (!access.authenticated) {
+      throw new CourseApiError(401, "AUTH_REQUIRED", "Vui lòng đăng nhập để tiếp tục.");
+    }
+    if (!access.entitled) {
+      throw new CourseApiError(
+        403,
+        access.blockCode || "ENTITLEMENT_REQUIRED",
+        "Bạn không có quyền truy cập nội dung học này.",
+      );
+    }
+    const deviceCtx = await ensureDeviceContext({ req, res, user });
+    return {
+      cleanVideoId,
+      profileRow,
+      unitRow,
+      deviceCtx,
+      externalUserId: `moly:${user.id}`,
+    };
+  }
+
+  async function getExternalVideoPlaybackToken({
+    profileId,
+    unitId,
+    videoId,
+    ttlSeconds = 60,
+    delegatedSessionToken = null,
+    user = null,
+    req = null,
+    res = null,
+    correlationId = null,
+  } = {}) {
+    const corr = resolveCorrelationId(correlationId);
+    if (!client || typeof client.requestDelegatedPlaybackToken !== "function") {
+      throw new CourseApiError(503, "COURSE_CLIENT_UNAVAILABLE", "Dịch vụ phát video liên kết tạm thời không khả dụng.");
+    }
+    const {
+      cleanVideoId,
+      profileRow,
+      unitRow,
+      deviceCtx,
+      externalUserId,
+    } = await resolveEntitledVideoContext({
+      profileId,
+      unitId,
+      videoId,
+      user,
+      req,
+      res,
+    });
+    const clampedTtl = Math.max(15, Math.min(60, Math.floor(Number(ttlSeconds) || 60)));
+    const deviceSlotProof = tryBuildDeviceProofHeader({ deviceCtx, externalUserId });
+    const clientIp = deviceCtx?.ipAddress || extractClientIp(req);
+    const userAgent = deviceCtx?.userAgent || extractUserAgent(req);
+
+    const tokenData = await executeWithDelegatedSession({
+      user,
+      profileRow,
+      deviceCtx,
+      req,
+      preferredSessionToken: delegatedSessionToken,
+      correlationId: corr,
+    }, (sessionToken) => client.requestDelegatedPlaybackToken({
+      sessionToken,
+      videoId: cleanVideoId,
+      unitId: String(unitRow.remote_unit_id),
+      profileId: String(profileRow.remote_profile_id),
+      ttlSeconds: clampedTtl,
+      ...(deviceSlotProof ? { deviceSlotProof } : {}),
+      ...(clientIp ? { clientIp } : {}),
+      ...(userAgent ? { userAgent } : {}),
+      correlationId: corr,
+    }));
+
+    return {
+      ...tokenData,
+      unitProjectionId: Number(unitRow.id),
+      projectionSlug: `u-${unitRow.id}`,
+    };
+  }
+
+  async function updateExternalVideoProgress({
+    profileId,
+    unitId,
+    videoId,
+    payload = {},
+    delegatedSessionToken = null,
+    user = null,
+    req = null,
+    res = null,
+    correlationId = null,
+  } = {}) {
+    const corr = resolveCorrelationId(correlationId);
+    if (!client || typeof client.sendDelegatedVideoProgress !== "function") {
+      throw new CourseApiError(503, "COURSE_CLIENT_UNAVAILABLE", "Dịch vụ đồng bộ tiến độ liên kết tạm thời không khả dụng.");
+    }
+    const {
+      cleanVideoId,
+      profileRow,
+      unitRow,
+      deviceCtx,
+    } = await resolveEntitledVideoContext({
+      profileId,
+      unitId,
+      videoId,
+      user,
+      req,
+      res,
+    });
+
+    const body = payload && typeof payload === "object" ? payload : {};
+    const progressResult = await executeWithDelegatedSession({
+      user,
+      profileRow,
+      deviceCtx,
+      req,
+      preferredSessionToken: delegatedSessionToken,
+      correlationId: corr,
+    }, (sessionToken) => client.sendDelegatedVideoProgress({
+      sessionToken,
+      videoId: cleanVideoId,
+      unitId: String(unitRow.remote_unit_id),
+      profileId: String(profileRow.remote_profile_id),
+      currentTimeSeconds: Number(body.currentTimeSeconds ?? body.lastPositionSeconds ?? 0),
+      watchedDeltaSeconds: Number(body.watchedDeltaSeconds ?? 0),
+      durationSeconds: body.durationSeconds != null ? Number(body.durationSeconds) : null,
+      clientSequence: body.clientSequence != null ? Number(body.clientSequence) : null,
+      eventTimestamp: body.eventTimestamp || null,
+      correlationId: corr,
+    }));
+
+    if (progressResult && !progressResult.stale) {
+      const unitsList = Array.isArray(progressResult.units) ? progressResult.units : [];
+      const currentUnitIdx = unitsList.findIndex(
+        (u) => String(u.id) === String(progressResult.unitId || unitRow.remote_unit_id)
+          && (!u.unitType || String(u.unitType) === String(progressResult.unitType || unitRow.unit_type)),
+      );
+      const nextUnit = currentUnitIdx >= 0 && currentUnitIdx + 1 < unitsList.length
+        ? unitsList[currentUnitIdx + 1]
+        : null;
+      const unlockedNextUnitId = Boolean(progressResult.isUnitCompleted) && nextUnit && !nextUnit.isLocked
+        ? String(nextUnit.id)
+        : null;
+
+      await withTx((txClient) => upsertLearningProgressProjectionTx(txClient, {
+        userId: Number(user.id),
+        profileProjectionId: Number(profileRow.id),
+        localCourseId: Number(profileRow.local_course_id),
+        unitType: progressResult.unitType || unitRow.unit_type,
+        remoteUnitId: String(progressResult.unitId || unitRow.remote_unit_id),
+        watchedSeconds: Math.round(Number(
+          progressResult.unitProgress?.watchedSeconds
+          ?? progressResult.watchedSeconds
+          ?? 0,
+        )),
+        lastPositionSeconds: Math.round(Number(progressResult.lastPositionSeconds || 0)),
+        completionPct: Number(
+          progressResult.unitProgress?.completionPercent
+          ?? progressResult.completionPercent
+          ?? 0,
+        ),
+        isVideoCompleted: Boolean(
+          progressResult.unitProgress?.isCompleted
+          ?? progressResult.isVideoCompleted,
+        ),
+        isQuizCompleted: Boolean(progressResult.isQuizCompleted),
+        isUnitCompleted: Boolean(progressResult.isUnitCompleted),
+        isUnlocked: true,
+        courseCompletionPct: progressResult.courseProgress?.overallPercent ?? null,
+        lastUnitId: String(progressResult.unitId || unitRow.remote_unit_id),
+        syncRevision: Number(progressResult.syncRevision || 1),
+        sourceUpdatedAt: progressResult.lastHeartbeatAt || new Date().toISOString(),
+        unlockedNextUnitId,
+        nextUnitType: nextUnit ? nextUnit.unitType : null,
+      }));
+    }
+
+    return {
+      ...progressResult,
+      unitProjectionId: Number(unitRow.id),
+      projectionSlug: `u-${unitRow.id}`,
+    };
+  }
+
+  const learningActions = createMolyCourseLearningActionsService({
+    db,
+    client,
+    withTx,
+    hasProjectionTables,
+    resolveProfileProjection,
+    resolveUnitProjection,
+    listProfileUnits,
+    evaluateLiveUserAccess,
+    ensureDeviceContext,
+    executeWithDelegatedSession,
+    mapUpstreamError,
+  });
+
   return {
     getExternalCourseWorkspace,
     getExternalUnitDetail,
+    getExternalVideoPlaybackToken,
+    updateExternalVideoProgress,
+    ...learningActions,
   };
 }
 

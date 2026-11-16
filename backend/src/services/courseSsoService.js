@@ -2,6 +2,12 @@ const crypto = require("crypto");
 const bcrypt = require("bcrypt");
 const defaultDb = require("../config/database");
 const {
+  buildDeviceSlotProof,
+  ensureMolyTrustedDevice,
+  prepareSsoBrowserDevice,
+  finalizeSsoBrowserDevice,
+} = require("./molyTrustedDeviceService");
+const {
   DEFAULT_BROWSER_TX_TTL_SECONDS,
   DEFAULT_SSO_TTL_SECONDS,
   SsoPolicyError,
@@ -358,12 +364,24 @@ function createCourseSsoService({
     courseId = null,
     offeringId = null,
     targetPath = null,
+    req = null,
+    res = null,
     correlationId = null,
     courseWebBaseUrl = null,
   }) {
     const validatedState = validateSsoStateParam(state);
     const validatedChallenge = validatePkceChallenge(codeChallenge, codeChallengeMethod);
     const eligible = await assertCourseLaunchEligible({ userId, courseId, offeringId, targetPath });
+    const trustedDevice = req
+      ? await ensureMolyTrustedDevice({
+          req,
+          res,
+          user: eligible.user,
+          db,
+          env,
+          now: () => now().getTime(),
+        })
+      : null;
 
     const ttlSeconds = resolveSsoTtlSeconds(env.COURSE_SSO_TTL_SECONDS, DEFAULT_SSO_TTL_SECONDS);
     const issuedAt = now();
@@ -371,18 +389,26 @@ function createCourseSsoService({
     const code = generateOpaqueSsoCode();
     const codeHash = hashSsoToken(code);
     const corr = correlationId || crypto.randomUUID();
+    const ssoMetadata = trustedDevice?.deviceTokenHash
+      ? {
+          molyDeviceTokenHash: trustedDevice.deviceTokenHash,
+          deviceName: trustedDevice.deviceName || null,
+          userAgent: trustedDevice.userAgent || "",
+          ipAddress: trustedDevice.ipAddress || null,
+        }
+      : {};
 
     await db.query(
       `INSERT INTO integration_sso_codes (
          code_hash, source_system, source_user_id, local_user_id,
          target_system, target_path, nonce, pkce_challenge, pkce_method,
          scope_type, scoped_local_course_id, scoped_external_course_id,
-         correlation_id, expires_at
+         metadata, correlation_id, expires_at
        ) VALUES (
          $1, 'moly', $2, $3,
          'csca-course', $4, $5, $6, 'S256',
          $7, $8, $9,
-         $10, $11
+         $10::jsonb, $11, $12
        )`,
       [
         codeHash,
@@ -394,6 +420,7 @@ function createCourseSsoService({
         eligible.scopeType,
         eligible.resolvedCourseId,
         eligible.resolvedOfferingId,
+        JSON.stringify(ssoMetadata),
         corr,
         expiresAt.toISOString(),
       ],
@@ -542,6 +569,25 @@ function createCourseSsoService({
       );
 
       const activeCourseIdentity = identities.find((row) => row.status === "active");
+      const metaDeviceHash = typeof ssoRow.metadata?.molyDeviceTokenHash === "string"
+        ? ssoRow.metadata.molyDeviceTokenHash.trim().toLowerCase()
+        : null;
+      let deviceSlotProof = null;
+      if (metaDeviceHash && /^[0-9a-f]{64}$/.test(metaDeviceHash)) {
+        try {
+          deviceSlotProof = buildDeviceSlotProof({
+            externalUserId: String(user.id),
+            molyDeviceTokenHash: metaDeviceHash,
+            deviceName: ssoRow.metadata?.deviceName || null,
+            userAgent: ssoRow.metadata?.userAgent || "",
+            ipAddress: ssoRow.metadata?.ipAddress || consumeIp || null,
+            now: () => current.getTime(),
+            env,
+          }).proofObject;
+        } catch {
+          deviceSlotProof = null;
+        }
+      }
       return {
         source_system: "moly",
         source_user_id: String(user.id),
@@ -557,6 +603,8 @@ function createCourseSsoService({
         scoped_external_course_id: ssoRow.scoped_external_course_id ?? null,
         nonce: ssoRow.nonce,
         correlation_id: ssoRow.correlation_id || corr,
+        ...(deviceSlotProof ? { device_slot_proof: deviceSlotProof } : {}),
+        ...(metaDeviceHash ? { moly_device_token_hash: metaDeviceHash } : {}),
       };
     });
   }
@@ -743,7 +791,17 @@ function createCourseSsoService({
     };
   }
 
-  async function issueAuthResult({ req, user, targetPath, externalUserId, syncPeer, nonce, corr }) {
+  async function issueAuthResult({
+    req,
+    res = null,
+    user,
+    targetPath,
+    externalUserId,
+    syncPeer,
+    nonce,
+    corr,
+    devicePrep = null,
+  }) {
     await assertMolyLearnerPolicy(db, user.id);
     if (syncPeer && courseClient?.isConfigured?.()) {
       await courseClient.bindSsoPeerIdentity({
@@ -753,6 +811,19 @@ function createCourseSsoService({
         nonce: nonce || "sso-bind",
         correlationId: corr,
       });
+    }
+
+    if (devicePrep) {
+      await finalizeSsoBrowserDevice({ req, res, db, userId: user.id, devicePrep, env });
+    } else if (req) {
+      await ensureMolyTrustedDevice({
+        req,
+        res,
+        user,
+        db,
+        env,
+        allowRotateRevoked: true,
+      }).catch(() => null);
     }
 
     if (ownership) {
@@ -828,6 +899,7 @@ function createCourseSsoService({
     code,
     state,
     req = null,
+    res = null,
     browserTxToken = null,
     ipAddress = null,
     correlationId = null,
@@ -890,13 +962,29 @@ function createCourseSsoService({
       };
     });
 
-    const exchanged = await courseClient.exchangeSsoCode({
-      code,
-      nonce: state,
-      codeVerifier: boundTx.codeVerifier,
-      consumeIp: ipAddress,
-      correlationId: corr,
-    });
+    const devicePrep = await prepareSsoBrowserDevice({ req, db, env, now: () => current.getTime() });
+    const deviceSlotProof = devicePrep?.canSignProof?.()
+      ? devicePrep.buildProof({
+          externalUserId: devicePrep.existingUserId ? `moly:${devicePrep.existingUserId}` : `sso:${state}`,
+        }).proofHeader
+      : null;
+
+    let exchanged;
+    try {
+      exchanged = await courseClient.exchangeSsoCode({
+        code,
+        nonce: state,
+        codeVerifier: boundTx.codeVerifier,
+        consumeIp: ipAddress,
+        deviceSlotProof,
+        correlationId: corr,
+      });
+    } catch (exchangeErr) {
+      if (exchangeErr?.status && exchangeErr?.code && exchangeErr.status < 500) {
+        throw new SsoPolicyError(exchangeErr.status, exchangeErr.code, exchangeErr.message, exchangeErr.details);
+      }
+      throw exchangeErr;
+    }
     if (exchanged?.source_system !== "csca-course" || !exchanged.source_user_id
       || !constantTimeEqual(exchanged.nonce, state)) {
       throw new SsoPolicyError(502, "SSO_INVALID_RESPONSE", "SSO issuer or nonce does not match this exchange.");
@@ -922,12 +1010,14 @@ function createCourseSsoService({
 
     return issueAuthResult({
       req,
+      res,
       user: resolved.user,
       targetPath: resolved.targetPath,
       externalUserId: resolved.externalUserId,
       syncPeer: true,
       nonce: exchanged.nonce || state,
       corr,
+      devicePrep,
     });
   }
 
@@ -970,6 +1060,7 @@ function createCourseSsoService({
     password = null,
     authenticatedUser = null,
     req = null,
+    res = null,
     linkBrowserTxToken = null,
     correlationId = null,
   }) {
@@ -1117,6 +1208,7 @@ function createCourseSsoService({
 
     return issueAuthResult({
       req,
+      res,
       user: verified.candidate,
       targetPath: verified.targetPath,
       externalUserId: verified.externalUserId,

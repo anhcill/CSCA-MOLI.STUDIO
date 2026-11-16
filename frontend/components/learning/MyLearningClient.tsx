@@ -16,6 +16,9 @@ import type { MyLearningItemDto } from '@/lib/types/courses';
 import { CourseOwnershipBadge } from '@/components/courses/CourseOwnershipBadge';
 import { CourseSsoLaunchButton } from '@/components/courses/CourseSsoLaunchButton';
 
+const courseSyncEnabled = process.env.NEXT_PUBLIC_COURSE_SYNC_ENABLED === 'true';
+const delegatedLearningEnabled = process.env.NEXT_PUBLIC_DELEGATED_LEARNING_ENABLED === 'true';
+
 function formatDuration(totalSeconds: number): string {
   const minutes = Math.max(0, Math.round(totalSeconds / 60));
   if (minutes < 60) return `${minutes} phút`;
@@ -61,7 +64,7 @@ export function MyLearningClient() {
     };
     void load(true);
     const refreshWhenVisible = () => {
-      if (document.visibilityState === 'visible') void load(false);
+      if (courseSyncEnabled && document.visibilityState === 'visible') void load(false);
     };
     window.addEventListener('focus', refreshWhenVisible);
     document.addEventListener('visibilitychange', refreshWhenVisible);
@@ -117,11 +120,19 @@ export function MyLearningClient() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         {items.map(({ course, enrollment }) => {
+          const directWorkspaceEnabled = courseSyncEnabled && delegatedLearningEnabled;
+          const resumeHref = directWorkspaceEnabled
+            ? (enrollment.resumeUnitHref || course.resumeUnitHref || null)
+            : null;
+          const unitHref = directWorkspaceEnabled
+            ? (enrollment.firstUnitHref || course.firstUnitHref || null)
+            : null;
+          const activeProfileId = enrollment.activeProfileId || course.activeProfileId || null;
           const isCscaCourse = course.contentOrigin === 'csca_course'
-            || Boolean(enrollment.firstUnitHref || course.firstUnitHref);
-          const unitHref = enrollment.firstUnitHref || course.firstUnitHref || null;
+            || Boolean(resumeHref || unitHref);
           const isExternalOnly = Boolean(
             !isCscaCourse
+            && !resumeHref
             && !unitHref
             && (
               enrollment.isExternalOnly
@@ -133,9 +144,12 @@ export function MyLearningClient() {
           const progress = isExternalOnly ? 0 : Math.min(100, Math.max(0, enrollment.progress?.completionPct ?? 0));
           const roundedProgress = Math.round(progress);
           const lessonId = isExternalOnly ? null : enrollment.progress?.lastLessonId ?? null;
-          const started = !isExternalOnly && (Boolean(lessonId) || progress > 0);
-          const target = unitHref
-            || (lessonId ? `/hoc/${course.slug}/bai-hoc/${lessonId}` : `/khoa-hoc/${course.slug}`);
+          const started = !isExternalOnly && (Boolean(resumeHref) || Boolean(lessonId) || progress > 0);
+          const target = resumeHref
+            || (lessonId
+              ? `/hoc/${course.slug}/bai-hoc/${lessonId}${activeProfileId ? `?profileId=${encodeURIComponent(activeProfileId)}` : ''}`
+              : unitHref)
+            || `/khoa-hoc/${course.slug}`;
           const coverStyle = course.thumbnailUrl
             ? { backgroundImage: `linear-gradient(90deg, rgba(15,23,42,.9), rgba(30,41,59,.45)), url("${course.thumbnailUrl}")` }
             : undefined;
@@ -199,7 +213,7 @@ export function MyLearningClient() {
                 ) : (
                   <>
                     <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm font-semibold text-slate-500 dark:text-slate-400">
-                      <span className="inline-flex items-center gap-2"><FiBookOpen /> {enrollment.progress?.completedLessons ?? 0}/{enrollment.progress?.totalLessons ?? 0} bài hoàn thành</span>
+                      <span className="inline-flex items-center gap-2"><FiBookOpen /> {enrollment.progress?.completedLessons ?? 0}/{enrollment.progress?.totalLessons ?? course.totalLessons ?? 0} bài hoàn thành</span>
                       <span className="inline-flex items-center gap-2"><FiClock /> {formatDuration(course.totalDurationSeconds)}</span>
                       <span className="inline-flex items-center gap-2 text-emerald-700 dark:text-emerald-300"><FiMonitor /> Đồng bộ đa thiết bị</span>
                     </div>

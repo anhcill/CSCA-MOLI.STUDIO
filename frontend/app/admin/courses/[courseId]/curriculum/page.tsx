@@ -20,9 +20,9 @@ import { VideoUploadPanel } from '@/components/courses/VideoUploadPanel';
 import { LessonWorkEditor } from '@/components/courses/LessonWorkEditor';
 import coursesApi, { extractCourseApiError, slugifyVietnamese } from '@/lib/api/courses';
 import type {
+  AdminCurriculumLessonDto,
+  AdminCurriculumSectionDto,
   CourseAdminDto,
-  CurriculumLessonDto,
-  CurriculumSectionDto,
   LessonType,
 } from '@/lib/types/courses';
 import { useAuthStore } from '@/lib/store/authStore';
@@ -57,7 +57,7 @@ function SectionEditor({
   reload,
 }: {
   courseId: number;
-  section: CurriculumSectionDto;
+  section: AdminCurriculumSectionDto;
   sectionIndex: number;
   totalSections: number;
   onMoveSection: (direction: -1 | 1) => Promise<void>;
@@ -395,7 +395,7 @@ function LessonEditor({
   reload,
 }: {
   courseId: number;
-  lesson: CurriculumLessonDto;
+  lesson: AdminCurriculumLessonDto;
   lessonIndex: number;
   totalLessonsInSection: number;
   onMoveLesson: (direction: -1 | 1) => Promise<void>;

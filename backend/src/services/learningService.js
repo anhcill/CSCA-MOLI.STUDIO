@@ -132,6 +132,11 @@ async function listMyEnrollments(user) {
   );
   const firstUnitMap = await learningRepository.listExternalFirstUnits(
     externalRows.map((row) => Number(row.id)),
+    user.id,
+  );
+  const extProgressMap = await learningRepository.listExternalProgressSummaries(
+    user.id,
+    externalRows.map((row) => Number(row.id)),
   );
   const externalItems = [];
   for (const row of externalRows) {
@@ -140,12 +145,41 @@ async function listMyEnrollments(user) {
     if (!ownershipInfo || ownershipInfo.owned !== true || !ownershipInfo.canLaunchCourse) {
       continue;
     }
-    const baseCourse = catalogCourse(row, null);
-    const mergedCourse = courseService.mergeCourseOwnershipView(baseCourse, ownershipInfo, false);
+    const rawProgress = extProgressMap.get(courseId) || null;
     const firstUnit = firstUnitMap.get(courseId) || null;
-    const firstUnitHref = firstUnit
-      ? `/hoc/${row.slug}/bai-hoc/u-${firstUnit.unitProjectionId}?profileId=${encodeURIComponent(firstUnit.remoteProfileId)}`
+    const activeProfileId = rawProgress?.activeProfileId || firstUnit?.remoteProfileId || null;
+    const alignedFirstUnitId = rawProgress?.firstUnitProjectionId || firstUnit?.unitProjectionId || null;
+    const firstUnitSlug = alignedFirstUnitId ? `u-${alignedFirstUnitId}` : null;
+    const firstUnitHref = firstUnitSlug && activeProfileId
+      ? `/hoc/${row.slug}/bai-hoc/${firstUnitSlug}?profileId=${encodeURIComponent(activeProfileId)}`
       : null;
+    const lastLessonId = rawProgress?.lastLessonId || null;
+    const resumeUnitHref = lastLessonId && activeProfileId
+      ? `/hoc/${row.slug}/bai-hoc/${lastLessonId}?profileId=${encodeURIComponent(activeProfileId)}`
+      : firstUnitHref;
+    const normalizedProgress = rawProgress
+      ? {
+          completedLessons: Number(rawProgress.completedLessons || 0),
+          totalLessons: Number(rawProgress.totalLessons || 0),
+          completionPct: Number(rawProgress.completionPct || 0),
+          watchedSeconds: Number(rawProgress.watchedSeconds || 0),
+          lastLessonId,
+          lastLessonTitle: rawProgress.lastLessonTitle || null,
+          lastPositionSeconds: Number(rawProgress.lastPositionSeconds || 0),
+        }
+      : (firstUnit
+          ? {
+              completedLessons: 0,
+              totalLessons: Math.max(1, Number(row.total_lessons || 0)),
+              completionPct: 0,
+              watchedSeconds: 0,
+              lastLessonId: null,
+              lastLessonTitle: null,
+              lastPositionSeconds: 0,
+            }
+          : null);
+    const baseCourse = catalogCourse(row, normalizedProgress);
+    const mergedCourse = courseService.mergeCourseOwnershipView(baseCourse, ownershipInfo, false);
     externalItems.push({
       enrollment: {
         id: -Math.abs(Number(row.external_entitlement_id || courseId)),
@@ -159,17 +193,25 @@ async function listMyEnrollments(user) {
         isExternalOnly: true,
         learningDestination: firstUnitHref ? "moly_workspace" : "csca-course",
         firstUnitHref,
-        firstUnitSlug: firstUnit ? `u-${firstUnit.unitProjectionId}` : null,
-        activeProfileId: firstUnit ? firstUnit.remoteProfileId : null,
-        progress: null,
+        firstUnitSlug,
+        resumeUnitHref,
+        activeProfileId,
+        lastLessonId,
+        lastLessonTitle: normalizedProgress?.lastLessonTitle || null,
+        lastPositionSeconds: normalizedProgress?.lastPositionSeconds ?? 0,
+        progress: normalizedProgress,
       },
       course: {
         ...mergedCourse,
         isExternalOnly: true,
         learningDestination: firstUnitHref ? "moly_workspace" : "csca-course",
         firstUnitHref,
-        firstUnitSlug: firstUnit ? `u-${firstUnit.unitProjectionId}` : null,
-        activeProfileId: firstUnit ? firstUnit.remoteProfileId : null,
+        firstUnitSlug,
+        resumeUnitHref,
+        activeProfileId,
+        lastLessonId,
+        lastLessonTitle: normalizedProgress?.lastLessonTitle || null,
+        lastPositionSeconds: normalizedProgress?.lastPositionSeconds ?? 0,
       },
     });
   }

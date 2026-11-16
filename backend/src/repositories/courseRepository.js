@@ -37,7 +37,16 @@ async function getCatalogCaps() {
          ) AS has_origin,
          to_regclass('course_profile_projections') IS NOT NULL AS has_profiles,
          to_regclass('external_course_mappings') IS NOT NULL AS has_mappings,
-         (to_regclass('video_package_courses') IS NOT NULL AND to_regclass('video_packages') IS NOT NULL) AS has_video_packages`,
+         (to_regclass('video_package_courses') IS NOT NULL AND to_regclass('video_packages') IS NOT NULL) AS has_video_packages,
+         (
+           EXISTS (
+             SELECT 1 FROM pg_attribute
+             WHERE attrelid = to_regclass('video_packages') AND NOT attisdropped AND attname = 'requires_subject_choice'
+           ) AND EXISTS (
+             SELECT 1 FROM pg_attribute
+             WHERE attrelid = to_regclass('video_packages') AND NOT attisdropped AND attname = 'subject_prices'
+           )
+         ) AS has_vp_subject_prices`,
     );
     const row = res.rows[0] || {};
     const caps = {
@@ -45,14 +54,21 @@ async function getCatalogCaps() {
       hasProfiles: row.has_profiles === true,
       hasMappings: row.has_mappings === true,
       hasVideoPackages: row.has_video_packages === true,
+      hasVpSubjectPrices: row.has_vp_subject_prices === true,
     };
     if (cacheKey && typeof cacheKey === "object"
-      && caps.hasOrigin && caps.hasProfiles && caps.hasMappings && caps.hasVideoPackages) {
+      && caps.hasOrigin && caps.hasProfiles && caps.hasMappings && caps.hasVideoPackages && caps.hasVpSubjectPrices) {
       catalogCapsCache.set(cacheKey, caps);
     }
     return caps;
   } catch {
-    return { hasOrigin: false, hasProfiles: false, hasMappings: false, hasVideoPackages: false };
+    return {
+      hasOrigin: false,
+      hasProfiles: false,
+      hasMappings: false,
+      hasVideoPackages: false,
+      hasVpSubjectPrices: false,
+    };
   }
 }
 
@@ -101,13 +117,24 @@ function buildCourseColumns(caps) {
     ), '[]'::jsonb) AS projected_profiles`);
   }
   if (caps.hasVideoPackages) {
+    const subjectPriceClause = caps.hasVpSubjectPrices
+      ? `OR (
+            COALESCE(vp.requires_subject_choice, FALSE) = TRUE
+            AND vp.subject_prices IS NOT NULL
+            AND COALESCE(vp.subject_prices ->> c.subject_code, '') ~ '^[0-9]+(\\.[0-9]+)?$'
+            AND (vp.subject_prices ->> c.subject_code)::numeric > 0
+          )`
+      : "";
     extra.push(`EXISTS (
       SELECT 1
       FROM video_package_courses vpc
       JOIN video_packages vp ON vp.id = vpc.video_package_id
       WHERE vpc.course_id = c.id
         AND vp.status = 'active'
-        AND COALESCE(vp.price_vnd, 0) > 0
+        AND (
+          COALESCE(vp.price_vnd, 0) > 0
+          ${subjectPriceClause}
+        )
     ) AS has_priced_video_package`);
   }
   return extra.length ? `${COURSE_COLUMNS},\n  ${extra.join(",\n  ")}` : COURSE_COLUMNS;

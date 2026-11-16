@@ -7,15 +7,18 @@ const { createMolyCourseCatalogSyncService } = require("./molyCourseCatalogSyncS
 const { createMolyCourseWorkspaceService } = require("./molyCourseWorkspaceService");
 const {
   createIntegrationLogger,
-  isCatalogSyncKillSwitchActive,
+  getKillSwitchesSnapshot,
+  isContentSyncKillSwitchActive,
   isIntegrationKillSwitchActive,
+  isMutationsRepairKillSwitchActive,
+  readRolloutPosture,
 } = require("../utils/integrationLogger");
 
 const client = createCourseIntegrationClient();
 const outbox = createCourseOutboxSyncService({ db, client });
 const ownership = createCourseOwnershipProjectionService({ db, client, outbox });
-const reconciliation = createCourseReconciliationService({ db, client, outbox });
 const catalogSync = createMolyCourseCatalogSyncService({ db, client });
+const reconciliation = createCourseReconciliationService({ db, client, outbox, catalogSync });
 const workspace = createMolyCourseWorkspaceService({ db, client, ownership });
 const workerLog = createIntegrationLogger({ component: "course-worker" });
 
@@ -39,13 +42,15 @@ function startOutboxWorker({
     if (workerRunning || isIntegrationKillSwitchActive()) return;
     workerRunning = true;
     try {
-      await outbox.processAvailableOutboxJobs({
-        workerId: `moly-worker-${process.pid}`,
-        limit: 25,
-        reconcileBefore: true,
-        reconcileAfter: true,
-      });
-      if (!isCatalogSyncKillSwitchActive()) {
+      if (!isMutationsRepairKillSwitchActive()) {
+        await outbox.processAvailableOutboxJobs({
+          workerId: `moly-worker-${process.pid}`,
+          limit: 25,
+          reconcileBefore: true,
+          reconcileAfter: true,
+        });
+      }
+      if (!isContentSyncKillSwitchActive()) {
         await catalogSync.processAvailableInboxJobs({
           workerId: `moly-catalog-${process.pid}`,
           limit: 50,
@@ -71,8 +76,9 @@ function startOutboxWorker({
       }
       if (reconcileIntervalMs > 0 && Date.now() - lastReconcileAtMs >= reconcileIntervalMs) {
         lastReconcileAtMs = Date.now();
+        const autoRepairRequested = String(process.env.COURSE_INTEGRATION_RECONCILE_AUTO_REPAIR || "false").toLowerCase() === "true";
         await reconciliation.runReconciliation({
-          dryRun: String(process.env.COURSE_INTEGRATION_RECONCILE_AUTO_REPAIR || "false").toLowerCase() !== "true",
+          dryRun: !autoRepairRequested || isMutationsRepairKillSwitchActive(),
           triggerMode: "scheduled",
           dispatchRepairs: true,
         }).catch((err) => {
@@ -106,6 +112,15 @@ function stopOutboxWorker() {
   }
 }
 
+function getWorkerStatus() {
+  return {
+    active: Boolean(workerTimer),
+    running: Boolean(workerRunning),
+    lastReconcileAt: lastReconcileAtMs ? new Date(lastReconcileAtMs).toISOString() : null,
+    lastCatalogPullAt: lastCatalogPullAtMs ? new Date(lastCatalogPullAtMs).toISOString() : null,
+  };
+}
+
 module.exports = {
   client,
   outbox,
@@ -113,6 +128,9 @@ module.exports = {
   reconciliation,
   catalogSync,
   workspace,
+  readRolloutPosture,
+  getKillSwitchesSnapshot,
+  getWorkerStatus,
   startOutboxWorker,
   stopOutboxWorker,
 };
