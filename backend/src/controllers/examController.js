@@ -37,6 +37,10 @@ function getExamAllowDownload(requiredTier) {
   return requiredTier === 'basic';
 }
 
+function isLearnerVisibleExam(exam) {
+  return Boolean(exam && exam.status === 'published' && !exam.deleted_at);
+}
+
 function buildVipAccessError(requiredTier) {
   return {
     success: false,
@@ -123,7 +127,7 @@ const examController = {
 
       const exam = await Exam.getById(examId, includeAnswers);
 
-      if (!exam) {
+      if (!isLearnerVisibleExam(exam)) {
         return res.status(404).json({
           success: false,
           message: "Không tìm thấy đề thi",
@@ -161,7 +165,7 @@ const examController = {
       }
 
       const exam = await Exam.getById(examId, false);
-      if (!exam) {
+      if (!isLearnerVisibleExam(exam)) {
         return res.status(404).json({ success: false, message: "Không tìm thấy đề thi" });
       }
 
@@ -349,7 +353,7 @@ const examController = {
       }
 
       let exam = await Exam.getSummaryForUser(parsedId, req.user.id);
-      if (!exam) {
+      if (!isLearnerVisibleExam(exam)) {
         return res.status(404).json({
           success: false,
           message: "Khong tim thay de thi",
@@ -467,7 +471,7 @@ const examController = {
       // Get exam details with questions
       const exam = await Exam.getById(parsedId, false);
 
-      if (!exam) {
+      if (!isLearnerVisibleExam(exam)) {
         return res.status(404).json({
           success: false,
           message: "Không tìm thấy đề thi",

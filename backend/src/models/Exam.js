@@ -395,7 +395,9 @@ const Exam = {
        FROM exams e
        INNER JOIN subjects s ON e.subject_id = s.id
        LEFT JOIN questions q ON q.exam_id = e.id AND q.deleted_at IS NULL
-       WHERE e.id = $1 AND e.deleted_at IS NULL
+       WHERE e.id = $1
+         AND e.status = 'published'
+         AND e.deleted_at IS NULL
        GROUP BY e.id, s.id`,
       [examId, userId],
     );
@@ -417,7 +419,9 @@ const Exam = {
              ) AS has_exam_pdf
       FROM exams e
       INNER JOIN subjects s ON e.subject_id = s.id
-      WHERE e.id = $1 AND e.deleted_at IS NULL
+      WHERE e.id = $1
+        AND e.status = 'published'
+        AND e.deleted_at IS NULL
     `;
     const examResult = await pool.query(examQuery, [examId]);
 
