@@ -7,7 +7,7 @@ import { adminApi } from '@/lib/api/admin';
 
 type Recipient = { id: number; full_name: string; email: string };
 type EmailQuotaAccount = {
-  id: 'default' | 'critical';
+  id: 'default' | 'bulk' | 'critical';
   label: string;
   configured: boolean;
   status: 'ok' | 'missing' | 'error';
@@ -31,7 +31,7 @@ type EmailSendLog = {
     errorMessage?: string;
     reserveCritical?: number;
     accountBreakdown?: Array<{
-      id: 'default' | 'critical';
+      id: 'default' | 'bulk' | 'critical';
       sent: number;
       campaignId?: number;
       quotaBefore?: number | null;
@@ -270,13 +270,21 @@ export default function EmailCampaignPage() {
     const itemName = channel === 'notification'
       ? 'thông báo'
       : emailType === 'transactional' ? 'email học tập' : 'email marketing';
-    const defaultRemaining = quotaAccounts.find(account => account.id === 'default')?.remaining || 0;
-    const criticalRemaining = quotaAccounts.find(account => account.id === 'critical')?.remaining || 0;
-    const defaultShare = Math.min(recipientCount, defaultRemaining);
-    const criticalShare = Math.max(0, recipientCount - defaultShare);
-    const criticalAfter = Math.max(0, criticalRemaining - criticalShare);
+    let recipientsLeft = recipientCount;
+    const allocationLines = quotaAccounts
+      .filter(account => account.status === 'ok')
+      .map(account => {
+        const remaining = Math.max(0, Number(account.remaining) || 0);
+        const capacity = account.id === 'critical'
+          ? Math.max(0, remaining - criticalReserve)
+          : remaining;
+        const share = Math.min(recipientsLeft, capacity);
+        recipientsLeft -= share;
+        return `• ${account.label}: ${share} email`;
+      });
+    if (recipientsLeft > 0) allocationLines.push(`• Còn thiếu quota: ${recipientsLeft} email`);
     const allocation = channel === 'email' && mode === 'all'
-      ? `\n\nPhân bổ dự kiến:\n• Tài khoản 1: ${defaultShare} email\n• Tài khoản 2: ${criticalShare} email\n• Tài khoản 2 còn khoảng ${criticalAfter} lượt (mức dự phòng: ${criticalReserve})`
+      ? `\n\nPhân bổ dự kiến:\n${allocationLines.join('\n')}\n• Dự phòng tài khoản OTP: ${criticalReserve}`
       : '';
     const placeholderWarning = hasUnfilledPlaceholders
       ? '\n\n⚠️ Nội dung vẫn còn chỗ [điền ...] chưa được thay.'
@@ -357,7 +365,9 @@ export default function EmailCampaignPage() {
                           <p className="mt-1 text-xs text-slate-500">
                             {account.id === 'critical'
                               ? 'Xác minh · OTP · Reset · VIP · Marketing'
-                              : 'Học tập · Thanh toán · Hệ thống'}
+                              : account.id === 'bulk'
+                                ? 'Thông báo · Chiến dịch gửi bổ sung'
+                                : 'Học tập · Thanh toán · Hệ thống'}
                           </p>
                         </div>
                         <span className={`rounded-full px-2 py-1 text-[10px] font-black uppercase ${

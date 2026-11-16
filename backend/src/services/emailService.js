@@ -8,10 +8,13 @@ class EmailService {
   constructor() {
     this.apiKey = process.env.BREVO_API_KEY;
     this.criticalApiKey = process.env.BREVO_CRITICAL_API_KEY || this.apiKey;
+    this.bulkApiKey = process.env.BREVO_BULK_API_KEY || '';
     this.senderEmail = process.env.EMAIL_SENDER || 'cloudlystudio05@gmail.com';
     this.senderName = process.env.EMAIL_SENDER_NAME || 'MOLY.STUDIO';
     this.criticalSenderEmail = process.env.EMAIL_CRITICAL_SENDER || this.senderEmail;
     this.criticalSenderName = process.env.EMAIL_CRITICAL_SENDER_NAME || this.senderName;
+    this.bulkSenderEmail = process.env.EMAIL_BULK_SENDER || this.senderEmail;
+    this.bulkSenderName = process.env.EMAIL_BULK_SENDER_NAME || this.senderName;
     this.marketingSenderEmail = process.env.EMAIL_MARKETING_SENDER || this.criticalSenderEmail;
     this.marketingSenderName = process.env.EMAIL_MARKETING_SENDER_NAME || this.criticalSenderName;
     this.replyToEmail = process.env.EMAIL_REPLY_TO || '';
@@ -24,6 +27,10 @@ class EmailService {
       process.env.BREVO_CRITICAL_MARKETING_LIST_ID || process.env.BREVO_MARKETING_LIST_ID || '',
       10
     );
+    this.bulkMarketingListId = Number.parseInt(
+      process.env.BREVO_BULK_MARKETING_LIST_ID || '',
+      10
+    );
     this.criticalReserve = Math.max(
       0,
       Number.parseInt(process.env.BREVO_CRITICAL_RESERVE || '50', 10) || 0
@@ -34,6 +41,9 @@ class EmailService {
     this.criticalClient = this.criticalApiKey === this.apiKey
       ? this.client
       : this._createClient(this.criticalApiKey);
+    this.bulkClient = this.bulkApiKey
+      ? this._createClient(this.bulkApiKey)
+      : null;
   }
 
   _createClient(apiKey) {
@@ -86,6 +96,7 @@ class EmailService {
     const accountConfigs = {
       default: {
         id: 'default',
+        apiKey: this.apiKey,
         client: this.client,
         listId: this.defaultMarketingListId,
         senderEmail: this.senderEmail,
@@ -93,14 +104,24 @@ class EmailService {
       },
       critical: {
         id: 'critical',
+        apiKey: this.criticalApiKey,
         client: this.criticalClient,
         listId: this.criticalMarketingListId,
         senderEmail: this.marketingSenderEmail,
         senderName: this.marketingSenderName,
       },
+      bulk: {
+        id: 'bulk',
+        apiKey: this.bulkApiKey,
+        client: this.bulkClient,
+        listId: this.bulkMarketingListId,
+        senderEmail: this.bulkSenderEmail,
+        senderName: this.bulkSenderName,
+      },
     };
     const availableAccountIds = Object.values(accountConfigs)
-      .filter(config => Number.isInteger(config.listId) && config.listId > 0)
+      .filter(config => config.apiKey && config.client
+        && Number.isInteger(config.listId) && config.listId > 0)
       .map(config => config.id);
     if (!availableAccountIds.length) {
       throw new Error('BREVO_MARKETING_LIST_ID not configured');
@@ -136,7 +157,10 @@ class EmailService {
     const validRecipients = this._dedupeRecipients(recipients);
     if (!validRecipients.length) throw new Error('No valid recipients');
 
-    const allocation = await this._allocateBulkRecipients(validRecipients, ['default', 'critical']);
+    const availableAccountIds = ['default'];
+    if (this.bulkApiKey && this.bulkClient) availableAccountIds.push('bulk');
+    if (this.criticalApiKey) availableAccountIds.push('critical');
+    const allocation = await this._allocateBulkRecipients(validRecipients, availableAccountIds);
     const configs = {
       default: {
         client: this.client,
@@ -147,6 +171,11 @@ class EmailService {
         client: this.criticalClient,
         senderEmail: this.criticalSenderEmail,
         senderName: this.criticalSenderName,
+      },
+      bulk: {
+        client: this.bulkClient,
+        senderEmail: this.bulkSenderEmail,
+        senderName: this.bulkSenderName,
       },
     };
     const accounts = [];
@@ -187,10 +216,21 @@ class EmailService {
   async _allocateBulkRecipients(recipients, availableAccountIds) {
     const quota = await this.getQuotaStatus();
     const byId = Object.fromEntries(quota.accounts.map(account => [account.id, account]));
-    const distinctCritical = this.criticalApiKey && this.criticalApiKey !== this.apiKey;
-    const order = distinctCritical
-      ? ['default', 'critical']
-      : [availableAccountIds.includes('default') ? 'default' : 'critical'];
+    const apiKeys = {
+      default: this.apiKey,
+      bulk: this.bulkApiKey,
+      critical: this.criticalApiKey,
+    };
+    const seenApiKeys = new Set();
+    const order = ['default', 'bulk', 'critical'].filter(id => {
+      const apiKey = apiKeys[id];
+      if (!availableAccountIds.includes(id) || !apiKey || seenApiKeys.has(apiKey)) return false;
+      seenApiKeys.add(apiKey);
+      return true;
+    });
+    const protectedCriticalKey = this.criticalApiKey && this.criticalApiKey !== this.apiKey
+      ? this.criticalApiKey
+      : null;
     const capacities = {};
     order.forEach(id => {
       const account = byId[id];
@@ -201,7 +241,7 @@ class EmailService {
       const rawRemaining = account.remaining === null || account.remaining === undefined
         ? recipients.length
         : Math.max(0, account.remaining);
-      capacities[id] = id === 'critical' && distinctCritical
+      capacities[id] = protectedCriticalKey && apiKeys[id] === protectedCriticalKey
         ? Math.max(0, rawRemaining - this.criticalReserve)
         : rawRemaining;
     });
@@ -402,7 +442,7 @@ class EmailService {
       }
     };
 
-    const [defaultAccount, criticalAccount] = await Promise.all([
+    const accountRequests = [
       loadAccount({
         id: 'default',
         label: 'Học tập & hệ thống',
@@ -415,12 +455,21 @@ class EmailService {
         apiKey: this.criticalApiKey,
         client: this.criticalClient,
       }),
-    ]);
+    ];
+    if (this.bulkApiKey && this.bulkClient) {
+      accountRequests.splice(1, 0, loadAccount({
+        id: 'bulk',
+        label: 'Gửi bổ sung',
+        apiKey: this.bulkApiKey,
+        client: this.bulkClient,
+      }));
+    }
+    const accounts = await Promise.all(accountRequests);
 
     return {
       updatedAt: new Date().toISOString(),
       criticalReserve: this.criticalReserve,
-      accounts: [defaultAccount, criticalAccount],
+      accounts,
     };
   }
 

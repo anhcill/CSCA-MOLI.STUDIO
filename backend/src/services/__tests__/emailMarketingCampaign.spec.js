@@ -290,6 +290,60 @@ describe('EmailService marketing campaigns', () => {
     expect(criticalClient.post).toHaveBeenCalledTimes(1);
   });
 
+  test('uses a third Brevo account before consuming the critical reserve', async () => {
+    process.env = {
+      ...originalEnv,
+      BREVO_API_KEY: 'default-key',
+      BREVO_BULK_API_KEY: 'bulk-key',
+      BREVO_CRITICAL_API_KEY: 'critical-key',
+      BREVO_CRITICAL_RESERVE: '2',
+    };
+
+    const clients = {
+      'default-key': {
+        get: jest.fn().mockResolvedValue({
+          data: { plan: [{ type: 'free', credits: 2, creditsType: 'sendLimit' }] },
+        }),
+        post: jest.fn().mockResolvedValue({ data: { messageIds: ['d1', 'd2'] } }),
+      },
+      'bulk-key': {
+        get: jest.fn().mockResolvedValue({
+          data: { plan: [{ type: 'free', credits: 3, creditsType: 'sendLimit' }] },
+        }),
+        post: jest.fn().mockResolvedValue({ data: { messageIds: ['b1', 'b2', 'b3'] } }),
+      },
+      'critical-key': {
+        get: jest.fn().mockResolvedValue({
+          data: { plan: [{ type: 'free', credits: 4, creditsType: 'sendLimit' }] },
+        }),
+        post: jest.fn().mockResolvedValue({ data: { messageIds: ['c1'] } }),
+      },
+    };
+    jest.doMock('axios', () => ({
+      create: jest.fn(config => clients[config.headers['api-key']]),
+    }));
+
+    const emailService = require('../emailService');
+    const result = await emailService.sendTransactionalBatch({
+      recipients: [1, 2, 3, 4, 5, 6].map(index => ({
+        email: `student${index}@example.com`,
+        name: `Student ${index}`,
+      })),
+      subject: 'Lịch học',
+      html: '<p>Lịch học</p>',
+      text: 'Lịch học',
+    });
+
+    expect(result.accounts).toEqual([
+      expect.objectContaining({ id: 'default', sent: 2, projectedAfter: 0 }),
+      expect.objectContaining({ id: 'bulk', sent: 3, projectedAfter: 0 }),
+      expect.objectContaining({ id: 'critical', sent: 1, projectedAfter: 3 }),
+    ]);
+    expect(clients['default-key'].post).toHaveBeenCalledTimes(1);
+    expect(clients['bulk-key'].post).toHaveBeenCalledTimes(1);
+    expect(clients['critical-key'].post).toHaveBeenCalledTimes(1);
+  });
+
   test('returns quota for both Brevo accounts without exposing account details', async () => {
     process.env = {
       ...originalEnv,
