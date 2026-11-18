@@ -4,7 +4,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { FiDownload, FiExternalLink, FiLock, FiX } from 'react-icons/fi';
 import learningApi, { parseExternalApiError } from '@/lib/api/learning';
 import { useAuthStore } from '@/lib/store/authStore';
-import type { ExternalFileStreamResult, ExternalUnitFileDto } from '@/lib/types/courses';
+import type {
+  ExternalFileDownloadProgress,
+  ExternalFileStreamResult,
+  ExternalUnitFileDto,
+} from '@/lib/types/courses';
 import {
   formatExternalFileSize,
   ProtectedExternalDocumentBody,
@@ -34,6 +38,7 @@ export function ExternalFileViewerModal({
   const user = useAuthStore((state) => state.user);
   const [stream, setStream] = useState<ExternalFileStreamResult | null>(null);
   const [loading, setLoading] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState<ExternalFileDownloadProgress | null>(null);
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState('');
   const [errorCode, setErrorCode] = useState<string | null>(null);
@@ -68,6 +73,7 @@ export function ExternalFileViewerModal({
   useEffect(() => {
     if (!open || !file || !profileId) {
       setStream(null);
+      setDownloadProgress(null);
       setError('');
       setErrorCode(null);
       setViewerError('');
@@ -75,6 +81,7 @@ export function ExternalFileViewerModal({
     }
     if (file.allowView === false) {
       setStream(null);
+      setDownloadProgress(null);
       setErrorCode('FILE_VIEW_DISABLED');
       setError('Tài liệu này hiện không cho phép xem trực tuyến.');
       return undefined;
@@ -83,6 +90,12 @@ export function ExternalFileViewerModal({
     const controller = new AbortController();
     let active = true;
     setLoading(true);
+    setDownloadProgress({
+      phase: 'connecting',
+      loadedBytes: 0,
+      totalBytes: Number(file.sizeBytes || 0),
+      percent: file.sizeBytes > 0 ? 0 : null,
+    });
     setError('');
     setErrorCode(null);
     setViewerError('');
@@ -94,6 +107,10 @@ export function ExternalFileViewerModal({
       fileId: file.id,
       disposition: 'inline',
       fallbackFileName: file.fileName,
+      knownSizeBytes: file.sizeBytes,
+      onProgress: (progress) => {
+        if (active) setDownloadProgress(progress);
+      },
       signal: controller.signal,
     })
       .then((res) => {
@@ -226,6 +243,7 @@ export function ExternalFileViewerModal({
           file={file}
           stream={stream}
           loading={loading}
+          downloadProgress={downloadProgress}
           error={error}
           errorCode={errorCode}
           viewerError={viewerError}

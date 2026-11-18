@@ -11,7 +11,11 @@ import {
   FiShield,
 } from 'react-icons/fi';
 import MobilePdfViewer from '@/components/materials/MobilePdfViewer';
-import type { ExternalFileStreamResult, ExternalUnitFileDto } from '@/lib/types/courses';
+import type {
+  ExternalFileDownloadProgress,
+  ExternalFileStreamResult,
+  ExternalUnitFileDto,
+} from '@/lib/types/courses';
 
 export function formatExternalFileSize(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes <= 0) return '—';
@@ -67,6 +71,7 @@ interface ProtectedExternalDocumentBodyProps {
   file: ExternalUnitFileDto;
   stream: ExternalFileStreamResult | null;
   loading: boolean;
+  downloadProgress?: ExternalFileDownloadProgress | null;
   error: string;
   errorCode: string | null;
   viewerError: string;
@@ -83,6 +88,7 @@ export function ProtectedExternalDocumentBody({
   file,
   stream,
   loading,
+  downloadProgress = null,
   error,
   errorCode,
   viewerError,
@@ -95,6 +101,7 @@ export function ProtectedExternalDocumentBody({
   onViewerError,
 }: ProtectedExternalDocumentBodyProps) {
   const [imageObjectUrl, setImageObjectUrl] = useState<string | null>(null);
+  const [pdfRendering, setPdfRendering] = useState(false);
   const showWatermark = !canDownload || file.allowDownload === false;
 
   useEffect(() => {
@@ -126,19 +133,71 @@ export function ProtectedExternalDocumentBody({
   const isPdf = stream ? isPdfDocument(file, stream.mimeType, stream.fileName) : false;
   const isImage = stream ? isImageDocument(file, stream.mimeType, stream.fileName) : false;
 
+  useEffect(() => {
+    setPdfRendering(Boolean(stream && isPdf));
+  }, [isPdf, stream]);
+
+  const knownTotal = downloadProgress?.totalBytes || file.sizeBytes || 0;
+  const loadedBytes = downloadProgress?.loadedBytes || 0;
+  const progressPercent = downloadProgress?.percent ?? (knownTotal > 0 && loadedBytes > 0
+    ? Math.min(99, Math.round((loadedBytes / knownTotal) * 100))
+    : null);
+  const phaseLabel = downloadProgress?.phase === 'authenticating'
+    ? 'Đang xác thực quyền truy cập & thông tin tài liệu...'
+    : downloadProgress?.phase === 'connecting'
+      ? 'Đang kết nối máy chủ tài liệu...'
+      : downloadProgress?.phase === 'rendering'
+        ? 'Đã tải xong dữ liệu, đang dựng trang tài liệu...'
+        : 'Đang tải tài liệu bảo mật...';
+
   return (
     <div
-      className={`relative flex-1 overflow-auto bg-slate-100 dark:bg-[#071225] ${!canDownload ? 'select-none print:hidden' : ''}`}
+      className={`relative flex flex-1 flex-col bg-slate-100 dark:bg-[#071225] ${isPdf && stream ? 'min-h-0 overflow-hidden' : 'overflow-auto'} ${!canDownload ? 'select-none print:hidden' : ''}`}
       onContextMenu={(event) => {
         if (!canDownload) event.preventDefault();
       }}
     >
       {loading ? (
-        <div className="flex h-full min-h-64 flex-col items-center justify-center gap-3 p-6 text-center">
-          <div className="h-10 w-10 animate-spin rounded-full border-4 border-[#247d7e]/25 border-t-[#247d7e]" />
-          <p className="text-sm font-bold text-[#414c61] dark:text-slate-300">
-            Đang tải tài liệu bảo mật...
-          </p>
+        <div className="flex h-full min-h-72 flex-col items-center justify-center p-6 text-center">
+          <div className="w-full max-w-md rounded-2xl border border-[#e3d7cb] bg-white/95 p-6 shadow-lg dark:border-[#2a3950] dark:bg-[#0f1d33]/95">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[#247d7e]/10 text-[#247d7e] dark:bg-[#247d7e]/20 dark:text-[#6ac6bd]">
+              <FiFileText className="h-6 w-6" />
+            </div>
+            <p className="mt-3 truncate text-sm font-black text-[#18243b] dark:text-white">
+              {file.title || file.fileName || 'Tài liệu học tập'}
+            </p>
+            <p className="mt-1 text-xs font-semibold text-[#5a667d] dark:text-slate-300">
+              {phaseLabel}
+            </p>
+
+            <div className="mt-4">
+              <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+                {progressPercent !== null ? (
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-[#247d7e] to-[#34b3a0] transition-all duration-200 ease-out"
+                    style={{ width: `${Math.max(4, Math.min(100, progressPercent))}%` }}
+                  />
+                ) : (
+                  <div className="h-full w-2/5 animate-pulse rounded-full bg-gradient-to-r from-[#247d7e] to-[#34b3a0]" />
+                )}
+              </div>
+
+              <div className="mt-2.5 flex items-center justify-between gap-2 text-xs font-bold text-[#414c61] dark:text-slate-300">
+                <span>
+                  {loadedBytes > 0 && knownTotal > 0
+                    ? `${formatExternalFileSize(loadedBytes)} / ${formatExternalFileSize(knownTotal)}`
+                    : loadedBytes > 0
+                      ? `Đã tải ${formatExternalFileSize(loadedBytes)}`
+                      : knownTotal > 0
+                        ? `Dung lượng: ${formatExternalFileSize(knownTotal)}`
+                        : 'Đang chuẩn bị dữ liệu...'}
+                </span>
+                <span className="tabular-nums text-[#247d7e] dark:text-[#6ac6bd]">
+                  {progressPercent !== null ? `${progressPercent}%` : '...'}
+                </span>
+              </div>
+            </div>
+          </div>
         </div>
       ) : error ? (
         <div role="alert" className="flex h-full min-h-64 flex-col items-center justify-center gap-3 p-6 text-center">
@@ -162,7 +221,7 @@ export function ProtectedExternalDocumentBody({
           </div>
         </div>
       ) : stream ? (
-        <div className="relative flex h-full min-h-full flex-col">
+        <div className="relative flex min-h-0 flex-1 flex-col">
           {viewerError ? (
             <p role="alert" className="m-3 rounded-xl bg-red-50 px-3 py-2 text-xs font-bold text-red-700 dark:bg-red-950/40 dark:text-red-300">
               {viewerError}
@@ -170,14 +229,26 @@ export function ProtectedExternalDocumentBody({
           ) : null}
 
           {isPdf ? (
-            <div className={`relative flex-1 p-2 sm:p-4 ${fullPage ? 'mx-auto w-full max-w-5xl' : ''}`}>
+            <div className={`relative flex min-h-0 flex-1 flex-col p-2 sm:p-4 ${fullPage ? 'mx-auto w-full max-w-6xl' : ''}`}>
               <MobilePdfViewer
                 data={stream.data}
                 title={file.title || file.fileName}
-                className={fullPage ? '!min-h-[calc(100svh-8rem)]' : '!min-h-[72svh]'}
+                className="h-full min-h-0"
                 scrollContainerOnly
-                onError={onViewerError}
+                onReady={() => setPdfRendering(false)}
+                onError={(msg) => {
+                  setPdfRendering(false);
+                  onViewerError(msg);
+                }}
               />
+              {pdfRendering ? (
+                <div className="pointer-events-none absolute inset-x-0 top-14 z-10 flex justify-center px-4">
+                  <div className="inline-flex items-center gap-2 rounded-full bg-slate-900/85 px-4 py-1.5 text-xs font-bold text-white shadow-md backdrop-blur">
+                    <span className="h-3 w-3 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                    Đang dựng trang PDF để hiển thị...
+                  </div>
+                </div>
+              ) : null}
               {showWatermark ? <FileWatermarkOverlay label={watermarkLabel} /> : null}
             </div>
           ) : isImage && imageObjectUrl ? (

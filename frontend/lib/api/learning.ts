@@ -18,6 +18,7 @@ import type {
   ExternalVideoPlaybackTokenDto,
   ExternalVideoProgressDto,
   ExternalVideoProgressInput,
+  ExternalFileDownloadProgress,
   ExternalFileStreamResult,
   ExternalQuizDetailDto,
   ExternalQuizAttemptDto,
@@ -542,10 +543,14 @@ export const learningApi = {
     courseSlugOrId,
     profileId = null,
     unitId = null,
+    timeoutMs = 60000,
+    signal,
   }: {
     courseSlugOrId: string | number;
     profileId?: string | null;
     unitId?: string | number | null;
+    timeoutMs?: number;
+    signal?: AbortSignal;
   }): Promise<ExternalCourseWorkspaceDto> {
     const response = await axios.get<ApiSuccessEnvelope<ExternalCourseWorkspaceDto>>(
       `/learning/external/courses/${encodeURIComponent(String(courseSlugOrId))}/workspace`,
@@ -554,6 +559,8 @@ export const learningApi = {
           ...(profileId ? { profileId } : {}),
           ...(unitId != null && String(unitId).trim() ? { unitId: String(unitId) } : {}),
         },
+        timeout: timeoutMs,
+        signal,
       },
     );
     return unwrapData(response.data);
@@ -563,15 +570,21 @@ export const learningApi = {
     profileId,
     unitId,
     courseId = null,
+    timeoutMs = 60000,
+    signal,
   }: {
     profileId: string;
     unitId: string | number;
     courseId?: string | number | null;
+    timeoutMs?: number;
+    signal?: AbortSignal;
   }): Promise<ExternalUnitDetailDto> {
     const response = await axios.get<ApiSuccessEnvelope<ExternalUnitDetailDto>>(
       `/learning/external/offerings/${encodeURIComponent(profileId)}/units/${encodeURIComponent(String(unitId))}`,
       {
         params: courseId != null ? { courseId: String(courseId) } : undefined,
+        timeout: timeoutMs,
+        signal,
       },
     );
     return unwrapData(response.data);
@@ -622,6 +635,9 @@ export const learningApi = {
     fileId,
     disposition = 'inline',
     fallbackFileName = 'document',
+    knownSizeBytes = null,
+    timeoutMs = 300000,
+    onProgress,
     signal,
   }: {
     profileId: string;
@@ -629,15 +645,44 @@ export const learningApi = {
     fileId: string | number;
     disposition?: 'inline' | 'attachment';
     fallbackFileName?: string;
+    knownSizeBytes?: number | null;
+    timeoutMs?: number;
+    onProgress?: (progress: ExternalFileDownloadProgress) => void;
     signal?: AbortSignal;
   }): Promise<ExternalFileStreamResult> {
     const url = `/learning/external/offerings/${encodeURIComponent(profileId)}/units/${encodeURIComponent(String(unitId))}/files/${encodeURIComponent(String(fileId))}/stream`;
+    const totalHint = Number.isFinite(Number(knownSizeBytes)) && Number(knownSizeBytes) > 0
+      ? Number(knownSizeBytes)
+      : 0;
+    onProgress?.({
+      phase: 'connecting',
+      loadedBytes: 0,
+      totalBytes: totalHint,
+      percent: totalHint > 0 ? 0 : null,
+    });
+
     const runRequest = () => axios.get<ArrayBuffer>(url, {
       params: { disposition },
       responseType: 'arraybuffer',
       withCredentials: true,
-      timeout: 120000,
+      timeout: timeoutMs,
       signal,
+      onDownloadProgress: (progressEvent) => {
+        const loadedBytes = Number(progressEvent.loaded || 0);
+        const evtTotal = Number(progressEvent.total || 0);
+        const totalBytes = evtTotal > 0 ? evtTotal : totalHint;
+        const percent = totalBytes > 0
+          ? Math.min(99, Math.max(0, Math.round((loadedBytes / totalBytes) * 100)))
+          : (typeof progressEvent.progress === 'number'
+            ? Math.min(99, Math.max(0, Math.round(progressEvent.progress * 100)))
+            : null);
+        onProgress?.({
+          phase: 'downloading',
+          loadedBytes,
+          totalBytes,
+          percent,
+        });
+      },
     });
 
     let response;
@@ -651,7 +696,7 @@ export const learningApi = {
       }
       if (axErr.response?.status === 401 && parsedBody?.code === 'TOKEN_EXPIRED') {
         // Trigger axios interceptor's single-flight JSON token refresh, then retry binary fetch once.
-        await this.getExternalUnitDetail({ profileId, unitId });
+        await this.getExternalUnitDetail({ profileId, unitId, signal });
         try {
           response = await runRequest();
         } catch (retryErr) {
@@ -671,6 +716,12 @@ export const learningApi = {
     const mimeType = String(headers['content-type'] || 'application/octet-stream').split(';')[0].trim();
     const resolvedName = parseContentDispositionFilename(headers['content-disposition'], fallbackFileName);
     const data = response.data instanceof ArrayBuffer ? response.data : new ArrayBuffer(0);
+    onProgress?.({
+      phase: 'rendering',
+      loadedBytes: data.byteLength,
+      totalBytes: Math.max(data.byteLength, totalHint),
+      percent: 100,
+    });
     return {
       data,
       mimeType,

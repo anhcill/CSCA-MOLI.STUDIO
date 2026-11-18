@@ -1,3 +1,4 @@
+const { Readable } = require("stream");
 const learningService = require("../services/learningService");
 const assignmentService = require("../services/courseAssignmentService");
 const discussionService = require("../services/courseDiscussionService");
@@ -129,7 +130,39 @@ const streamExternalFile = async (req, res) => {
     for (const [headerName, headerVal] of Object.entries(result.headers || {})) {
       if (headerVal != null) res.setHeader(headerName, headerVal);
     }
-    return res.status(result.status || 200).send(result.bodyBuffer);
+    res.status(result.status || 200);
+
+    if (Buffer.isBuffer(result.bodyBuffer)) {
+      result.releaseStreamTimer?.();
+      return res.send(result.bodyBuffer);
+    }
+    const rawStream = result.bodyStream;
+    const nodeStream = typeof rawStream?.pipe === "function"
+      ? rawStream
+      : (typeof rawStream?.getReader === "function" ? Readable.fromWeb(rawStream) : null);
+    if (nodeStream) {
+      let cleanedUp = false;
+      const cleanup = () => {
+        if (cleanedUp) return;
+        cleanedUp = true;
+        result.cleanupStream?.();
+        if (!res.writableEnded) {
+          nodeStream.destroy?.();
+        }
+      };
+      res.on("close", cleanup);
+      nodeStream.on("end", () => {
+        cleanedUp = true;
+        result.releaseStreamTimer?.();
+      });
+      nodeStream.on("error", () => {
+        cleanup();
+        if (!res.writableEnded) res.destroy();
+      });
+      return nodeStream.pipe(res);
+    }
+    result.releaseStreamTimer?.();
+    return res.end();
   } catch (error) {
     return sendExternalCourseError(res, error);
   }

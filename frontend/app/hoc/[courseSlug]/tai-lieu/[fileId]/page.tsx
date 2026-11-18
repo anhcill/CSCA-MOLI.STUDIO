@@ -6,7 +6,11 @@ import Link from 'next/link';
 import { FiArrowLeft, FiDownload, FiLock } from 'react-icons/fi';
 import learningApi, { parseExternalApiError } from '@/lib/api/learning';
 import { useAuthStore } from '@/lib/store/authStore';
-import type { ExternalFileStreamResult, ExternalUnitFileDto } from '@/lib/types/courses';
+import type {
+  ExternalFileDownloadProgress,
+  ExternalFileStreamResult,
+  ExternalUnitFileDto,
+} from '@/lib/types/courses';
 import {
   formatExternalFileSize,
   ProtectedExternalDocumentBody,
@@ -29,6 +33,7 @@ export default function ProtectedExternalDocumentPage({
   const [isPublicPreviewAccess, setIsPublicPreviewAccess] = useState(false);
   const [stream, setStream] = useState<ExternalFileStreamResult | null>(null);
   const [loading, setLoading] = useState(true);
+  const [downloadProgress, setDownloadProgress] = useState<ExternalFileDownloadProgress | null>(null);
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState('');
   const [errorCode, setErrorCode] = useState<string | null>(null);
@@ -63,17 +68,40 @@ export default function ProtectedExternalDocumentPage({
         return;
       }
       setLoading(true);
+      setDownloadProgress({
+        phase: 'authenticating',
+        loadedBytes: 0,
+        totalBytes: 0,
+        percent: null,
+      });
       setError('');
       setErrorCode(null);
       setViewerError('');
       setStream(null);
 
       try {
-        const ws = await learningApi.getExternalCourseWorkspace({
+        const fetchWorkspace = () => learningApi.getExternalCourseWorkspace({
           courseSlugOrId: courseSlug,
           profileId: profileIdParam,
           unitId: unitIdParam,
+          timeoutMs: 60000,
+          signal: controller.signal,
         });
+        let ws;
+        try {
+          ws = await fetchWorkspace();
+        } catch (wsErr) {
+          const axErr = wsErr as { name?: string; code?: string; message?: string; response?: { status?: number } };
+          const status = Number(axErr?.response?.status || 0);
+          const transient = axErr?.code === 'ECONNABORTED'
+            || axErr?.code === 'ERR_NETWORK'
+            || status === 502
+            || status === 503
+            || status === 504
+            || /timeout/i.test(String(axErr?.message || ''));
+          if (!transient || controller.signal.aborted) throw wsErr;
+          ws = await fetchWorkspace();
+        }
         if (!active) return;
 
         const targetProfileId = ws.profile?.remoteProfileId || profileIdParam;
@@ -111,6 +139,10 @@ export default function ProtectedExternalDocumentPage({
           fileId: matchedFile.id,
           disposition: 'inline',
           fallbackFileName: matchedFile.fileName,
+          knownSizeBytes: matchedFile.sizeBytes,
+          onProgress: (progress) => {
+            if (active) setDownloadProgress(progress);
+          },
           signal: controller.signal,
         });
         if (!active) return;
@@ -160,7 +192,7 @@ export default function ProtectedExternalDocumentPage({
     : `/khoa-hoc/${encodeURIComponent(courseSlug)}`;
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#f5efe6] dark:bg-[#071225]">
+    <div className="flex h-[100dvh] flex-col overflow-hidden bg-[#f5efe6] dark:bg-[#071225]">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e5d9ce] bg-[#fffdf9] px-4 py-3 shadow-sm dark:border-[#2d3b52] dark:bg-[#101e33] sm:px-6">
         <div className="flex min-w-0 flex-1 items-center gap-3">
           <Link
@@ -210,6 +242,7 @@ export default function ProtectedExternalDocumentPage({
         }}
         stream={stream}
         loading={loading}
+        downloadProgress={downloadProgress}
         error={error}
         errorCode={errorCode}
         viewerError={viewerError}

@@ -133,9 +133,24 @@ app.use(
       "X-Previous-Session",
       "X-Device-Id",
     ],
+    exposedHeaders: [
+      "Content-Disposition",
+      "Content-Length",
+      "Content-Range",
+      "Accept-Ranges",
+    ],
   }),
 );
-app.use(compression()); // Compress responses
+app.use(
+  compression({
+    filter: (req, res) => {
+      if (req.path.includes("/files/") && req.path.endsWith("/stream")) {
+        return false;
+      }
+      return compression.filter(req, res);
+    },
+  }),
+); // Compress responses (skip binary delegated file streams to preserve Content-Length & progress)
 const jsonBodyLimit = process.env.JSON_BODY_LIMIT || "2mb";
 const urlEncodedBodyLimit = process.env.URLENCODED_BODY_LIMIT || "200kb";
 app.use(express.json({

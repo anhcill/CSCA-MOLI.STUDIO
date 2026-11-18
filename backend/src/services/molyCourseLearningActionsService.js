@@ -293,9 +293,12 @@ function createMolyCourseLearningActionsService({
     const contentType = upstreamHeaders["content-type"] || fileRow?.mime_type || "application/octet-stream";
     const acceptRanges = upstreamHeaders["accept-ranges"] || "bytes";
     const contentRange = upstreamHeaders["content-range"] || null;
-    const bodyBuf = upstreamResult.bodyBufferOrStream || upstreamResult.bodyBuffer || Buffer.alloc(0);
-    const contentLength = upstreamHeaders["content-length"]
-      || (Buffer.isBuffer(bodyBuf) ? String(bodyBuf.length) : null);
+    const streamOrBuf = upstreamResult.bodyStream || upstreamResult.bodyBufferOrStream || upstreamResult.bodyBuffer || Buffer.alloc(0);
+    const isBuf = Buffer.isBuffer(streamOrBuf);
+    const fallbackLength = isBuf
+      ? String(streamOrBuf.length)
+      : (!rangeHeader && fileRow?.size_bytes != null ? String(fileRow.size_bytes) : null);
+    const contentLength = upstreamHeaders["content-length"] || fallbackLength;
 
     return {
       mode: "stream",
@@ -310,7 +313,10 @@ function createMolyCourseLearningActionsService({
         "X-Frame-Options": "SAMEORIGIN",
         "X-Content-Type-Options": "nosniff",
       },
-      bodyBuffer: bodyBuf,
+      bodyStream: isBuf ? null : streamOrBuf,
+      bodyBuffer: isBuf ? streamOrBuf : null,
+      cleanupStream: upstreamResult.abort || upstreamResult.release || null,
+      releaseStreamTimer: upstreamResult.release || null,
     };
   }
 

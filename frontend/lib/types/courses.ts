@@ -1047,6 +1047,13 @@ export interface ExternalVideoProgressDto {
   projectionSlug?: string;
 }
 
+export interface ExternalFileDownloadProgress {
+  phase: 'authenticating' | 'connecting' | 'downloading' | 'rendering';
+  loadedBytes: number;
+  totalBytes: number;
+  percent: number | null;
+}
+
 export interface ExternalFileStreamResult {
   data: ArrayBuffer;
   mimeType: string;

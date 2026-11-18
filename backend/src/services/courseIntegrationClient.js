@@ -14,6 +14,8 @@ const {
 const DEFAULT_TIMEOUT_MS = 10000;
 const MIN_TIMEOUT_MS = 100;
 const MAX_TIMEOUT_MS = 60000;
+const DEFAULT_STREAM_TIMEOUT_MS = 180000;
+const MAX_STREAM_TIMEOUT_MS = 300000;
 const DEFAULT_MAX_TRANSPORT_ATTEMPTS = 2;
 const DEFAULT_RETRY_BASE_DELAY_MS = 150;
 const TRANSIENT_HTTP_STATUSES = new Set([429, 502, 503, 504]);
@@ -1117,10 +1119,16 @@ function createCourseIntegrationClient({
       1,
       { min: 1, max: 5 },
     );
-    const requestTimeoutMs = parsePositiveInt(timeoutMs ?? cfg.timeoutMs, cfg.timeoutMs, {
-      min: MIN_TIMEOUT_MS,
-      max: MAX_TIMEOUT_MS,
-    });
+    const hasExplicitTimeout = timeoutMs !== undefined && timeoutMs !== null;
+    const streamTimeoutMs = hasExplicitTimeout
+      ? parsePositiveInt(timeoutMs, DEFAULT_STREAM_TIMEOUT_MS, {
+          min: MIN_TIMEOUT_MS,
+          max: MAX_STREAM_TIMEOUT_MS,
+        })
+      : Math.max(cfg.timeoutMs, DEFAULT_STREAM_TIMEOUT_MS);
+    const headerTimeoutMs = hasExplicitTimeout
+      ? streamTimeoutMs
+      : Math.max(cfg.timeoutMs, 30000);
 
     let lastError = null;
     for (let attempt = 1; attempt <= attempts; attempt += 1) {
@@ -1143,16 +1151,30 @@ function createCourseIntegrationClient({
       if (sessionToken) headers["X-Delegated-Session"] = String(sessionToken);
       if (rangeHeader) headers.Range = String(rangeHeader);
 
+      const controller = new AbortController();
+      let timerCleared = false;
+      let timeoutHandle = setTimeout(() => controller.abort(), headerTimeoutMs);
+      timeoutHandle.unref?.();
+      const releaseTimer = () => {
+        if (timerCleared) return;
+        timerCleared = true;
+        clearTimeout(timeoutHandle);
+      };
+
       let response;
       try {
         response = await fetchImpl(url, {
           method: "GET",
           headers,
-          signal: AbortSignal.timeout(requestTimeoutMs),
+          signal: controller.signal,
           redirect: "error",
         });
       } catch (err) {
-        const isTimeout = err?.name === "TimeoutError" || err?.name === "AbortError" || err?.code === "ETIMEDOUT";
+        releaseTimer();
+        const isTimeout = controller.signal.aborted
+          || err?.name === "TimeoutError"
+          || err?.name === "AbortError"
+          || err?.code === "ETIMEDOUT";
         lastError = new CourseIntegrationClientError(
           isTimeout ? 504 : 503,
           isTimeout ? "COURSE_LMS_TIMEOUT" : "COURSE_LMS_NETWORK_ERROR",
@@ -1167,23 +1189,72 @@ function createCourseIntegrationClient({
       }
 
       if (response.status === 200 || response.status === 206) {
-        const arrayBuf = await response.arrayBuffer();
-        const bodyBuffer = Buffer.from(arrayBuf);
         const resHeaders = {};
         if (response.headers && typeof response.headers.forEach === "function") {
           response.headers.forEach((value, key) => {
             resHeaders[String(key).toLowerCase()] = value;
           });
         }
+        const hasStreamBody = Boolean(
+          response.body
+          && (typeof response.body.getReader === "function" || typeof response.body.pipe === "function"),
+        );
+        if (hasStreamBody) {
+          clearTimeout(timeoutHandle);
+          timerCleared = false;
+          timeoutHandle = setTimeout(() => controller.abort(), streamTimeoutMs);
+          timeoutHandle.unref?.();
+          observeMetricLatency("moly.client.http_ms", Date.now() - callStartMs);
+          recordMetric("moly.client.http_ok");
+          return {
+            status: response.status,
+            headers: resHeaders,
+            bodyStream: response.body,
+            bodyBufferOrStream: response.body,
+            bodyBuffer: null,
+            release: releaseTimer,
+            abort: () => {
+              releaseTimer();
+              controller.abort();
+            },
+          };
+        }
+
+        clearTimeout(timeoutHandle);
+        timerCleared = false;
+        timeoutHandle = setTimeout(() => controller.abort(), streamTimeoutMs);
+        timeoutHandle.unref?.();
+        let bodyBuffer;
+        try {
+          const arrayBuf = await response.arrayBuffer();
+          bodyBuffer = Buffer.from(arrayBuf);
+        } catch (err) {
+          releaseTimer();
+          const isTimeout = controller.signal.aborted
+            || err?.name === "TimeoutError"
+            || err?.name === "AbortError"
+            || err?.code === "ETIMEDOUT";
+          throw new CourseIntegrationClientError(
+            isTimeout ? 504 : 502,
+            isTimeout ? "COURSE_LMS_TIMEOUT" : "COURSE_LMS_STREAM_FAILED",
+            isTimeout ? "Timed out reading file stream from CSCA-Course." : "Failed reading file stream from CSCA-Course.",
+            { retryable: true },
+          );
+        } finally {
+          releaseTimer();
+        }
         observeMetricLatency("moly.client.http_ms", Date.now() - callStartMs);
         recordMetric("moly.client.http_ok");
         return {
           status: response.status,
           headers: resHeaders,
+          bodyStream: null,
           bodyBufferOrStream: bodyBuffer,
           bodyBuffer,
         };
       }
+
+      releaseTimer();
 
       let parsedBody = null;
       try {

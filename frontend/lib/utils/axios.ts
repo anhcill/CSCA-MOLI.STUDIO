@@ -14,10 +14,46 @@ let refreshInFlight: Promise<{ token: string; refreshToken: string }> | null = n
 
 type AuthRequestConfig = InternalAxiosRequestConfig & { _authAccountId?: string | null };
 
+type PersistedAuthBlob = {
+  token?: string | null;
+  refreshToken?: string | null;
+  user?: { id?: unknown } | null;
+};
+
+function readPersistedAuthState(): PersistedAuthBlob | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const state = JSON.parse(localStorage.getItem('auth-storage') || 'null')?.state;
+    return state && typeof state === 'object' ? (state as PersistedAuthBlob) : null;
+  } catch {
+    return null;
+  }
+}
+
+function readStoredAuthToken(key: 'token' | 'refreshToken'): string | null {
+  if (typeof window === 'undefined') return null;
+  const fromSession = sessionStorage.getItem(key);
+  if (fromSession) return fromSession;
+  const persisted = readPersistedAuthState();
+  const fromLocal = typeof persisted?.[key] === 'string' && persisted[key] ? persisted[key] : null;
+  if (fromLocal) {
+    try {
+      sessionStorage.setItem(key, fromLocal);
+      if (!sessionStorage.getItem('user') && persisted?.user) {
+        sessionStorage.setItem('user', JSON.stringify(persisted.user));
+      }
+    } catch {
+      // Ignore sessionStorage write errors
+    }
+  }
+  return fromLocal;
+}
+
 function getStoredAccountId(): string | null {
   if (typeof window === 'undefined') return null;
   try {
-    const id = JSON.parse(sessionStorage.getItem('user') || 'null')?.id;
+    const sessionUserId = JSON.parse(sessionStorage.getItem('user') || 'null')?.id;
+    const id = sessionUserId ?? readPersistedAuthState()?.user?.id;
     return id == null ? null : String(id);
   } catch {
     return null;
@@ -118,9 +154,9 @@ axiosInstance.interceptors.request.use(
       if (previousSessionToken) config.headers['X-Previous-Session'] = previousSessionToken;
     }
     const now = Date.now();
-    // Only read from sessionStorage if cache is stale
+    // Only read from storage if cache is stale (falls back to persisted localStorage in fresh noopener tabs)
     if (!cachedToken || now - tokenLastChecked > TOKEN_CACHE_DURATION) {
-      cachedToken = typeof window !== 'undefined' ? sessionStorage.getItem('token') : null;
+      cachedToken = readStoredAuthToken('token');
       tokenLastChecked = now;
     }
     if (cachedToken) {
@@ -183,7 +219,7 @@ axiosInstance.interceptors.response.use(
       originalRequest._retry = true;
 
       try {
-        const refreshToken = sessionStorage.getItem('refreshToken');
+        const refreshToken = readStoredAuthToken('refreshToken');
         if (refreshToken) {
           if (!refreshInFlight) {
             refreshInFlight = (async () => {
