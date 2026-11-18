@@ -1,6 +1,6 @@
 const express = require("express");
 const rateLimit = require("express-rate-limit");
-const { authenticate, optionalAuthenticate } = require("../middleware/authMiddleware");
+const { authenticate, optionalAuth: defaultOptionalAuth } = require("../middleware/authMiddleware");
 const {
   completeLoginForUser,
   createDeviceLimitLockedPayload,
@@ -65,7 +65,7 @@ function createMolySsoRouters({
   ssoService = null,
   verifyInbound = createCourseInboundAuth(),
   authenticateUser = authenticate,
-  optionalAuth = optionalAuthenticate,
+  optionalAuth = defaultOptionalAuth,
 } = {}) {
   const service = ssoService || createCourseSsoService({
     courseClient: courseIntegrationRuntime.client,

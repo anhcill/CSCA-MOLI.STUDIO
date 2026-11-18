@@ -27,6 +27,12 @@ const {
   validateSsoTargetPath,
 } = require('../src/utils/ssoPathPolicy');
 
+test('Moly SSO routers construct with the production auth middleware defaults', () => {
+  const { userRouter, inboundRouter } = createMolySsoRouters();
+  assert.ok(userRouter);
+  assert.ok(inboundRouter);
+});
+
 async function startMolyBrowserSso(agent, { targetPath = '/khoa-hoc' } = {}) {
   const res = await agent.post('/api/sso/csca-course/start').send({ targetPath });
   assert.equal(res.status, 200);
