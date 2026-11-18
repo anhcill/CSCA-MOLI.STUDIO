@@ -45,9 +45,38 @@ interface GroupQuestionContext {
   groupType?: string | null;
   passageText?: string;
   passageTextCn?: string | null;
+  passageTextEn?: string | null;
   passageImageUrl?: string | null;
   clozeMode?: string | null;
-  linkedOptions?: Array<{ key?: string; id?: string; label?: string; text: string }>;
+  linkedOptions?: Array<{ key?: string; id?: string; label?: string; text: string; textCn?: string | null; textEn?: string | null }>;
+}
+
+function normalizeQuizOptionEntry(rawOpt: unknown) {
+  if (!rawOpt || typeof rawOpt !== 'object') return rawOpt;
+  const opt = rawOpt as Record<string, unknown>;
+  const text = typeof opt.text === 'string'
+    ? opt.text
+    : typeof opt.textCn === 'string'
+      ? opt.textCn
+      : typeof opt.text_cn === 'string'
+        ? opt.text_cn
+        : '';
+  const textCn = typeof opt.textCn === 'string'
+    ? opt.textCn
+    : typeof opt.text_cn === 'string'
+      ? opt.text_cn
+      : null;
+  const textEn = typeof opt.textEn === 'string'
+    ? opt.textEn
+    : typeof opt.text_en === 'string'
+      ? opt.text_en
+      : null;
+  return {
+    ...opt,
+    text,
+    ...(textCn ? { textCn } : {}),
+    ...(textEn ? { textEn } : {}),
+  };
 }
 
 function normalizeQuizQuestionEntry(
@@ -57,10 +86,25 @@ function normalizeQuizQuestionEntry(
 ): ExternalQuizQuestionDto {
   const rawId = rawEntry.id ?? rawEntry.questionId ?? rawEntry.question_id;
   const groupPassage = groupCtx?.passageText;
+  const questionTextVal = typeof rawEntry.questionText === 'string'
+    ? rawEntry.questionText
+    : typeof rawEntry.question_text === 'string'
+      ? rawEntry.question_text
+      : undefined;
+  const questionTextCnVal = typeof rawEntry.questionTextCn === 'string'
+    ? rawEntry.questionTextCn
+    : typeof rawEntry.question_text_cn === 'string'
+      ? rawEntry.question_text_cn
+      : null;
+  const questionTextEnVal = typeof rawEntry.questionTextEn === 'string'
+    ? rawEntry.questionTextEn
+    : typeof rawEntry.question_text_en === 'string'
+      ? rawEntry.question_text_en
+      : null;
   const prompt = String(
     rawEntry.prompt
-    ?? rawEntry.questionText
-    ?? rawEntry.question_text
+    ?? questionTextVal
+    ?? questionTextCnVal
     ?? rawEntry.title
     ?? groupPassage
     ?? '',
@@ -73,21 +117,43 @@ function normalizeQuizQuestionEntry(
     : typeof rawEntry.passage_text === 'string'
       ? rawEntry.passage_text
       : undefined;
-  const rawOpts = Array.isArray(rawEntry.options) ? rawEntry.options : [];
-  const rawLinked = Array.isArray(rawEntry.linkedOptions)
-    ? rawEntry.linkedOptions
-    : (Array.isArray(groupCtx?.linkedOptions) ? groupCtx.linkedOptions : []);
+  const existingPassageCn = typeof rawEntry.passageTextCn === 'string'
+    ? rawEntry.passageTextCn
+    : typeof rawEntry.passage_text_cn === 'string'
+      ? rawEntry.passage_text_cn
+      : undefined;
+  const existingPassageEn = typeof rawEntry.passageTextEn === 'string'
+    ? rawEntry.passageTextEn
+    : typeof rawEntry.passage_text_en === 'string'
+      ? rawEntry.passage_text_en
+      : undefined;
+  const explanationCnVal = typeof rawEntry.explanationCn === 'string'
+    ? rawEntry.explanationCn
+    : typeof rawEntry.explanation_cn === 'string'
+      ? rawEntry.explanation_cn
+      : null;
+  const explanationEnVal = typeof rawEntry.explanationEn === 'string'
+    ? rawEntry.explanationEn
+    : typeof rawEntry.explanation_en === 'string'
+      ? rawEntry.explanation_en
+      : null;
+  const rawOpts = (Array.isArray(rawEntry.options) ? rawEntry.options : []).map(normalizeQuizOptionEntry);
+  const rawLinked = (
+    Array.isArray(rawEntry.linkedOptions)
+      ? rawEntry.linkedOptions
+      : (Array.isArray(groupCtx?.linkedOptions) ? groupCtx.linkedOptions : [])
+  ).map(normalizeQuizOptionEntry);
   const effectiveOptions = rawOpts.length > 0 ? rawOpts : rawLinked;
 
   return {
     ...(rawEntry as unknown as ExternalQuizQuestionDto),
     id: rawId != null ? String(rawId) : String(fallbackIndex + 1),
     prompt,
-    questionText: typeof rawEntry.questionText === 'string'
-      ? rawEntry.questionText
-      : typeof rawEntry.question_text === 'string'
-        ? rawEntry.question_text
-        : prompt,
+    questionText: questionTextVal ?? prompt,
+    ...(questionTextCnVal ? { questionTextCn: questionTextCnVal } : {}),
+    ...(questionTextEnVal ? { questionTextEn: questionTextEnVal } : {}),
+    ...(explanationCnVal ? { explanationCn: explanationCnVal } : {}),
+    ...(explanationEnVal ? { explanationEn: explanationEnVal } : {}),
     options: effectiveOptions as ExternalQuizQuestionDto['options'],
     ...(rawLinked.length > 0
       ? { linkedOptions: rawLinked as ExternalQuizQuestionDto['linkedOptions'] }
@@ -104,8 +170,11 @@ function normalizeQuizQuestionEntry(
     ...(existingPassage || groupPassage
       ? { passageText: existingPassage ?? groupPassage }
       : {}),
-    ...(rawEntry.passageTextCn !== undefined || groupCtx?.passageTextCn !== undefined
-      ? { passageTextCn: (rawEntry.passageTextCn ?? groupCtx?.passageTextCn ?? null) as string | null }
+    ...(existingPassageCn !== undefined || groupCtx?.passageTextCn !== undefined
+      ? { passageTextCn: (existingPassageCn ?? groupCtx?.passageTextCn ?? null) as string | null }
+      : {}),
+    ...(existingPassageEn !== undefined || groupCtx?.passageTextEn !== undefined
+      ? { passageTextEn: (existingPassageEn ?? groupCtx?.passageTextEn ?? null) as string | null }
       : {}),
     ...(rawEntry.passageImageUrl !== undefined || groupCtx?.passageImageUrl !== undefined
       ? { passageImageUrl: (rawEntry.passageImageUrl ?? groupCtx?.passageImageUrl ?? null) as string | null }
@@ -136,6 +205,16 @@ function flattenExternalQuizItems(rawItems: unknown): ExternalQuizQuestionDto[] 
         : typeof obj.groupTitle === 'string'
           ? obj.groupTitle
           : undefined;
+    const groupPassageCn = typeof obj.passageTextCn === 'string'
+      ? obj.passageTextCn
+      : typeof obj.passage_text_cn === 'string'
+        ? obj.passage_text_cn
+        : null;
+    const groupPassageEn = typeof obj.passageTextEn === 'string'
+      ? obj.passageTextEn
+      : typeof obj.passage_text_en === 'string'
+        ? obj.passage_text_en
+        : null;
     const groupLinked = Array.isArray(obj.linkedOptions)
       ? obj.linkedOptions
       : Array.isArray(obj.linked_options)
@@ -146,7 +225,8 @@ function flattenExternalQuizItems(rawItems: unknown): ExternalQuizQuestionDto[] 
       groupKind: typeof obj.kind === 'string' ? obj.kind : null,
       groupType: typeof obj.groupType === 'string' ? obj.groupType : null,
       passageText: groupPassage,
-      passageTextCn: typeof obj.passageTextCn === 'string' ? obj.passageTextCn : null,
+      passageTextCn: groupPassageCn,
+      passageTextEn: groupPassageEn,
       passageImageUrl: typeof obj.passageImageUrl === 'string' ? obj.passageImageUrl : null,
       clozeMode: typeof obj.clozeMode === 'string' ? obj.clozeMode : null,
       linkedOptions: groupLinked as GroupQuestionContext['linkedOptions'],
@@ -633,67 +713,22 @@ export const learningApi = {
     return result.fileName || fallbackFileName;
   },
 
-  openStreamBlobInNewTab(stream: ExternalFileStreamResult, targetWindow?: Window | null): void {
-    const mime = stream.mimeType || 'application/octet-stream';
-    const blob = new Blob([stream.data], { type: mime });
-    const objectUrl = URL.createObjectURL(blob);
-    const win = targetWindow && !targetWindow.closed ? targetWindow : window.open(objectUrl, '_blank');
-    if (win) {
-      try {
-        if (targetWindow && !targetWindow.closed) {
-          win.location.replace(objectUrl);
-        }
-      } catch {
-        window.open(objectUrl, '_blank', 'noopener,noreferrer');
-      }
-    } else {
-      const link = document.createElement('a');
-      link.href = objectUrl;
-      link.target = '_blank';
-      link.rel = 'noopener noreferrer';
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-    }
-    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
-  },
-
-  async openExternalFileInNewTab({
+  buildExternalFileViewerPath({
+    courseSlug,
     profileId,
     unitId,
     fileId,
-    fallbackFileName = 'document',
   }: {
+    courseSlug: string;
     profileId: string;
     unitId: string | number;
     fileId: string | number;
-    fallbackFileName?: string;
-  }): Promise<void> {
-    const popup = typeof window !== 'undefined' ? window.open('about:blank', '_blank') : null;
-    if (popup && !popup.closed) {
-      try {
-        popup.document.title = `Đang mở ${fallbackFileName}...`;
-        popup.document.body.innerHTML =
-          '<div style="font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:95vh;color:#1e2b44;font-weight:700;">Đang tải tài liệu bảo mật...</div>';
-      } catch {
-        // Ignore cross-origin styling restrictions
-      }
-    }
-    try {
-      const stream = await this.fetchExternalFileStream({
-        profileId,
-        unitId,
-        fileId,
-        disposition: 'inline',
-        fallbackFileName,
-      });
-      this.openStreamBlobInNewTab(stream, popup);
-    } catch (err) {
-      if (popup && !popup.closed) {
-        popup.close();
-      }
-      throw err;
-    }
+  }): string {
+    const query = new URLSearchParams({
+      profileId: String(profileId),
+      unitId: String(unitId),
+    });
+    return `/hoc/${encodeURIComponent(courseSlug)}/tai-lieu/${encodeURIComponent(String(fileId))}?${query.toString()}`;
   },
 
   async getExternalQuizDetail({

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import katex from 'katex';
 import {
@@ -37,6 +37,7 @@ import { ExternalNotesBookmarksPanel } from './ExternalNotesBookmarksPanel';
 import { ExternalQaPanel } from './ExternalQaPanel';
 import { ExternalQuizPlayerPanel } from './ExternalQuizPlayerPanel';
 import { ExternalVocabFlashcardDeck } from './ExternalVocabFlashcardDeck';
+import { useChineseSpeech } from '@/lib/utils/chineseSpeech';
 
 export type ExternalTabId =
   | 'theory'
@@ -202,10 +203,8 @@ export function ExternalUnitContentTabs({
 }: Props) {
   const [activeTab, setActiveTab] = useState<ExternalTabId>('theory');
   const [vocabMode, setVocabMode] = useState<'list' | 'flashcard'>('list');
-  const [playingVocabId, setPlayingVocabId] = useState<string | null>(null);
   const [viewerFile, setViewerFile] = useState<ExternalUnitFileDto | null>(null);
   const [downloadingFileId, setDownloadingFileId] = useState<string | null>(null);
-  const [openingNewTabFileId, setOpeningNewTabFileId] = useState<string | null>(null);
   const [fileDownloadError, setFileDownloadError] = useState('');
   const [notesCount, setNotesCount] = useState<number>(unit?.notes?.length ?? 0);
   const [bookmarksCount, setBookmarksCount] = useState<number>(unit?.bookmarks?.length ?? 0);
@@ -213,7 +212,7 @@ export function ExternalUnitContentTabs({
     total: unit?.qaThreads?.length ?? 0,
     unread: 0,
   });
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const { speakingKey, speechError, speak: speakVocab } = useChineseSpeech();
 
   const vocabulary = unit?.vocabulary ?? [];
   const formulas = unit?.formulas ?? [];
@@ -234,23 +233,16 @@ export function ExternalUnitContentTabs({
     setQaSummary({ total: unit?.qaThreads?.length ?? 0, unread: 0 });
   }, [activeUnitProjectionId, unit?.bookmarks?.length, unit?.notes?.length, unit?.qaThreads?.length]);
 
-  const handleOpenNewTab = async (file: ExternalUnitFileDto) => {
-    if (!profileId || openingNewTabFileId) return;
-    try {
-      setOpeningNewTabFileId(file.id);
-      setFileDownloadError('');
-      await learningApi.openExternalFileInNewTab({
-        profileId,
-        unitId: unitParamId,
-        fileId: file.id,
-        fallbackFileName: file.fileName,
-      });
-    } catch (err) {
-      const parsed = parseExternalApiError(err, 'Không thể mở tài liệu trong tab mới.');
-      setFileDownloadError(parsed.message);
-    } finally {
-      setOpeningNewTabFileId(null);
-    }
+  const handleOpenNewTab = (file: ExternalUnitFileDto) => {
+    if (!profileId || typeof window === 'undefined') return;
+    setFileDownloadError('');
+    const viewerPath = learningApi.buildExternalFileViewerPath({
+      courseSlug,
+      profileId,
+      unitId: unitParamId,
+      fileId: file.id,
+    });
+    window.open(viewerPath, '_blank', 'noopener,noreferrer');
   };
 
   useEffect(() => {
@@ -292,18 +284,13 @@ export function ExternalUnitContentTabs({
     }
   };
 
-  const playVocabAudio = (id: string, url: string) => {
-    const safeUrl = isSafeHttpOrRelativeUrl(url);
-    if (!safeUrl) return;
-    if (audioRef.current) {
-      audioRef.current.pause();
-    }
-    const audio = new Audio(safeUrl);
-    audioRef.current = audio;
-    setPlayingVocabId(id);
-    audio.onended = () => setPlayingVocabId((curr) => (curr === id ? null : curr));
-    audio.onerror = () => setPlayingVocabId((curr) => (curr === id ? null : curr));
-    void audio.play().catch(() => setPlayingVocabId(null));
+  const playVocabItem = (id: string, term: string, audioUrl?: string | null) => {
+    void speakVocab({
+      key: id,
+      text: term,
+      audioUrl,
+      rate: 0.85,
+    });
   };
 
   const resolvedSummary = unitSummary || units.find((u) => u.unitProjectionId === activeUnitProjectionId) || null;
@@ -474,29 +461,33 @@ export function ExternalUnitContentTabs({
               {vocabMode === 'flashcard' ? (
                 <ExternalVocabFlashcardDeck vocabulary={vocabulary} />
               ) : (
-                <div className="grid gap-4 sm:grid-cols-2">
-                  {vocabulary.map((item, idx) => {
-                    const key = item.id || `${item.term}-${idx}`;
-                    const audioSafe = isSafeHttpOrRelativeUrl(item.audioUrl);
-                    return (
-                      <div key={key} className="rounded-xl border border-[#dfd0c2] bg-[#fffdf9] p-4 shadow-sm dark:border-[#334159] dark:bg-[#101e33]">
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="text-xl font-black text-[#18243b] dark:text-white">{item.term}</p>
-                            {item.pinyin ? <p className="text-xs font-bold text-[#247d7e] dark:text-[#6ac6bd]">{item.pinyin}</p> : null}
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            {item.partOfSpeech ? (
-                              <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                                {item.partOfSpeech}
-                              </span>
-                            ) : null}
-                            {audioSafe ? (
+                <div className="space-y-3">
+                  {speechError ? (
+                    <p className="rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2 text-xs font-bold text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+                      {speechError}
+                    </p>
+                  ) : null}
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    {vocabulary.map((item, idx) => {
+                      const key = String(item.id || `${item.term}-${idx}`);
+                      return (
+                        <div key={key} className="rounded-xl border border-[#dfd0c2] bg-[#fffdf9] p-4 shadow-sm dark:border-[#334159] dark:bg-[#101e33]">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-xl font-black text-[#18243b] dark:text-white">{item.term}</p>
+                              {item.pinyin ? <p className="text-xs font-bold text-[#247d7e] dark:text-[#6ac6bd]">{item.pinyin}</p> : null}
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              {item.partOfSpeech ? (
+                                <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                                  {item.partOfSpeech}
+                                </span>
+                              ) : null}
                               <button
                                 type="button"
-                                onClick={() => playVocabAudio(key, audioSafe)}
+                                onClick={() => playVocabItem(key, item.term, item.audioUrl)}
                                 className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border transition ${
-                                  playingVocabId === key
+                                  speakingKey === key
                                     ? 'border-[#247d7e] bg-[#247d7e] text-white'
                                     : 'border-[#d8c8b9] text-[#247d7e] hover:bg-[#eff9f7] dark:border-[#34435a]'
                                 }`}
@@ -504,22 +495,22 @@ export function ExternalUnitContentTabs({
                               >
                                 <FiVolume2 />
                               </button>
-                            ) : null}
+                            </div>
                           </div>
+                          {item.sinoVietnamese ? (
+                            <p className="mt-1 text-xs font-bold text-amber-700 dark:text-amber-300">Hán Việt: {item.sinoVietnamese}</p>
+                          ) : null}
+                          <p className="mt-2 font-semibold text-[#2a364e] dark:text-slate-200">{item.meaning}</p>
+                          {item.exampleSentence ? (
+                            <div className="mt-3 border-t border-[#efe4d8] pt-2 text-xs dark:border-[#26354b]">
+                              <p className="font-semibold text-[#1e2b44] dark:text-slate-200">{item.exampleSentence}</p>
+                              {item.exampleMeaning ? <p className="text-[#6f665f] dark:text-slate-400">{item.exampleMeaning}</p> : null}
+                            </div>
+                          ) : null}
                         </div>
-                        {item.sinoVietnamese ? (
-                          <p className="mt-1 text-xs font-bold text-amber-700 dark:text-amber-300">Hán Việt: {item.sinoVietnamese}</p>
-                        ) : null}
-                        <p className="mt-2 font-semibold text-[#2a364e] dark:text-slate-200">{item.meaning}</p>
-                        {item.exampleSentence ? (
-                          <div className="mt-3 border-t border-[#efe4d8] pt-2 text-xs dark:border-[#26354b]">
-                            <p className="font-semibold text-[#1e2b44] dark:text-slate-200">{item.exampleSentence}</p>
-                            {item.exampleMeaning ? <p className="text-[#6f665f] dark:text-slate-400">{item.exampleMeaning}</p> : null}
-                          </div>
-                        ) : null}
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
               )}
             </div>
@@ -640,11 +631,10 @@ export function ExternalUnitContentTabs({
                             </button>
                             <button
                               type="button"
-                              disabled={openingNewTabFileId === file.id}
-                              onClick={() => void handleOpenNewTab(file)}
-                              className="inline-flex items-center gap-1.5 rounded-xl border border-[#247d7e] bg-white px-3.5 py-2 text-xs font-black text-[#247d7e] transition hover:bg-[#eff9f7] disabled:opacity-50 dark:bg-[#0b172b] dark:text-[#6ac6bd]"
+                              onClick={() => handleOpenNewTab(file)}
+                              className="inline-flex items-center gap-1.5 rounded-xl border border-[#247d7e] bg-white px-3.5 py-2 text-xs font-black text-[#247d7e] transition hover:bg-[#eff9f7] dark:bg-[#0b172b] dark:text-[#6ac6bd]"
                             >
-                              <FiExternalLink /> {openingNewTabFileId === file.id ? 'Đang mở...' : 'Mở tab mới'}
+                              <FiExternalLink /> Mở tab mới
                             </button>
                           </>
                         ) : (
@@ -675,6 +665,7 @@ export function ExternalUnitContentTabs({
               <ExternalFileViewerModal
                 open={Boolean(viewerFile)}
                 file={viewerFile}
+                courseSlug={courseSlug}
                 profileId={profileId}
                 unitId={unitParamId}
                 profileAllowsDownload={profileAllowsDownload}

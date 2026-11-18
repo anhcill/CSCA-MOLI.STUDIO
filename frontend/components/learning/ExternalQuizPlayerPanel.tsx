@@ -6,6 +6,7 @@ import {
   FiArrowLeft,
   FiCheckCircle,
   FiClock,
+  FiGlobe,
   FiLock,
   FiPlay,
   FiRefreshCw,
@@ -72,14 +73,46 @@ function isAnsweredValue(val: unknown): boolean {
   return false;
 }
 
-function formatDisplayAnswer(val: unknown, question?: ExternalQuizQuestionDto): string {
+function localizedQuestionText(q: ExternalQuizQuestionDto, showChinese: boolean): string {
+  if (showChinese) {
+    return q.questionTextCn || q.questionText || q.prompt || '';
+  }
+  return q.questionText || q.prompt || q.questionTextCn || '';
+}
+
+function localizedPassageText(q: ExternalQuizQuestionDto, showChinese: boolean): string {
+  if (showChinese) {
+    return q.passageTextCn || q.passageText || '';
+  }
+  return q.passageText || q.passageTextCn || '';
+}
+
+function localizedOptionText(opt: ExternalQuizOptionDto, showChinese: boolean): string {
+  if (showChinese) {
+    return opt.textCn || opt.text || '';
+  }
+  return opt.text || opt.textCn || '';
+}
+
+function localizedExplanationText(q: ExternalQuizQuestionDto, showChinese: boolean): string {
+  if (showChinese) {
+    return q.explanationCn || q.explanation || '';
+  }
+  return q.explanation || q.explanationCn || '';
+}
+
+function formatDisplayAnswer(
+  val: unknown,
+  question?: ExternalQuizQuestionDto,
+  showChinese = true,
+): string {
   if (val === null || val === undefined) return '—';
   const opts = question?.options?.length ? question.options : (question?.linkedOptions ?? []);
   const mapOption = (raw: string) => {
     const foundIndex = opts.findIndex((opt, idx) => optionValue(opt, idx) === raw || opt.key === raw);
     const found = foundIndex >= 0 ? opts[foundIndex] : undefined;
     if (!found) return raw;
-    return `${optionLabel(found, foundIndex)}. ${found.text}`;
+    return `${optionLabel(found, foundIndex)}. ${localizedOptionText(found, showChinese)}`;
   };
   if (Array.isArray(val)) {
     return val.length ? val.map((item) => mapOption(String(item))).join(', ') : '—';
@@ -99,7 +132,7 @@ function shouldRenderGroupBanner(questions: ExternalQuizQuestionDto[], idx: numb
   const curr = questions[idx];
   if (!curr) return false;
   const hasGroup = curr.groupId !== undefined && curr.groupId !== null;
-  const hasPassage = Boolean(curr.passageText || (curr.linkedOptions && curr.linkedOptions.length > 0));
+  const hasPassage = Boolean(curr.passageText || curr.passageTextCn || (curr.linkedOptions && curr.linkedOptions.length > 0));
   if (!hasGroup && !hasPassage) return false;
   if (idx === 0) return true;
   const prev = questions[idx - 1];
@@ -107,7 +140,7 @@ function shouldRenderGroupBanner(questions: ExternalQuizQuestionDto[], idx: numb
   if (hasGroup && prev.groupId !== undefined && prev.groupId !== null) {
     return String(curr.groupId) !== String(prev.groupId);
   }
-  return (curr.passageText || '') !== (prev.passageText || '');
+  return (curr.passageTextCn || curr.passageText || '') !== (prev.passageTextCn || prev.passageText || '');
 }
 
 function computeInitialRemainingSeconds(
@@ -154,6 +187,7 @@ export function ExternalQuizPlayerPanel({
   const [answers, setAnswers] = useState<Record<string, unknown>>({});
   const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
   const [submitResponse, setSubmitResponse] = useState<ExternalQuizSubmitResponseDto | null>(null);
+  const [showChinese, setShowChinese] = useState(true);
 
   const dirtyRef = useRef(false);
   const lastChangedQuestionRef = useRef<string | null>(null);
@@ -422,11 +456,17 @@ export function ExternalQuizPlayerPanel({
         ...(rev || {}),
         id: String(item.id || item.questionId || rev?.id || idx + 1),
         prompt,
+        questionText: item.questionText || rev?.questionText || prompt,
+        questionTextCn: item.questionTextCn || rev?.questionTextCn || null,
+        questionTextEn: item.questionTextEn || rev?.questionTextEn || null,
+        explanation: item.explanation ?? rev?.explanation ?? null,
+        explanationCn: item.explanationCn || rev?.explanationCn || null,
         options: revOpts.length > 0 ? revOpts : baseOpts,
         linkedOptions: revLinked.length > 0 ? revLinked : baseLinked,
         groupId: item.groupId ?? rev?.groupId ?? null,
         groupKind: item.groupKind ?? rev?.groupKind ?? null,
         passageText: item.passageText ?? rev?.passageText ?? null,
+        passageTextCn: item.passageTextCn || rev?.passageTextCn || null,
         passageImageUrl: item.passageImageUrl ?? rev?.passageImageUrl ?? null,
         clozeMode: item.clozeMode ?? rev?.clozeMode ?? null,
         userAnswer: item.userAnswer ?? item.studentAnswer ?? rev?.userAnswer ?? rev?.studentAnswer,
@@ -434,6 +474,17 @@ export function ExternalQuizPlayerPanel({
     });
     return [...merged].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
   }, [detail?.latestResult?.questions, detail?.latestResult?.review, detail?.questions, submitResponse?.result?.questions, submitResponse?.result?.review]);
+
+  const hasChineseContent = useMemo(
+    () => questions.some((q) => Boolean(
+      q.questionTextCn
+      || q.passageTextCn
+      || q.explanationCn
+      || (q.options || []).some((o) => Boolean(o?.textCn))
+      || (q.linkedOptions || []).some((o) => Boolean(o?.textCn)),
+    )),
+    [questions],
+  );
 
   if (!quizzes.length) return null;
 
@@ -475,7 +526,10 @@ export function ExternalQuizPlayerPanel({
               {!isPublicPreviewAccess && profileId ? (
                 <button
                   type="button"
-                  onClick={() => setSelectedQuizId(q.id)}
+                  onClick={() => {
+                    setShowChinese(true);
+                    setSelectedQuizId(q.id);
+                  }}
                   className="inline-flex items-center gap-1.5 rounded-xl bg-[#ad2033] px-4 py-2 text-xs font-black text-white shadow-sm transition hover:bg-[#911a2b]"
                 >
                   <FiPlay /> {(q.attemptsCount ?? 0) > 0 ? 'Làm bài / Xem kết quả' : 'Bắt đầu làm bài'}
@@ -564,6 +618,15 @@ export function ExternalQuizPlayerPanel({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {hasChineseContent ? (
+            <button
+              type="button"
+              onClick={() => setShowChinese((v) => !v)}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-[#247d7e] bg-[#eff9f7] px-3 py-1.5 text-xs font-black text-[#247d7e] transition hover:bg-[#dff4f0] dark:border-[#49b6ac] dark:bg-[#132c3d] dark:text-[#6ac6bd]"
+            >
+              <FiGlobe /> {showChinese ? 'Xem bản Tiếng Việt' : 'Xem đề Tiếng Trung (中文)'}
+            </button>
+          ) : null}
           {activeAttempt && remainingSeconds !== null ? (
             <span className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 font-mono text-sm font-black ${
               remainingSeconds <= 60
@@ -678,9 +741,9 @@ export function ExternalQuizPlayerPanel({
                       <p className="text-[11px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
                         {question.linkedOptions?.length ? 'Ngữ cảnh & Kho lựa chọn' : 'Bài đọc / Ngữ cảnh chung'}
                       </p>
-                      {question.passageText ? (
+                      {localizedPassageText(question, showChinese) ? (
                         <div className="mt-1.5 text-[#18243b] dark:text-slate-100">
-                          <RichMathText value={question.passageText} />
+                          <RichMathText value={localizedPassageText(question, showChinese)} />
                         </div>
                       ) : null}
                       {safePassageImg ? (
@@ -699,7 +762,7 @@ export function ExternalQuizPlayerPanel({
                               className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-white px-2.5 py-1 text-xs font-semibold text-emerald-950 dark:border-emerald-800 dark:bg-[#0b172b] dark:text-emerald-200"
                             >
                               <strong className="text-emerald-700 dark:text-emerald-300">{optionLabel(opt, oIdx)}.</strong>
-                              <span>{opt.text}</span>
+                              <span>{localizedOptionText(opt, showChinese)}</span>
                             </span>
                           ))}
                         </div>
@@ -723,7 +786,7 @@ export function ExternalQuizPlayerPanel({
                     </div>
 
                     <div className="mt-2.5 text-[#18243b] dark:text-slate-100">
-                      <RichMathText value={question.prompt} />
+                      <RichMathText value={localizedQuestionText(question, showChinese)} />
                     </div>
 
                     {safeImg ? (
@@ -761,7 +824,7 @@ export function ExternalQuizPlayerPanel({
                                 {optionLabel(opt, optIdx)}.
                               </span>
                               <div className="min-w-0 flex-1 text-[#29354b] dark:text-slate-200">
-                                <RichMathText value={opt.text} />
+                                <RichMathText value={localizedOptionText(opt, showChinese)} />
                               </div>
                             </label>
                           );
@@ -791,7 +854,7 @@ export function ExternalQuizPlayerPanel({
                                 {optionLabel(opt, optIdx)}.
                               </span>
                               <div className="min-w-0 flex-1 text-[#29354b] dark:text-slate-200">
-                                <RichMathText value={opt.text} />
+                                <RichMathText value={localizedOptionText(opt, showChinese)} />
                               </div>
                             </label>
                           );
@@ -931,9 +994,9 @@ export function ExternalQuizPlayerPanel({
                           <p className="font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
                             {question.linkedOptions?.length ? 'Ngữ cảnh & Kho lựa chọn' : 'Bài đọc / Ngữ cảnh chung'}
                           </p>
-                          {question.passageText ? (
+                          {localizedPassageText(question, showChinese) ? (
                             <div className="mt-1 text-[#18243b] dark:text-slate-100">
-                              <RichMathText value={question.passageText} />
+                              <RichMathText value={localizedPassageText(question, showChinese)} />
                             </div>
                           ) : null}
                           {question.linkedOptions && question.linkedOptions.length > 0 ? (
@@ -944,7 +1007,7 @@ export function ExternalQuizPlayerPanel({
                                   className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-emerald-950 dark:border-emerald-800 dark:bg-[#0b172b] dark:text-emerald-200"
                                 >
                                   <strong className="text-emerald-700 dark:text-emerald-300">{optionLabel(opt, oIdx)}.</strong>
-                                  <span>{opt.text}</span>
+                                  <span>{localizedOptionText(opt, showChinese)}</span>
                                 </span>
                               ))}
                             </div>
@@ -968,7 +1031,7 @@ export function ExternalQuizPlayerPanel({
                           ) : null}
                         </div>
                         <div className="mt-2 text-[#18243b] dark:text-slate-100">
-                          <RichMathText value={question.prompt} />
+                          <RichMathText value={localizedQuestionText(question, showChinese)} />
                         </div>
                         {reviewOpts.length > 0 ? (
                           <div className="mt-2 flex flex-wrap gap-1.5">
@@ -977,7 +1040,7 @@ export function ExternalQuizPlayerPanel({
                                 key={optionValue(opt, oIdx)}
                                 className="rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-700 dark:border-slate-700 dark:bg-[#101e33] dark:text-slate-300"
                               >
-                                <strong className="text-[#247d7e] dark:text-[#6ac6bd]">{optionLabel(opt, oIdx)}.</strong> {opt.text}
+                                <strong className="text-[#247d7e] dark:text-[#6ac6bd]">{optionLabel(opt, oIdx)}.</strong> {localizedOptionText(opt, showChinese)}
                               </span>
                             ))}
                           </div>
@@ -986,22 +1049,22 @@ export function ExternalQuizPlayerPanel({
                           <div className="rounded-lg bg-slate-50 p-2.5 dark:bg-[#101e33]">
                             <span className="font-bold text-slate-500">Bạn chọn: </span>
                             <span className="font-bold text-slate-900 dark:text-slate-100">
-                              {formatDisplayAnswer(userAns, question)}
+                              {formatDisplayAnswer(userAns, question, showChinese)}
                             </span>
                           </div>
                           {question.correctAnswer !== undefined ? (
                             <div className="rounded-lg bg-emerald-50 p-2.5 dark:bg-emerald-950/30">
                               <span className="font-bold text-emerald-700 dark:text-emerald-300">Đáp án đúng: </span>
                               <span className="font-bold text-emerald-900 dark:text-emerald-100">
-                                {formatDisplayAnswer(question.correctAnswer, question)}
+                                {formatDisplayAnswer(question.correctAnswer, question, showChinese)}
                               </span>
                             </div>
                           ) : null}
                         </div>
-                        {question.explanation ? (
+                        {localizedExplanationText(question, showChinese) ? (
                           <div className="mt-3 rounded-xl border border-indigo-200/70 bg-indigo-50/60 p-3 text-xs dark:border-indigo-900/50 dark:bg-indigo-950/25">
                             <p className="mb-1 font-black text-indigo-700 dark:text-indigo-300">Giải thích</p>
-                            <RichMathText value={question.explanation} />
+                            <RichMathText value={localizedExplanationText(question, showChinese)} />
                           </div>
                         ) : null}
                       </div>

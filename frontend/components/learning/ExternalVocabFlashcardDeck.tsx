@@ -12,22 +12,10 @@ import {
   FiVolume2,
 } from 'react-icons/fi';
 import type { ExternalUnitVocabularyDto } from '@/lib/types/courses';
+import { useChineseSpeech } from '@/lib/utils/chineseSpeech';
 
 interface ExternalVocabFlashcardDeckProps {
   vocabulary: ExternalUnitVocabularyDto[];
-}
-
-function isSafeAudioUrl(rawUrl: string | null | undefined): string | null {
-  if (!rawUrl || typeof rawUrl !== 'string') return null;
-  const trimmed = rawUrl.trim();
-  if (!trimmed) return null;
-  if (trimmed.startsWith('/') && !trimmed.startsWith('//')) return trimmed;
-  try {
-    const parsed = new URL(trimmed);
-    return parsed.protocol === 'https:' || parsed.protocol === 'http:' ? parsed.toString() : null;
-  } catch {
-    return null;
-  }
 }
 
 export function ExternalVocabFlashcardDeck({ vocabulary }: ExternalVocabFlashcardDeckProps) {
@@ -37,9 +25,11 @@ export function ExternalVocabFlashcardDeck({ vocabulary }: ExternalVocabFlashcar
   const [index, setIndex] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const [showPinyinFront, setShowPinyinFront] = useState(true);
+  const [autoSpeak, setAutoSpeak] = useState(true);
   const [filterMode, setFilterMode] = useState<'all' | 'review'>('all');
   const [knownIds, setKnownIds] = useState<Record<string, boolean>>({});
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const { isSpeaking, speechError, speak, stop } = useChineseSpeech();
+  const lastAutoSpokenKeyRef = useRef<string | null>(null);
 
   const itemByKey = useMemo(() => {
     const map = new Map<string, ExternalUnitVocabularyDto>();
@@ -54,6 +44,7 @@ export function ExternalVocabFlashcardDeck({ vocabulary }: ExternalVocabFlashcar
     setIndex(0);
     setFlipped(false);
     setKnownIds({});
+    lastAutoSpokenKeyRef.current = null;
   }, [vocabulary]);
 
   const deckKeys = useMemo(() => {
@@ -74,36 +65,44 @@ export function ExternalVocabFlashcardDeck({ vocabulary }: ExternalVocabFlashcar
     [knownIds, orderedIds],
   );
 
+  const speakCurrentCard = useCallback((card: ExternalUnitVocabularyDto | null, cardKey?: string | null) => {
+    if (!card) return;
+    void speak({
+      key: cardKey || card.id || card.term,
+      text: card.term,
+      audioUrl: card.audioUrl,
+      rate: 0.85,
+    });
+  }, [speak]);
+
+  useEffect(() => {
+    if (!autoSpeak || !currentCard || !currentKey) return undefined;
+    const speakToken = `${currentKey}::${currentCard.term}`;
+    if (lastAutoSpokenKeyRef.current === speakToken) return undefined;
+
+    const timer = window.setTimeout(() => {
+      lastAutoSpokenKeyRef.current = speakToken;
+      speakCurrentCard(currentCard, currentKey);
+    }, 180);
+
+    return () => window.clearTimeout(timer);
+  }, [autoSpeak, currentCard, currentKey, speakCurrentCard]);
+
+  useEffect(() => () => stop(), [stop]);
+
   const goPrev = useCallback(() => {
     if (!deckKeys.length) return;
+    lastAutoSpokenKeyRef.current = null;
     setFlipped(false);
     setIndex((curr) => (curr - 1 + deckKeys.length) % deckKeys.length);
   }, [deckKeys.length]);
 
   const goNext = useCallback(() => {
     if (!deckKeys.length) return;
+    lastAutoSpokenKeyRef.current = null;
     setFlipped(false);
     setIndex((curr) => (curr + 1) % deckKeys.length);
   }, [deckKeys.length]);
-
-  const speakCard = useCallback((card: ExternalUnitVocabularyDto | null) => {
-    if (!card) return;
-    const safeUrl = isSafeAudioUrl(card.audioUrl);
-    if (safeUrl) {
-      if (audioRef.current) audioRef.current.pause();
-      const audio = new Audio(safeUrl);
-      audioRef.current = audio;
-      void audio.play().catch(() => {});
-      return;
-    }
-    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-      const utter = new SpeechSynthesisUtterance(card.term);
-      utter.lang = 'zh-CN';
-      utter.rate = 0.85;
-      window.speechSynthesis.speak(utter);
-    }
-  }, []);
 
   const handleShuffle = () => {
     const next = [...orderedIds];
@@ -111,6 +110,7 @@ export function ExternalVocabFlashcardDeck({ vocabulary }: ExternalVocabFlashcar
       const j = Math.floor(Math.random() * (i + 1));
       [next[i], next[j]] = [next[j], next[i]];
     }
+    lastAutoSpokenKeyRef.current = null;
     setOrderedIds(next);
     setIndex(0);
     setFlipped(false);
@@ -120,6 +120,7 @@ export function ExternalVocabFlashcardDeck({ vocabulary }: ExternalVocabFlashcar
     if (!currentKey) return;
     setKnownIds((prev) => ({ ...prev, [currentKey]: learned }));
     if (deckKeys.length > 1) {
+      lastAutoSpokenKeyRef.current = null;
       setFlipped(false);
       setIndex((curr) => (curr + 1) % deckKeys.length);
     }
@@ -136,11 +137,14 @@ export function ExternalVocabFlashcardDeck({ vocabulary }: ExternalVocabFlashcar
         goNext();
       } else if (event.key === 'ArrowLeft') {
         goPrev();
+      } else if (event.key.toLowerCase() === 's' || event.key.toLowerCase() === 'r') {
+        event.preventDefault();
+        speakCurrentCard(currentCard, currentKey);
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [goNext, goPrev]);
+  }, [currentCard, currentKey, goNext, goPrev, speakCurrentCard]);
 
   if (!currentCard || !currentKey) {
     return <p className="text-slate-500 dark:text-slate-400">Chưa có từ vựng để ôn tập Flashcard.</p>;
@@ -165,6 +169,7 @@ export function ExternalVocabFlashcardDeck({ vocabulary }: ExternalVocabFlashcar
             type="button"
             onClick={() => {
               setFilterMode((m) => (m === 'all' ? 'review' : 'all'));
+              lastAutoSpokenKeyRef.current = null;
               setIndex(0);
               setFlipped(false);
             }}
@@ -186,6 +191,26 @@ export function ExternalVocabFlashcardDeck({ vocabulary }: ExternalVocabFlashcar
           </button>
           <button
             type="button"
+            onClick={() => {
+              const nextAuto = !autoSpeak;
+              setAutoSpeak(nextAuto);
+              if (nextAuto) {
+                lastAutoSpokenKeyRef.current = `${currentKey}::${currentCard.term}`;
+                speakCurrentCard(currentCard, currentKey);
+              } else {
+                stop();
+              }
+            }}
+            className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-bold transition ${
+              autoSpeak
+                ? 'border-[#247d7e] bg-[#247d7e] text-white'
+                : 'border-[#d8c8b9] bg-white text-[#29354b] dark:border-[#34435a] dark:bg-[#0b172b] dark:text-slate-200'
+            }`}
+          >
+            <FiVolume2 /> Tự động phát âm: {autoSpeak ? 'Bật' : 'Tắt'}
+          </button>
+          <button
+            type="button"
             onClick={handleShuffle}
             className="inline-flex items-center gap-1 rounded-lg border border-[#d8c8b9] bg-white px-2.5 py-1.5 text-xs font-bold text-[#29354b] hover:bg-slate-50 dark:border-[#34435a] dark:bg-[#0b172b] dark:text-slate-200"
           >
@@ -193,14 +218,24 @@ export function ExternalVocabFlashcardDeck({ vocabulary }: ExternalVocabFlashcar
           </button>
           <button
             type="button"
-            onClick={() => speakCard(currentCard)}
+            onClick={() => speakCurrentCard(currentCard, currentKey)}
             aria-label={`Phát âm ${currentCard.term}`}
-            className="inline-flex items-center gap-1 rounded-lg border border-[#247d7e]/40 bg-[#eff9f7] px-2.5 py-1.5 text-xs font-bold text-[#247d7e] hover:bg-[#dff4f0] dark:border-[#49b6ac]/40 dark:bg-[#132c3d] dark:text-[#6ac6bd]"
+            className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-bold transition ${
+              isSpeaking
+                ? 'border-[#247d7e] bg-[#247d7e] text-white'
+                : 'border-[#247d7e]/40 bg-[#eff9f7] text-[#247d7e] hover:bg-[#dff4f0] dark:border-[#49b6ac]/40 dark:bg-[#132c3d] dark:text-[#6ac6bd]'
+            }`}
           >
-            <FiVolume2 /> Nghe
+            <FiVolume2 /> {isSpeaking ? 'Đang đọc...' : 'Phát âm'}
           </button>
         </div>
       </div>
+
+      {speechError ? (
+        <p className="rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2 text-xs font-bold text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+          {speechError}
+        </p>
+      ) : null}
 
       <div className="h-2 w-full overflow-hidden rounded-full bg-[#efe4d8] dark:bg-[#1d2d45]">
         <div
@@ -209,11 +244,34 @@ export function ExternalVocabFlashcardDeck({ vocabulary }: ExternalVocabFlashcar
         />
       </div>
 
-      <button
-        type="button"
+      <div
+        role="button"
+        tabIndex={0}
         onClick={() => setFlipped((v) => !v)}
-        className="flex min-h-72 w-full flex-col items-center justify-center rounded-2xl border-2 border-[#dfd0c2] bg-gradient-to-br from-[#fffdf9] to-[#f8efe6] p-6 text-center shadow-sm transition hover:border-[#247d7e] dark:border-[#34435a] dark:from-[#101e33] dark:to-[#081326] dark:hover:border-[#49b6ac] sm:p-10"
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            setFlipped((v) => !v);
+          }
+        }}
+        className="relative flex min-h-72 w-full cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-[#dfd0c2] bg-gradient-to-br from-[#fffdf9] to-[#f8efe6] p-6 text-center shadow-sm transition hover:border-[#247d7e] dark:border-[#34435a] dark:from-[#101e33] dark:to-[#081326] dark:hover:border-[#49b6ac] sm:p-10"
       >
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            speakCurrentCard(currentCard, currentKey);
+          }}
+          aria-label={`Nghe phát âm ${currentCard.term}`}
+          className={`absolute right-4 top-4 inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold transition ${
+            isSpeaking
+              ? 'border-[#247d7e] bg-[#247d7e] text-white'
+              : 'border-[#d8c8b9] bg-white/90 text-[#247d7e] hover:bg-[#eff9f7] dark:border-[#34435a] dark:bg-[#0b172b]'
+          }`}
+        >
+          <FiVolume2 /> {isSpeaking ? 'Đang phát...' : 'Nghe (S)'}
+        </button>
+
         {!flipped ? (
           <div className="space-y-3">
             <span className="inline-block rounded-full bg-[#ad2033]/10 px-3 py-1 text-[11px] font-black uppercase tracking-wider text-[#ad2033] dark:text-[#f08d9c]">
@@ -254,7 +312,7 @@ export function ExternalVocabFlashcardDeck({ vocabulary }: ExternalVocabFlashcar
             ) : null}
           </div>
         )}
-      </button>
+      </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">

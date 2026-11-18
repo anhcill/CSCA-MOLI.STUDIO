@@ -1059,6 +1059,8 @@ export interface ExternalQuizOptionDto {
   key?: string;
   label?: string;
   text: string;
+  textCn?: string | null;
+  textEn?: string | null;
   isCorrect?: boolean;
 }
 
@@ -1083,6 +1085,7 @@ export interface ExternalQuizQuestionDto {
   groupType?: string | null;
   passageText?: string | null;
   passageTextCn?: string | null;
+  passageTextEn?: string | null;
   passageImageUrl?: string | null;
   clozeMode?: string | null;
   linkedOptions?: ExternalQuizOptionDto[];
@@ -1090,11 +1093,14 @@ export interface ExternalQuizQuestionDto {
   prompt: string;
   questionText?: string;
   questionTextCn?: string | null;
+  questionTextEn?: string | null;
   promptHtml?: string | null;
   points?: number;
   options?: ExternalQuizOptionDto[];
   correctAnswer?: unknown;
   explanation?: string | null;
+  explanationCn?: string | null;
+  explanationEn?: string | null;
   imageUrl?: string | null;
   explanationImageUrl?: string | null;
   userAnswer?: unknown;
