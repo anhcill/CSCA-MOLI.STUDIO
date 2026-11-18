@@ -981,11 +981,15 @@ function createCourseIntegrationClient({
     durationSeconds = null,
     clientSequence = null,
     eventTimestamp = null,
+    idempotencyKey = null,
     correlationId,
     maxTransportAttempts = 1,
     timeoutMs,
   } = {}) {
     const vid = encodeURIComponent(String(videoId || "").trim());
+    const resolvedIdempotencyKey = typeof idempotencyKey === "string" && idempotencyKey.trim()
+      ? idempotencyKey.trim()
+      : `progress:${String(videoId || "video")}:${crypto.randomUUID()}`;
     return postSigned(
       `/learning/videos/${vid}/progress`,
       {
@@ -1001,8 +1005,8 @@ function createCourseIntegrationClient({
         apiVersion: "v2",
         killSwitchDomain: "delegated_mutation",
         method: "PUT",
-        idempotencyKey: null,
-        requireIdempotencyKey: false,
+        idempotencyKey: resolvedIdempotencyKey,
+        requireIdempotencyKey: true,
         extraHeaders: { "X-Delegated-Session": String(sessionToken || "") },
         correlationId: resolveCorrelationId(correlationId),
         maxTransportAttempts,

@@ -525,6 +525,7 @@ test("Day 4 Moly BFF: HttpOnly trusted cookie + HMAC device proof, <=60s playbac
     }
 
     if (method === "PUT" && url === "/api/integrations/v2/learning/videos/5001/progress") {
+      assert.match(headers["idempotency-key"], /^progress:\d+:[0-9a-f-]{36}$/);
       const completed = Number(body.currentTimeSeconds) >= 60;
       return {
         status: 200,
