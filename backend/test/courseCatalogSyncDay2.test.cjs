@@ -858,6 +858,7 @@ describe("Day 2 Moly Studio Catalog Sync v2, Backfill, Legacy Protection, and Un
       revision: 1,
       slug: "toan-record-500",
       title: "Toán Record 500",
+      description: "",
       subjectCode: "MATH",
       priceVnd: 799000,
       isFree: false,

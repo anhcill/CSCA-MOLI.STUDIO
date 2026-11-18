@@ -1724,7 +1724,7 @@ function createMolyCourseCatalogSyncService({
                renewal_mode = 'new_period',
                updated_at = NOW()
              RETURNING id`,
-            [title, shortDescription, packageStatus, priceVnd, subjectCode, SOURCE_SYSTEM, courseId],
+            [title, shortDescription || "", packageStatus, priceVnd, subjectCode, SOURCE_SYSTEM, courseId],
           )
         ).rows[0];
         await runner.query(
