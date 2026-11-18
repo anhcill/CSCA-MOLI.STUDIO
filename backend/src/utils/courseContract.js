@@ -60,9 +60,25 @@ function parseRemoteInstructor(row) {
   };
 }
 
+function parseCommerceOffers(row) {
+  if (!Array.isArray(row?.commerce_offers)) return [];
+  return row.commerce_offers
+    .filter((offer) => offer && typeof offer === "object")
+    .map((offer) => ({
+      id: toFiniteNumber(offer.id),
+      type: offer.type === "combo" ? "combo" : "video",
+      name: String(offer.name || "").trim(),
+      priceVnd: toNullableNumber(offer.priceVnd ?? offer.price_vnd),
+      originalPriceVnd: toNullableNumber(offer.originalPriceVnd ?? offer.original_price_vnd),
+      requiresSubjectChoice: offer.requiresSubjectChoice === true || offer.requires_subject_choice === true,
+    }))
+    .filter((offer) => offer.id > 0 && offer.name && Number(offer.priceVnd) > 0);
+}
+
 function mapCourse(row) {
   if (!row) return null;
   const profiles = parseProjectedProfiles(row);
+  const commerceOffers = parseCommerceOffers(row);
   const instructor = parseRemoteInstructor(row);
   const contentOrigin = row.content_origin === "csca_course" ? "csca_course" : "moly_native";
   const priceVnd = toFiniteNumber(row.price_vnd);
@@ -99,6 +115,7 @@ function mapCourse(row) {
     remoteCourseId: row.remote_course_id || null,
     syncRevision: toNullableNumber(row.sync_revision),
     profiles,
+    commerceOffers,
     checkoutReady,
     isFeatured: row.is_featured === true,
     isNew: row.is_new === true,

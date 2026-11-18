@@ -63,6 +63,15 @@ export interface CoursePackageSummaryDto {
   name: string;
 }
 
+export interface CourseCommerceOfferDto {
+  id: number;
+  type: 'video' | 'combo';
+  name: string;
+  priceVnd: number;
+  originalPriceVnd: number | null;
+  requiresSubjectChoice: boolean;
+}
+
 export interface CourseProgressSummaryDto {
   completedLessons: number;
   totalLessons: number;
@@ -84,6 +93,7 @@ export interface CourseCatalogItemDto {
   thumbnailUrl: string | null;
   accessType: CourseAccessType;
   packages: CoursePackageSummaryDto[];
+  commerceOffers?: CourseCommerceOfferDto[];
   priceVnd: number | null;
   compareAtPriceVnd: number | null;
   isFeatured: boolean;

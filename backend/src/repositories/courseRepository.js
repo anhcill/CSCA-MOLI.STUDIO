@@ -24,7 +24,7 @@ async function getCatalogCaps() {
   const cacheKey = db?.pool || db;
   if (cacheKey && typeof cacheKey === "object") {
     const cached = catalogCapsCache.get(cacheKey);
-    if (cached && cached.hasOrigin && cached.hasProfiles && cached.hasMappings && cached.hasVideoPackages) {
+    if (cached && cached.hasOrigin && cached.hasProfiles && cached.hasMappings && cached.hasVideoPackages && cached.hasVideoOfferColumns) {
       return cached;
     }
   }
@@ -38,6 +38,13 @@ async function getCatalogCaps() {
          to_regclass('course_profile_projections') IS NOT NULL AS has_profiles,
          to_regclass('external_course_mappings') IS NOT NULL AS has_mappings,
          (to_regclass('video_package_courses') IS NOT NULL AND to_regclass('video_packages') IS NOT NULL) AS has_video_packages,
+         (
+           SELECT COUNT(*) = 6
+           FROM pg_attribute
+           WHERE attrelid = to_regclass('video_packages')
+             AND NOT attisdropped
+             AND attname = ANY(ARRAY['name','status','price_vnd','original_price_vnd','requires_subject_choice','sort_order'])
+         ) AS has_video_offer_columns,
          (
            EXISTS (
              SELECT 1 FROM pg_attribute
@@ -54,10 +61,11 @@ async function getCatalogCaps() {
       hasProfiles: row.has_profiles === true,
       hasMappings: row.has_mappings === true,
       hasVideoPackages: row.has_video_packages === true,
+      hasVideoOfferColumns: row.has_video_offer_columns === true,
       hasVpSubjectPrices: row.has_vp_subject_prices === true,
     };
     if (cacheKey && typeof cacheKey === "object"
-      && caps.hasOrigin && caps.hasProfiles && caps.hasMappings && caps.hasVideoPackages && caps.hasVpSubjectPrices) {
+      && caps.hasOrigin && caps.hasProfiles && caps.hasMappings && caps.hasVideoPackages && caps.hasVideoOfferColumns && caps.hasVpSubjectPrices) {
       catalogCapsCache.set(cacheKey, caps);
     }
     return caps;
@@ -67,6 +75,7 @@ async function getCatalogCaps() {
       hasProfiles: false,
       hasMappings: false,
       hasVideoPackages: false,
+      hasVideoOfferColumns: false,
       hasVpSubjectPrices: false,
     };
   }
@@ -136,6 +145,33 @@ function buildCourseColumns(caps) {
           ${subjectPriceClause}
         )
     ) AS has_priced_video_package`);
+    if (!caps.hasVideoOfferColumns) return extra.length ? `${COURSE_COLUMNS},\n  ${extra.join(",\n  ")}` : COURSE_COLUMNS;
+    const offerPriceExpr = caps.hasVpSubjectPrices
+      ? `CASE
+           WHEN COALESCE(vp.requires_subject_choice, FALSE) = TRUE
+             AND COALESCE(vp.subject_prices ->> c.subject_code, '') ~ '^[0-9]+(\\.[0-9]+)?$'
+           THEN (vp.subject_prices ->> c.subject_code)::numeric
+           ELSE vp.price_vnd
+         END`
+      : "vp.price_vnd";
+    extra.push(`COALESCE((
+      SELECT jsonb_agg(
+        jsonb_build_object(
+          'id', vp.id,
+          'type', 'video',
+          'name', vp.name,
+          'priceVnd', ${offerPriceExpr},
+          'originalPriceVnd', vp.original_price_vnd,
+          'requiresSubjectChoice', COALESCE(vp.requires_subject_choice, FALSE)
+        )
+        ORDER BY (${offerPriceExpr}) ASC NULLS LAST, vp.sort_order, vp.id
+      )
+      FROM video_package_courses vpc
+      JOIN video_packages vp ON vp.id = vpc.video_package_id
+      WHERE vpc.course_id = c.id
+        AND vp.status = 'active'
+        AND COALESCE(${offerPriceExpr}, 0) > 0
+    ), '[]'::jsonb) AS commerce_offers`);
   }
   return extra.length ? `${COURSE_COLUMNS},\n  ${extra.join(",\n  ")}` : COURSE_COLUMNS;
 }

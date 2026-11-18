@@ -1,7 +1,7 @@
 # Ke hoach dong bo day du Course <-> Moly - Gemini lam truoc, Codex review sau
 
 Ngay lap: 2026-11-15.
-Trang thai: KE HOACH, chua trien khai cac hang muc moi, chua push/deploy.
+Trang thai: DA TRIEN KHAI CODE; dang rollout co feature flag va kiem tra production.
 Thoi luong du kien: 10 ngay lam viec theo milestone; khong ep nghiem thu neu test chua dat.
 Ke hoach nay mo rong ke hoach 5 ngay cu, khong thay the cac ban sua SSO/quyen/outbox da co.
 
@@ -59,7 +59,8 @@ chua nam trong bang duoi phai duoc bo sung va phan cong, khong am tham bo qua.
 | Quiz, cau hoi, rubric, han nop, dap an, diem | Course | API lam bai/nop/cham; khong export dap an som |
 | Watch time, completion, next-unit lock | Course | Lenh tu hai UI ghi ve Course; Moly doc projection |
 | Notes/bookmarks/Q&A/submissions | Course cho khoa ke thua | Mutation co version/idempotency + read-back |
-| Gia ban/goi/voucher/coins/payment/refund Moly | Moly | Course chi nhan entitlement, khong ghi de gia |
+| Gia niem yet khoa dong bo | InternalManagement -> Course | Moly tao/cap nhat mot video package theo stable source course ID |
+| Voucher/coins/payment/refund Moly | Moly | Course chi nhan entitlement; hoc vien da co quyen Live/Record khong bi yeu cau mua lai |
 | Quyen goc Course/Management | He thong cap quyen do | Hieu luc tai Course; Moly doc ownership |
 | Quyen mua Moly | Moly | Course inbox ap dung tung grant doc lap |
 | Identity lien ket | Mapping canonical da xac minh | Khong ghep theo email; conflict can xu ly |

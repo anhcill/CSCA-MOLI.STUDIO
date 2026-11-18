@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import {
   FiAward,
   FiBookOpen,
@@ -46,6 +47,10 @@ function durationLabel(seconds: number) {
   return `${hours} giờ${minutes ? ` ${minutes} phút` : ''}`;
 }
 
+function formatVnd(amount: number) {
+  return `${Math.round(amount).toLocaleString('vi-VN')} ₫`;
+}
+
 function accessHeading(course: CourseDetailDto, names: string[]) {
   if (course.access.canLearn) return 'Bạn đã có quyền học';
   const unpricedBlocked = course.checkoutReady === false && !course.owned;
@@ -87,6 +92,14 @@ export function CourseAccessCard({ course }: { course: CourseDetailDto }) {
   const isUnpricedBlocked = !course.access.canLearn && !course.owned
     && (course.checkoutReady === false || blockCode === 'PRICE_NOT_CONFIGURED');
   const isCscaCourse = course.contentOrigin === 'csca_course';
+  const primaryOffer = [...(course.commerceOffers ?? [])]
+    .filter((offer) => Number(offer.priceVnd) > 0)
+    .sort((a, b) => Number(a.priceVnd) - Number(b.priceVnd))[0];
+  const displayPrice = Number(primaryOffer?.priceVnd ?? course.priceVnd ?? 0);
+  const originalPrice = Number(primaryOffer?.originalPriceVnd ?? course.compareAtPriceVnd ?? 0);
+  const purchaseHref = primaryOffer
+    ? `/thanh-toan-khoa-hoc?type=${primaryOffer.type}&productId=${primaryOffer.id}`
+    : `/vip?course=${encodeURIComponent(course.slug)}`;
   const firstUnitHref = course.firstUnitHref || course.curriculum[0]?.lessons[0]?.href || null;
   const firstFreePreviewLesson = !course.access.canLearn
     ? course.curriculum.flatMap((s) => s.lessons).find((l) => l.isFreePreview)
@@ -120,6 +133,9 @@ export function CourseAccessCard({ course }: { course: CourseDetailDto }) {
         const redirect = `/khoa-hoc/${course.slug}`;
         return router.push(`/login?redirect=${encodeURIComponent(redirect)}`);
       }
+      if (displayPrice > 0 && course.access.canPurchase !== false) {
+        return router.push(purchaseHref);
+      }
       if (course.accessType === 'contact' || course.accessType === 'private') {
         window.open(MOLY_ZALO_URL, '_blank', 'noopener,noreferrer');
         return;
@@ -139,7 +155,15 @@ export function CourseAccessCard({ course }: { course: CourseDetailDto }) {
   };
 
   return (
-    <aside className="overflow-hidden rounded-[1.75rem] border border-slate-200/80 bg-white shadow-[0_20px_60px_rgba(15,23,42,0.12)] dark:border-slate-800 dark:bg-slate-900 dark:shadow-[0_20px_60px_rgba(0,0,0,0.3)] lg:sticky lg:top-6">
+    <aside className="overflow-hidden rounded-[1.75rem] border border-slate-200/80 bg-white shadow-[0_20px_60px_rgba(15,23,42,0.12)] dark:border-slate-800 dark:bg-[#0b1427] dark:shadow-[0_20px_60px_rgba(0,0,0,0.3)] lg:sticky lg:top-6">
+      <div className="p-4 pb-0">
+        <div className="relative aspect-video overflow-hidden rounded-[1.25rem] bg-gradient-to-br from-sky-500 to-indigo-700">
+          {course.thumbnailUrl ? <img src={course.thumbnailUrl} alt={`Ảnh bìa ${course.title}`} className="h-full w-full object-cover" /> : null}
+          <div className="absolute inset-0 bg-slate-950/20" />
+          <span className="absolute left-1/2 top-1/2 flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-sky-500 text-2xl text-white shadow-xl"><FiPlayCircle /></span>
+          <span className="absolute bottom-3 right-3 rounded-lg bg-slate-950/80 px-3 py-1.5 text-xs font-black text-white">{course.access.canLearn ? 'Vào học ngay' : firstFreePreviewLesson ? 'Có bài học thử' : 'Xem chương trình'}</span>
+        </div>
+      </div>
       <div className="bg-gradient-to-br from-indigo-600 to-violet-700 px-6 py-6 text-white">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs font-black uppercase tracking-[0.18em] text-indigo-200">Quyền truy cập khóa học</p>
@@ -148,6 +172,12 @@ export function CourseAccessCard({ course }: { course: CourseDetailDto }) {
           ) : null}
         </div>
         <p className="mt-2 text-2xl font-black">{accessHeading(course, names)}</p>
+        {!course.access.canLearn && displayPrice > 0 ? (
+          <div className="mt-4 flex flex-wrap items-end gap-x-3 gap-y-1">
+            <span className="text-3xl font-black tracking-tight">{formatVnd(displayPrice)}</span>
+            {originalPrice > displayPrice ? <span className="pb-1 text-sm font-bold text-indigo-200 line-through">{formatVnd(originalPrice)}</span> : null}
+          </div>
+        ) : null}
         {course.access.canLearn ? (
           <p className="mt-2 text-sm font-semibold text-indigo-100">Quyền học của bạn đang hoạt động.</p>
         ) : isUnpricedBlocked ? (
@@ -215,6 +245,7 @@ export function CourseAccessCard({ course }: { course: CourseDetailDto }) {
             {canLaunchCourse ? (
               <CourseSsoLaunchButton courseId={course.id} targetPath={ssoTargetPath} label="Mở trên CSCA-Course" className="!bg-slate-100 !text-slate-800 hover:!bg-slate-200 dark:!bg-slate-800 dark:!text-slate-100" />
             ) : null}
+            <Link href="/hoc" className="inline-flex w-full items-center justify-center rounded-xl px-4 py-2 text-sm font-black text-indigo-700 transition hover:bg-indigo-50 dark:text-indigo-300 dark:hover:bg-indigo-950/40">Khóa học của tôi →</Link>
           </div>
         ) : (
           <>
@@ -245,6 +276,9 @@ export function CourseAccessCard({ course }: { course: CourseDetailDto }) {
           >
             <FiPlayCircle className="text-lg" /> Xem bài học thử miễn phí
           </button>
+        ) : null}
+        {isUnpricedBlocked ? (
+          <a href={MOLY_ZALO_URL} target="_blank" rel="noreferrer" className="mt-3 inline-flex w-full items-center justify-center rounded-xl border border-slate-200 px-4 py-3 text-sm font-black text-slate-700 transition hover:border-indigo-300 hover:text-indigo-700 dark:border-slate-700 dark:text-slate-200 dark:hover:border-indigo-700 dark:hover:text-indigo-300">Liên hệ hỗ trợ qua Zalo</a>
         ) : null}
         {error ? (
           <p role="alert" className="mt-3 rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-600 dark:bg-red-950/40 dark:text-red-300">

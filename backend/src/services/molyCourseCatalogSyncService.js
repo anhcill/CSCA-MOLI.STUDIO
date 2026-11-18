@@ -1,6 +1,7 @@
 const crypto = require("crypto");
 const { CourseApiError } = require("../utils/courseResponses");
 const { SUBJECT_CODES } = require("../utils/courseContract");
+const { syncProfileCheckoutReadyForCourses } = require("../utils/profileCheckoutReady");
 const { revokeMolyTrustedDevicesByHashes } = require("./molyTrustedDeviceService");
 const {
   createIntegrationLogger,
@@ -53,6 +54,14 @@ function toIso(value) {
   if (!value) return null;
   const date = value instanceof Date ? value : new Date(value);
   return Number.isFinite(date.getTime()) ? date.toISOString() : null;
+}
+
+function normalizeSourcePrice(value) {
+  const amount = Number(value);
+  if (!Number.isSafeInteger(amount) || amount < 0 || amount > 2147483647) {
+    throw new MolyCatalogSyncError(422, "INVALID_COURSE_PRICE", "priceVnd must be a non-negative VND integer.");
+  }
+  return amount;
 }
 
 /**
@@ -1464,6 +1473,10 @@ function createMolyCourseCatalogSyncService({
       ? coursePayload.thumbnailUrl.trim().slice(0, 1000)
       : null;
     const totalLessons = Math.max(0, Number.parseInt(coursePayload.totalLessons ?? 0, 10) || 0);
+    const hasSourcePrice = Object.prototype.hasOwnProperty.call(coursePayload, "priceVnd");
+    const priceVnd = hasSourcePrice ? normalizeSourcePrice(coursePayload.priceVnd) : 0;
+    const sourceIsFree = coursePayload.isFree === true;
+    const sourceAccessType = sourceIsFree ? "free" : (priceVnd > 0 ? "package" : "private");
     const instructor = coursePayload.instructor && typeof coursePayload.instructor === "object"
       ? {
           id: coursePayload.instructor.id != null ? String(coursePayload.instructor.id) : null,
@@ -1564,14 +1577,16 @@ function createMolyCourseCatalogSyncService({
                thumbnail_url = $8,
                status = $9::varchar,
                total_lessons = GREATEST(total_lessons, $10),
-               sync_revision = $11,
-               source_updated_at = $12::timestamptz,
-               tombstoned_at = $13::timestamptz,
+               price_vnd = CASE WHEN $11::boolean THEN $12::integer ELSE price_vnd END,
+               access_type = CASE WHEN $11::boolean THEN $13::varchar ELSE access_type END,
+               sync_revision = $14,
+               source_updated_at = $15::timestamptz,
+               tombstoned_at = $16::timestamptz,
                published_at = CASE
-                 WHEN $9::varchar = 'published' THEN COALESCE(published_at, $12::timestamptz)
+                 WHEN $9::varchar = 'published' THEN COALESCE(published_at, $15::timestamptz)
                  ELSE NULL
                END,
-               content_updated_at = $12::timestamptz
+               content_updated_at = $15::timestamptz
            WHERE id = $1 AND content_origin = 'csca_course'
            RETURNING *`,
           [
@@ -1585,6 +1600,9 @@ function createMolyCourseCatalogSyncService({
             thumbnailUrl,
             nextStatus,
             totalLessons,
+            hasSourcePrice,
+            priceVnd,
+            sourceAccessType,
             revision,
             sourceUpdatedAt,
             deletedAt,
@@ -1605,10 +1623,10 @@ function createMolyCourseCatalogSyncService({
            VALUES (
              $1, $2, $3, $4, $5,
              $6, $7, $8,
-             'private', 'basic', 0, $9, $10,
-             $11, $12,
-             'csca_course', $13, $14,
-             $15, $12, $16
+             $9, 'basic', $10, $11, $12,
+             $13, $14,
+             'csca_course', $15, $16,
+             $17, $14, $18
            )
            RETURNING *`,
           [
@@ -1620,6 +1638,8 @@ function createMolyCourseCatalogSyncService({
             subjectCode,
             level,
             thumbnailUrl,
+            sourceAccessType,
+            priceVnd,
             nextStatus,
             totalLessons,
             nextStatus === "published" ? sourceUpdatedAt : null,
@@ -1631,6 +1651,54 @@ function createMolyCourseCatalogSyncService({
           ],
         )
       ).rows[0];
+    }
+
+    if (hasSourcePrice) {
+      if (priceVnd > 0 && !deleted) {
+        const packageStatus = isPublished ? "active" : "archived";
+        const syncedPackage = (
+          await runner.query(
+            `INSERT INTO video_packages (
+               name, description, features, status, price_vnd, original_price_vnd,
+               duration_mode, duration_days, allowed_subjects, requires_subject_choice,
+               renewal_mode, source_system, source_course_id, updated_at
+             )
+             VALUES (
+               $1, $2, ARRAY['Video bài giảng theo lộ trình', 'Theo dõi tiến độ học tập']::text[],
+               $3, $4, NULL, 'lifetime', NULL, ARRAY[$5]::text[], FALSE,
+               'new_period', $6, $7, NOW()
+             )
+             ON CONFLICT (source_system, source_course_id)
+               WHERE source_system IS NOT NULL AND source_course_id IS NOT NULL
+             DO UPDATE SET
+               name = EXCLUDED.name,
+               description = EXCLUDED.description,
+               status = EXCLUDED.status,
+               price_vnd = EXCLUDED.price_vnd,
+               duration_mode = 'lifetime',
+               duration_days = NULL,
+               allowed_subjects = EXCLUDED.allowed_subjects,
+               requires_subject_choice = FALSE,
+               renewal_mode = 'new_period',
+               updated_at = NOW()
+             RETURNING id`,
+            [title, shortDescription, packageStatus, priceVnd, subjectCode, SOURCE_SYSTEM, courseId],
+          )
+        ).rows[0];
+        await runner.query(
+          `INSERT INTO video_package_courses (video_package_id, course_id)
+           VALUES ($1, $2)
+           ON CONFLICT (video_package_id, course_id) DO NOTHING`,
+          [syncedPackage.id, savedCourse.id],
+        );
+      } else {
+        await runner.query(
+          `UPDATE video_packages
+           SET status = 'archived', updated_at = NOW()
+           WHERE source_system = $1 AND source_course_id = $2`,
+          [SOURCE_SYSTEM, courseId],
+        );
+      }
     }
 
     await upsertOfferingMapping(runner, {
@@ -1680,6 +1748,10 @@ function createMolyCourseCatalogSyncService({
         });
         profileResults.push(res);
       }
+    }
+
+    if (hasSourcePrice) {
+      await syncProfileCheckoutReadyForCourses(runner, [Number(savedCourse.id)]);
     }
 
     return {

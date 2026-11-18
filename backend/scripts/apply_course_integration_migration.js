@@ -14,6 +14,7 @@ const MIGRATION_FILES = [
   path.join(__dirname, "../../database/migrations/080_moly_integration_day5_ops.sql"),
   path.join(__dirname, "../../database/migrations/081_moly_course_full_sync_foundation.sql"),
   path.join(__dirname, "../../database/migrations/082_moly_course_sync_day5_7.sql"),
+  path.join(__dirname, "../../database/migrations/083_moly_synced_course_commerce.sql"),
 ];
 
 const TABLES = [
@@ -88,6 +89,21 @@ async function main() {
     );
     const present = result.rows.map((row) => row.table_name);
     const missing = TABLES.filter((table) => !present.includes(table));
+    const commerceTable = await client.query("SELECT to_regclass('video_packages') AS relation");
+    if (commerceTable.rows[0]?.relation) {
+      const commerceColumns = await client.query(
+        `SELECT column_name
+         FROM information_schema.columns
+         WHERE table_schema = current_schema()
+           AND table_name = 'video_packages'
+           AND column_name = ANY($1::text[])`,
+        [["source_system", "source_course_id"]],
+      );
+      const presentColumns = new Set(commerceColumns.rows.map((row) => row.column_name));
+      for (const column of ["source_system", "source_course_id"]) {
+        if (!presentColumns.has(column)) missing.push(`video_packages.${column}`);
+      }
+    }
     console.log(
       JSON.stringify(
         { migration: path.basename(MIGRATION_FILE), ready: missing.length === 0, missing },

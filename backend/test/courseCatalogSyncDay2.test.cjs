@@ -238,6 +238,8 @@ function makeCourseEnvelope({
   subjectCode = "MATH",
   level = "intermediate",
   thumbnailUrl = "https://cdn.csca.local/math-2026.png",
+  priceVnd,
+  isFree,
   isPublished = true,
   deleted = false,
   deletedAt = null,
@@ -269,6 +271,8 @@ function makeCourseEnvelope({
       category: subjectCode,
       subjectCode,
       level,
+      ...(priceVnd === undefined ? {} : { priceVnd }),
+      ...(isFree === undefined ? {} : { isFree }),
       isPublished: !deleted && isPublished,
       totalLessons: 18,
       instructor,
@@ -818,5 +822,93 @@ describe("Day 2 Moly Studio Catalog Sync v2, Backfill, Legacy Protection, and Un
     });
     assert.equal(createdOrder.amount, 599000);
     assert.equal(createdOrder.snapshot.originalAmount, 599000);
+  });
+
+  test("Internal price projection creates an idempotent Moly video offer and unlocks checkout for non-owners", async (t) => {
+    const { pg, db } = await setupMolyCatalogDb();
+    const origQuery = database.query;
+    const origPool = database.pool;
+    database.query = db.query;
+    database.pool = db.pool;
+    t.after(async () => {
+      database.query = origQuery;
+      database.pool = origPool;
+      await pg.close();
+    });
+
+    const catalogSync = createMolyCourseCatalogSyncService({ db });
+    const student = (await pg.query(
+      `INSERT INTO users (username, email, full_name) VALUES ('priced_buyer', 'priced@test.local', 'Priced Buyer') RETURNING id`,
+    )).rows[0];
+    const profile = {
+      profileId: "5001",
+      externalOfferingId: "RECORD-500",
+      courseId: "500",
+      mode: "INDEPENDENT",
+      managementClassId: "RECORD-500",
+      badgeLabel: "Khóa video độc lập",
+      status: "active",
+      revision: 1,
+      deleted: false,
+      sourceUpdatedAt: "2026-11-15T10:00:00.000Z",
+    };
+
+    await catalogSync.ingestCatalogEvents(makeCourseEnvelope({
+      courseId: "500",
+      revision: 1,
+      slug: "toan-record-500",
+      title: "Toán Record 500",
+      subjectCode: "MATH",
+      priceVnd: 799000,
+      isFree: false,
+      profiles: [profile],
+    }));
+
+    const course = (await pg.query(
+      `SELECT id, price_vnd, access_type FROM courses WHERE remote_course_id = '500'`,
+    )).rows[0];
+    assert.equal(Number(course.price_vnd), 799000);
+    assert.equal(course.access_type, "package");
+
+    const offer = (await pg.query(
+      `SELECT vp.id, vp.price_vnd, vp.status, vp.source_system, vp.source_course_id
+       FROM video_packages vp
+       JOIN video_package_courses vpc ON vpc.video_package_id = vp.id
+       WHERE vpc.course_id = $1`,
+      [course.id],
+    )).rows[0];
+    assert.equal(Number(offer.price_vnd), 799000);
+    assert.equal(offer.status, "active");
+    assert.equal(offer.source_system, "csca-course");
+    assert.equal(offer.source_course_id, "500");
+    assert.equal((await pg.query(
+      `SELECT checkout_ready FROM course_profile_projections WHERE local_course_id = $1`,
+      [course.id],
+    )).rows[0].checkout_ready, true);
+
+    const landing = await courseService.getCourseLanding("toan-record-500", { id: student.id });
+    assert.equal(landing.checkoutReady, true);
+    assert.equal(landing.access.canPurchase, true);
+    assert.equal(landing.commerceOffers.length, 1);
+    assert.equal(landing.commerceOffers[0].id, Number(offer.id));
+    assert.equal(landing.commerceOffers[0].priceVnd, 799000);
+
+    await catalogSync.ingestCatalogEvents(makeCourseEnvelope({
+      courseId: "500",
+      revision: 2,
+      slug: "toan-record-500",
+      title: "Toán Record 500",
+      subjectCode: "MATH",
+      priceVnd: 699000,
+      isFree: false,
+      sourceUpdatedAt: "2026-11-15T11:00:00.000Z",
+      profiles: [{ ...profile, revision: 2, sourceUpdatedAt: "2026-11-15T11:00:00.000Z" }],
+    }));
+    const offersAfter = await pg.query(
+      `SELECT id, price_vnd FROM video_packages WHERE source_system = 'csca-course' AND source_course_id = '500'`,
+    );
+    assert.equal(offersAfter.rows.length, 1);
+    assert.equal(Number(offersAfter.rows[0].id), Number(offer.id));
+    assert.equal(Number(offersAfter.rows[0].price_vnd), 699000);
   });
 });

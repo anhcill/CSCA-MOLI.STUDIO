@@ -145,6 +145,7 @@ function mapCatalogItem(row) {
     totalDurationSeconds: course.totalDurationSeconds, instructor: course.instructor, progress,
     contentOrigin: course.contentOrigin, remoteCourseId: course.remoteCourseId,
     checkoutReady: course.checkoutReady, profiles: course.profiles,
+    commerceOffers: course.commerceOffers,
     packages: course.packages,
     publishedAt: course.publishedAt, contentUpdatedAt: course.contentUpdatedAt,
   };
