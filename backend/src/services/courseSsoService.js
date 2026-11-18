@@ -778,7 +778,7 @@ function createCourseSsoService({
           throw new SsoPolicyError(403, "SSO_USER_REVOKED", "Matching Moly account is inactive or locked.");
         }
 
-        const candidateEmailVerified = candidate.email_verified === true || candidate.is_verified === true;
+        const candidateEmailVerified = candidate.email_verified === true;
         if (exchanged.email_verified === true && candidateEmailVerified) {
           const otherActiveIdentity = (await client.query(
             `SELECT id

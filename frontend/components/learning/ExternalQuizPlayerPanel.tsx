@@ -188,6 +188,7 @@ export function ExternalQuizPlayerPanel({
   const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
   const [submitResponse, setSubmitResponse] = useState<ExternalQuizSubmitResponseDto | null>(null);
   const [showChinese, setShowChinese] = useState(true);
+  const [showSolutionPreview, setShowSolutionPreview] = useState(false);
 
   const dirtyRef = useRef(false);
   const lastChangedQuestionRef = useRef<string | null>(null);
@@ -205,6 +206,7 @@ export function ExternalQuizPlayerPanel({
     setSelectedQuizId(null);
     setDetail(null);
     setSubmitResponse(null);
+    setShowSolutionPreview(false);
     setError('');
     setErrorCode(null);
     setSaveNotice('');
@@ -475,6 +477,37 @@ export function ExternalQuizPlayerPanel({
     return [...merged].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
   }, [detail?.latestResult?.questions, detail?.latestResult?.review, detail?.questions, submitResponse?.result?.questions, submitResponse?.result?.review]);
 
+  const previewSolutionQuestions = useMemo(() => {
+    const revItems = detail?.reviewItems ?? [];
+    if (!revItems.length) return [];
+    const byId = new Map(revItems.map((item) => [String(item.id || item.questionId || ''), item]));
+    const base = detail?.questions?.length ? detail.questions : revItems;
+    return base
+      .map((item, idx) => {
+        const rev = byId.get(String(item.id || item.questionId || ''));
+        const baseOpts = Array.isArray(item.options) && item.options.length > 0 ? item.options : (item.linkedOptions ?? []);
+        const revOpts = Array.isArray(rev?.options) && rev.options.length > 0 ? rev.options : (rev?.linkedOptions ?? []);
+        const baseLinked = Array.isArray(item.linkedOptions) && item.linkedOptions.length > 0 ? item.linkedOptions : [];
+        const revLinked = Array.isArray(rev?.linkedOptions) && rev.linkedOptions.length > 0 ? rev.linkedOptions : [];
+        return {
+          ...item,
+          ...(rev || {}),
+          id: String(item.id || item.questionId || rev?.id || idx + 1),
+          prompt: item.prompt || item.questionText || rev?.prompt || rev?.questionText || '',
+          questionText: item.questionText || rev?.questionText || item.prompt || '',
+          questionTextCn: item.questionTextCn || rev?.questionTextCn || null,
+          questionTextEn: item.questionTextEn || rev?.questionTextEn || null,
+          explanation: item.explanation ?? rev?.explanation ?? null,
+          explanationCn: item.explanationCn || rev?.explanationCn || null,
+          options: revOpts.length > 0 ? revOpts : baseOpts,
+          linkedOptions: revLinked.length > 0 ? revLinked : baseLinked,
+          passageText: item.passageText ?? rev?.passageText ?? null,
+          passageTextCn: item.passageTextCn || rev?.passageTextCn || null,
+        };
+      })
+      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+  }, [detail?.questions, detail?.reviewItems]);
+
   const hasChineseContent = useMemo(
     () => questions.some((q) => Boolean(
       q.questionTextCn
@@ -550,17 +583,22 @@ export function ExternalQuizPlayerPanel({
   const displayedResult: ExternalQuizResultDto | null = submitResponse?.result ?? detail?.latestResult ?? null;
   const displayedAttempt: ExternalQuizAttemptDto | null = submitResponse?.attempt ?? detail?.latestAttempt ?? null;
 
-  const explicitCanViewSolution = submitResponse?.canViewSolution
-    ?? displayedResult?.canViewSolution
-    ?? detail?.canViewSolution
-    ?? detail?.quiz?.canViewSolution;
+  const hasFreeReviewBypass = Boolean(detail?.isAdminBypass || detail?.canReviewFreely);
+  const explicitCanViewSolution = hasFreeReviewBypass
+    ? true
+    : (submitResponse?.canViewSolution
+      ?? displayedResult?.canViewSolution
+      ?? detail?.canViewSolution
+      ?? detail?.quiz?.canViewSolution);
   const reviewPolicy = displayedResult?.reviewPolicy ?? detail?.reviewPolicy ?? detail?.quiz?.reviewPolicy ?? null;
-  const isSolutionEmbargoed = errorCode === 'SOLUTION_EMBARGOED'
-    || explicitCanViewSolution === false
-    || (explicitCanViewSolution === undefined && ['never', 'embargoed', 'after_due', 'after_graded'].includes(String(reviewPolicy || '')));
+  const isSolutionEmbargoed = hasFreeReviewBypass
+    ? false
+    : (errorCode === 'SOLUTION_EMBARGOED'
+      || explicitCanViewSolution === false
+      || (explicitCanViewSolution === undefined && ['never', 'embargoed', 'after_due', 'after_graded'].includes(String(reviewPolicy || ''))));
   const embargoUntil = displayedResult?.embargoUntil ?? detail?.embargoUntil ?? detail?.quiz?.embargoUntil ?? null;
 
-  const limitReached = detail?.isAdminBypass
+  const limitReached = hasFreeReviewBypass
     ? false
     : (errorCode === 'ATTEMPT_LIMIT_REACHED'
       || detail?.canStartAttempt === false
@@ -944,9 +982,11 @@ export function ExternalQuizPlayerPanel({
                 Đã làm {detail?.attemptsCount ?? quizInfo?.attemptsUsed ?? quizInfo?.attemptsCount ?? 0} lượt
                 {detail?.isAdminBypass
                   ? ' · Quyền Admin (không giới hạn lượt)'
-                  : typeof detail?.maxAttempts === 'number'
-                    ? ` / Tối đa ${detail.maxAttempts} lượt`
-                    : ''}
+                  : detail?.canReviewFreely
+                    ? ' · Học viên lớp Live (làm lại & xem lời giải tự do)'
+                    : typeof detail?.maxAttempts === 'number'
+                      ? ` / Tối đa ${detail.maxAttempts} lượt`
+                      : ''}
               </p>
             </div>
           ) : (
@@ -956,12 +996,78 @@ export function ExternalQuizPlayerPanel({
                   Bài kiểm tra gồm {questions.length || 'nhiều'} câu hỏi.
                 </p>
                 <p className="mt-1 text-xs text-[#6f665f] dark:text-slate-400">
-                  Hệ thống tự động lưu nháp trong quá trình làm bài. Bạn có thể bấm nút bên cạnh để bắt đầu ngay.
+                  {hasFreeReviewBypass
+                    ? 'Bạn có thể làm bài không giới hạn lượt hoặc xem ngay đáp án & lời giải mà không cần nộp bài trước.'
+                    : 'Hệ thống tự động lưu nháp trong quá trình làm bài. Bạn có thể bấm nút bên cạnh để bắt đầu ngay.'}
                 </p>
               </div>
-              {startOrRetakeButton}
+              <div className="flex flex-wrap items-center gap-2">
+                {hasFreeReviewBypass && previewSolutionQuestions.length > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowSolutionPreview((v) => !v)}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-[#247d7e] bg-[#eff9f7] px-4 py-2.5 text-xs font-black text-[#247d7e] transition hover:bg-[#dff4f0] dark:border-[#49b6ac] dark:bg-[#132c3d] dark:text-[#6ac6bd]"
+                  >
+                    {showSolutionPreview ? 'Ẩn đáp án & lời giải' : 'Xem đáp án & lời giải'}
+                  </button>
+                ) : null}
+                {startOrRetakeButton}
+              </div>
             </div>
           )}
+
+          {showSolutionPreview && hasFreeReviewBypass && !(displayedResult || displayedAttempt?.status === 'submitted' || displayedAttempt?.status === 'graded') && previewSolutionQuestions.length > 0 ? (
+            <div className="space-y-3">
+              <h4 className="text-sm font-black text-[#18243b] dark:text-white">
+                Đáp án & lời giải ({detail?.isAdminBypass ? 'Admin' : 'Lớp Live'})
+              </h4>
+              {previewSolutionQuestions.map((question, idx) => {
+                const reviewOpts = question.options?.length ? question.options : (question.linkedOptions ?? []);
+                return (
+                  <div
+                    key={question.id}
+                    className="rounded-xl border border-[#e3d4c5] bg-white p-4 dark:border-[#2c3a52] dark:bg-[#0b172b]"
+                  >
+                    <span className="text-xs font-black text-[#ad2033] dark:text-[#f08d9c]">Câu {idx + 1}</span>
+                    {localizedPassageText(question, showChinese) ? (
+                      <div className="mt-2 rounded-lg bg-emerald-50/70 p-2.5 text-xs dark:bg-emerald-950/25">
+                        <RichMathText value={localizedPassageText(question, showChinese)} />
+                      </div>
+                    ) : null}
+                    <div className="mt-2 text-[#18243b] dark:text-slate-100">
+                      <RichMathText value={localizedQuestionText(question, showChinese)} />
+                    </div>
+                    {reviewOpts.length > 0 ? (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {reviewOpts.map((opt, oIdx) => (
+                          <span
+                            key={optionValue(opt, oIdx)}
+                            className="rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-700 dark:border-slate-700 dark:bg-[#101e33] dark:text-slate-300"
+                          >
+                            <strong className="text-[#247d7e] dark:text-[#6ac6bd]">{optionLabel(opt, oIdx)}.</strong> {localizedOptionText(opt, showChinese)}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                    {question.correctAnswer !== undefined ? (
+                      <div className="mt-3 rounded-lg bg-emerald-50 p-2.5 text-xs dark:bg-emerald-950/30">
+                        <span className="font-bold text-emerald-700 dark:text-emerald-300">Đáp án đúng: </span>
+                        <span className="font-bold text-emerald-900 dark:text-emerald-100">
+                          {formatDisplayAnswer(question.correctAnswer, question, showChinese)}
+                        </span>
+                      </div>
+                    ) : null}
+                    {localizedExplanationText(question, showChinese) ? (
+                      <div className="mt-2 rounded-xl border border-indigo-200/70 bg-indigo-50/60 p-3 text-xs dark:border-indigo-900/50 dark:bg-indigo-950/25">
+                        <p className="mb-1 font-black text-indigo-700 dark:text-indigo-300">Giải thích</p>
+                        <RichMathText value={localizedExplanationText(question, showChinese)} />
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
 
           {(displayedResult || displayedAttempt?.status === 'submitted' || displayedAttempt?.status === 'graded') ? (
             isSolutionEmbargoed ? (

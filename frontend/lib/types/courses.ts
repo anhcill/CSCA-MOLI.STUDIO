@@ -903,6 +903,7 @@ export interface ExternalWorkspaceCapabilitiesDto {
   enforceTrustedDevices?: boolean;
   isPublicPreviewAccess?: boolean;
   isAdmin?: boolean;
+  canReviewFreely?: boolean;
 }
 
 export interface ExternalWorkspaceSourceClassDto {
@@ -1162,10 +1163,12 @@ export interface ExternalQuizDetailDto {
   canStartAttempt?: boolean;
   attemptsRemaining?: number | null;
   isAdminBypass?: boolean;
+  canReviewFreely?: boolean;
   canViewSolution?: boolean;
   reviewPolicy?: ExternalQuizReviewPolicy | null;
   embargoUntil?: string | null;
   solutionEmbargoedReason?: string | null;
+  reviewItems?: ExternalQuizQuestionDto[];
 }
 
 export interface ExternalQuizSubmitResponseDto {

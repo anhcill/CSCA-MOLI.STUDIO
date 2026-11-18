@@ -812,11 +812,13 @@ export const learningApi = {
             ? raw.attemptCount
             : attempts.length;
     const isAdminBypass = raw.isAdminBypass === true;
-    const maxAttemptsRaw = isAdminBypass
+    const canReviewFreely = raw.canReviewFreely === true;
+    const hasFreeReviewBypass = isAdminBypass || canReviewFreely;
+    const maxAttemptsRaw = hasFreeReviewBypass
       ? null
       : (raw.maxAttempts ?? quizObj.maxAttempts ?? quizObj.attemptLimit);
     const maxAttempts = typeof maxAttemptsRaw === 'number' ? maxAttemptsRaw : null;
-    const attemptsRemaining = isAdminBypass
+    const attemptsRemaining = hasFreeReviewBypass
       ? null
       : typeof raw.attemptsRemaining === 'number'
         ? raw.attemptsRemaining
@@ -828,16 +830,23 @@ export const learningApi = {
       ?? (attempts[0] ?? null);
     const canStartAttempt = typeof raw.canStartAttempt === 'boolean'
       ? raw.canStartAttempt
-      : isAdminBypass || attemptsRemaining === null || attemptsRemaining > 0 || activeAttempt !== null;
-    const canViewSolution = (raw.canViewSolution as boolean | undefined)
-      ?? (quizObj.canViewSolution as boolean | undefined);
+      : hasFreeReviewBypass || attemptsRemaining === null || attemptsRemaining > 0 || activeAttempt !== null;
+    const canViewSolution = hasFreeReviewBypass
+      ? true
+      : ((raw.canViewSolution as boolean | undefined)
+        ?? (quizObj.canViewSolution as boolean | undefined));
+    const reviewItems = Array.isArray(raw.reviewItems)
+      ? flattenExternalQuizItems(raw.reviewItems)
+      : undefined;
     const normalizedQuiz: ExternalUnitQuizDto = {
       ...quiz,
       id: quizObj.id != null ? String(quizObj.id) : String(quizId),
       attemptsCount: typeof quizObj.attemptsCount === 'number' ? quizObj.attemptsCount : attemptsCount,
-      attemptLimit: typeof quizObj.attemptLimit === 'number' || quizObj.attemptLimit === null
-        ? quizObj.attemptLimit
-        : maxAttempts,
+      attemptLimit: hasFreeReviewBypass
+        ? null
+        : (typeof quizObj.attemptLimit === 'number' || quizObj.attemptLimit === null
+          ? quizObj.attemptLimit
+          : maxAttempts),
       ...(canViewSolution !== undefined ? { canViewSolution } : {}),
     };
     const latestResult = normalizeExternalQuizResult(raw.latestResult, questions);
@@ -853,6 +862,9 @@ export const learningApi = {
       attemptsRemaining,
       canStartAttempt,
       canViewSolution,
+      isAdminBypass,
+      canReviewFreely,
+      ...(reviewItems ? { reviewItems } : {}),
     };
   },
 

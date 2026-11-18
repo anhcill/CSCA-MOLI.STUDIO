@@ -675,8 +675,9 @@ function createMolyCourseWorkspaceService({
         throw mapUpstreamError(err);
       }
 
+      const canBypassLock = Boolean(access.isAdmin || liveWs?.capabilities?.canReviewFreely);
       const sidebarUnits = formatSidebarUnits(unitRows, courseRow.slug, remoteProfileId, liveWs?.units || null, {
-        bypassLock: Boolean(access.isAdmin),
+        bypassLock: canBypassLock,
       });
       const activeRemoteId = liveWs?.activeUnit?.id != null
         ? String(liveWs.activeUnit.id)
@@ -686,16 +687,22 @@ function createMolyCourseWorkspaceService({
       const normalizedLiveMode = String(
         liveWs?.profile?.mode || liveWs?.mode || activeProfileSummary.mode,
       ).replace(/^RECORD_/i, "").toUpperCase();
-      const liveCapabilities = liveWs?.capabilities || liveWs?.profile?.capabilities || activeProfileSummary.capabilities;
-      const derivedSelectedLock = liveWs?.selectedUnitLock
-        || (liveWs?.activeUnit?.isLocked
-          ? {
-              locked: true,
-              code: "UNIT_LOCKED",
-              reason: liveWs.activeUnit.lockReason || "Bài học đang bị khóa theo tiến độ tuần tự.",
-              requiredPrevUnitTitle: liveWs.activeUnit.requiredPrevUnitTitle || null,
-            }
-          : null);
+      const baseLiveCaps = liveWs?.capabilities || liveWs?.profile?.capabilities || activeProfileSummary.capabilities;
+      const liveCapabilities = {
+        ...baseLiveCaps,
+        canReviewFreely: Boolean(liveWs?.capabilities?.canReviewFreely),
+      };
+      const derivedSelectedLock = canBypassLock
+        ? null
+        : (liveWs?.selectedUnitLock
+          || (liveWs?.activeUnit?.isLocked
+            ? {
+                locked: true,
+                code: "UNIT_LOCKED",
+                reason: liveWs.activeUnit.lockReason || "Bài học đang bị khóa theo tiến độ tuần tự.",
+                requiredPrevUnitTitle: liveWs.activeUnit.requiredPrevUnitTitle || null,
+              }
+            : null));
 
       return {
         course: {
