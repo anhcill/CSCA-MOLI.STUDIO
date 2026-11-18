@@ -151,6 +151,12 @@ function parseErrorMessage(err: unknown): { code: string | null; message: string
         message: msg || 'Video đang được xử lý hoặc tạm thời chưa sẵn sàng để phát.',
       };
     }
+    if (code === 'DELEGATED_LEARNING_DISABLED') {
+      return {
+        code,
+        message: 'Không gian học đang được chuẩn bị. Bạn vẫn có thể mở khóa học bằng luồng CSCA-Course hiện tại trong mục Khóa học của tôi.',
+      };
+    }
     if (code === 'PROFILE_SCOPE_MISMATCH') {
       return { code, message: 'Hồ sơ hoặc bài học không thuộc phạm vi khóa học này.' };
     }
@@ -751,6 +757,22 @@ export function ExternalLearningWorkspace({
   if (loading) return <LearningRoomLoading progress={null} stage="Đang kết nối không gian học CSCA-Course" />;
 
   if (error || !workspace) {
+    if (errorCode === 'DELEGATED_LEARNING_DISABLED') {
+      return (
+        <main className="mx-auto flex min-h-[55vh] max-w-3xl items-center px-5 py-12">
+          <section className="w-full rounded-[2rem] border border-amber-200 bg-amber-50 p-8 text-center shadow-sm dark:border-amber-900/70 dark:bg-amber-950/30">
+            <FiLock className="mx-auto h-10 w-10 text-amber-600 dark:text-amber-300" />
+            <h1 className="mt-4 text-xl font-black text-slate-900 dark:text-white">Không gian học đang được chuẩn bị</h1>
+            <p className="mt-2 text-sm font-medium text-slate-600 dark:text-slate-300">
+              Bạn vẫn có thể mở khóa học bằng luồng CSCA-Course hiện tại trong mục Khóa học của tôi.
+            </p>
+            <Link href="/hoc" className="mt-6 inline-flex items-center gap-2 rounded-xl bg-slate-900 px-5 py-3 font-black text-white transition hover:bg-slate-700 dark:bg-white dark:text-slate-900">
+              Về khóa học của tôi
+            </Link>
+          </section>
+        </main>
+      );
+    }
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#f5efe8] p-8 dark:bg-[#050d1d]">
         <div role="alert" className="max-w-lg rounded-2xl border border-red-200 bg-red-50 p-8 text-center text-red-700 dark:border-red-900/70 dark:bg-red-950/35 dark:text-red-300">

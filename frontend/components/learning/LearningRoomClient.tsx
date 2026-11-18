@@ -32,8 +32,6 @@ import { LessonQuestionPanel } from '@/components/courses/LessonQuestionPanel';
 
 type LessonPanel = 'overview' | 'curriculum' | 'notes' | 'resources' | 'assignment' | 'qa';
 
-const delegatedLearningEnabled = process.env.NEXT_PUBLIC_DELEGATED_LEARNING_ENABLED === 'true';
-
 function updateCompletedLesson(room: LearningRoomDto, lessonId: number): LearningRoomDto {
   const curriculum = room.curriculum.map((section) => ({
     ...section,
@@ -81,22 +79,6 @@ export function LearningRoomClient({
   initialProfileId?: string | null;
 }) {
   if (externalUnitId) {
-    if (!delegatedLearningEnabled) {
-      return (
-        <main className="mx-auto flex min-h-[55vh] max-w-3xl items-center px-5 py-12">
-          <section className="w-full rounded-[2rem] border border-amber-200 bg-amber-50 p-8 text-center shadow-sm dark:border-amber-900/70 dark:bg-amber-950/30">
-            <FiLock className="mx-auto h-10 w-10 text-amber-600 dark:text-amber-300" />
-            <h1 className="mt-4 text-xl font-black text-slate-900 dark:text-white">Không gian học đang được chuẩn bị</h1>
-            <p className="mt-2 text-sm font-medium text-slate-600 dark:text-slate-300">
-              Bạn vẫn có thể mở khóa học bằng luồng CSCA-Course hiện tại trong mục Khóa học của tôi.
-            </p>
-            <Link href="/hoc" className="mt-6 inline-flex items-center gap-2 rounded-xl bg-slate-900 px-5 py-3 font-black text-white transition hover:bg-slate-700 dark:bg-white dark:text-slate-900">
-              <FiBookOpen /> Về khóa học của tôi
-            </Link>
-          </section>
-        </main>
-      );
-    }
     return (
       <ExternalLearningWorkspace
         courseSlug={courseSlug}

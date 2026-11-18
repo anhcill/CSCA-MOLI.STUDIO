@@ -16,8 +16,7 @@ import type { MyLearningItemDto } from '@/lib/types/courses';
 import { CourseOwnershipBadge } from '@/components/courses/CourseOwnershipBadge';
 import { CourseSsoLaunchButton } from '@/components/courses/CourseSsoLaunchButton';
 
-const courseSyncEnabled = process.env.NEXT_PUBLIC_COURSE_SYNC_ENABLED === 'true';
-const delegatedLearningEnabled = process.env.NEXT_PUBLIC_DELEGATED_LEARNING_ENABLED === 'true';
+const courseSyncExplicitlyDisabled = process.env.NEXT_PUBLIC_COURSE_SYNC_ENABLED === 'false';
 
 function formatDuration(totalSeconds: number): string {
   const minutes = Math.max(0, Math.round(totalSeconds / 60));
@@ -64,7 +63,7 @@ export function MyLearningClient() {
     };
     void load(true);
     const refreshWhenVisible = () => {
-      if (courseSyncEnabled && document.visibilityState === 'visible') void load(false);
+      if (!courseSyncExplicitlyDisabled && document.visibilityState === 'visible') void load(false);
     };
     window.addEventListener('focus', refreshWhenVisible);
     document.addEventListener('visibilitychange', refreshWhenVisible);
@@ -120,13 +119,8 @@ export function MyLearningClient() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         {items.map(({ course, enrollment }) => {
-          const directWorkspaceEnabled = courseSyncEnabled && delegatedLearningEnabled;
-          const resumeHref = directWorkspaceEnabled
-            ? (enrollment.resumeUnitHref || course.resumeUnitHref || null)
-            : null;
-          const unitHref = directWorkspaceEnabled
-            ? (enrollment.firstUnitHref || course.firstUnitHref || null)
-            : null;
+          const resumeHref = enrollment.resumeUnitHref || course.resumeUnitHref || null;
+          const unitHref = enrollment.firstUnitHref || course.firstUnitHref || null;
           const activeProfileId = enrollment.activeProfileId || course.activeProfileId || null;
           const isCscaCourse = course.contentOrigin === 'csca_course'
             || Boolean(resumeHref || unitHref);
