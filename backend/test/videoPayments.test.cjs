@@ -517,3 +517,34 @@ test('payment QR is generated locally and only available to the order owner',asy
   assert.equal(own.status,200);assert.match(own.body.data.dataUrl,/^data:image\/png;base64,/);
   assert.equal((await request(app).get(`/payments/orders/${created.orderId}/qr`).set('x-test-user',String(other))).status,404);
 });
+
+test('deliverEmail routes SSO placeholder email via external_identities or marks NO_ROUTABLE_EMAIL and formats purchase HTML safely',async()=>{
+  const ssoUid=(await db.query("INSERT INTO users(email,full_name,username,coins) VALUES ('csca_99@sso.csca.local','SSO User','sso99',0) RETURNING id")).rows[0].id;
+  await db.query(`CREATE TABLE IF NOT EXISTS external_identities (id SERIAL PRIMARY KEY, user_id INTEGER, status TEXT, email_snapshot TEXT, metadata JSONB DEFAULT '{}'::jsonb)`);
+  const p=await product();
+  const createdNoMail=await pay(await order(ssoUid,p));
+  const outNoMail=(await db.query(`SELECT o.status,o.last_error FROM video_payment_outbox o JOIN transactions t ON t.id=o.transaction_id WHERE t.transaction_code=$1`,[createdNoMail.orderId])).rows[0];
+  assert.equal(outNoMail.status,'sent');
+  assert.equal(outNoMail.last_error,'NO_ROUTABLE_EMAIL');
+
+  const ssoMapped=(await db.query("INSERT INTO users(email,full_name,username,coins) VALUES ('csca_100@sso.csca.local','SSO Real','sso100',0) RETURNING id")).rows[0].id;
+  await db.query(`INSERT INTO external_identities(user_id,status,email_snapshot) VALUES ($1,'active','real-learner@gmail.com')`,[ssoMapped]);
+  const createdMapped=await pay(await order(ssoMapped,p));
+  const matchedMail=sent.find(v=>v.order.orderId===createdMapped.orderId);
+  assert.equal(matchedMail?.email,'real-learner@gmail.com');
+
+  const emailSvc=require('../src/services/emailService');
+  const origSend=emailSvc._send;
+  const captured=[];
+  emailSvc._send=async payload=>{captured.push(payload);return {sent:true};};
+  try{
+    await emailSvc.sendVideoPurchaseEmail({email:'real-learner@gmail.com',name:'Học viên A',order:{orderId:'ORD123',type:'video',amount:299000,snapshot:{name:'Gói Record TTXH',courseSlug:'record-ttxh',video:{name:'Record TTXH'}},rights:{videoExpiresAt:null}}});
+    assert.equal(captured.length,1);
+    assert.match(captured[0].html,/Không giới hạn/);
+    assert.match(captured[0].html,/record-ttxh/);
+    assert.equal(captured[0].account,'critical');
+    assert.equal(captured[0].throwOnError,true);
+  } finally {
+    emailSvc._send=origSend;
+  }
+});

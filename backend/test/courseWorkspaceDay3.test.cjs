@@ -1206,4 +1206,26 @@ test("Day 3 workspace HTTP endpoints enforce JWT identity, preview-only fallback
     .get(`/api/learning/external/offerings/prof_ws_901/units/u-${uPaidOnly.id}`)
     .set("Authorization", `Bearer ${revokedJwt}`);
   assert.equal(revokedRes.status, 403);
+
+  // 7) Admin user unlocks all units & course landing without external_entitlements row and forwards actorRole='admin'
+  const adminUser = (await envCtx.db.query(
+    `INSERT INTO users (email, username, role, is_active, is_verified)
+     VALUES ('admin@example.com', 'admin_u', 'admin', true, true) RETURNING id, email`,
+  )).rows[0];
+  const adminJwt = jwt.sign({ id: adminUser.id, role: "admin", email: adminUser.email }, TEST_JWT_SECRET);
+  const adminLanding = await envCtx.courseService.getCourseLanding("ly-ws-day3", { id: adminUser.id, role: "admin" });
+  assert.equal(adminLanding.access.owned, true);
+  assert.equal(adminLanding.access.ownershipLabel, "Quyền Admin");
+  assert.equal(adminLanding.access.canLearn, true);
+  assert.equal(adminLanding.curriculum[0].lessons.every((l) => l.isLocked === false), true);
+
+  mintedCalls.length = 0;
+  activeStubScenario = "unit_locked";
+  const adminWsRes = await request(app)
+    .get(`/api/learning/external/courses/ly-ws-day3/workspace?unitId=u-${uPaidOnly.id}`)
+    .set("Authorization", `Bearer ${adminJwt}`);
+  assert.equal(adminWsRes.status, 200);
+  assert.equal(mintedCalls.length, 1);
+  assert.equal(mintedCalls[0].actorRole, "admin");
+  assert.equal(adminWsRes.body.data.units.every((u) => u.isLocked === false), true);
 });

@@ -74,10 +74,12 @@ function isAnsweredValue(val: unknown): boolean {
 
 function formatDisplayAnswer(val: unknown, question?: ExternalQuizQuestionDto): string {
   if (val === null || val === undefined) return '—';
+  const opts = question?.options?.length ? question.options : (question?.linkedOptions ?? []);
   const mapOption = (raw: string) => {
-    const found = question?.options?.find((opt, idx) => optionValue(opt, idx) === raw);
+    const foundIndex = opts.findIndex((opt, idx) => optionValue(opt, idx) === raw || opt.key === raw);
+    const found = foundIndex >= 0 ? opts[foundIndex] : undefined;
     if (!found) return raw;
-    return `${optionLabel(found, question?.options?.indexOf(found) ?? 0)}. ${found.text}`;
+    return `${optionLabel(found, foundIndex)}. ${found.text}`;
   };
   if (Array.isArray(val)) {
     return val.length ? val.map((item) => mapOption(String(item))).join(', ') : '—';
@@ -85,12 +87,27 @@ function formatDisplayAnswer(val: unknown, question?: ExternalQuizQuestionDto): 
   if (typeof val === 'boolean') return val ? 'Đúng' : 'Sai';
   const str = String(val).trim();
   if (!str) return '—';
-  if (question?.options?.length) return mapOption(str);
+  if (opts.length) return mapOption(str);
   if (question?.questionType === 'true_false') {
     if (str === 'true') return 'Đúng';
     if (str === 'false') return 'Sai';
   }
   return str;
+}
+
+function shouldRenderGroupBanner(questions: ExternalQuizQuestionDto[], idx: number): boolean {
+  const curr = questions[idx];
+  if (!curr) return false;
+  const hasGroup = curr.groupId !== undefined && curr.groupId !== null;
+  const hasPassage = Boolean(curr.passageText || (curr.linkedOptions && curr.linkedOptions.length > 0));
+  if (!hasGroup && !hasPassage) return false;
+  if (idx === 0) return true;
+  const prev = questions[idx - 1];
+  if (!prev) return true;
+  if (hasGroup && prev.groupId !== undefined && prev.groupId !== null) {
+    return String(curr.groupId) !== String(prev.groupId);
+  }
+  return (curr.passageText || '') !== (prev.passageText || '');
 }
 
 function computeInitialRemainingSeconds(
@@ -393,14 +410,25 @@ export function ExternalQuizPlayerPanel({
     const reviewById = new Map(
       reviewItems.map((item) => [String(item.id || item.questionId || ''), item]),
     );
-    const merged = (base.length ? base : reviewItems).map((item, idx) => {
+      const merged = (base.length ? base : reviewItems).map((item, idx) => {
       const rev = reviewById.get(String(item.id || item.questionId || ''));
       const prompt = item.prompt || item.questionText || rev?.prompt || rev?.questionText || '';
+      const baseOpts = Array.isArray(item.options) && item.options.length > 0 ? item.options : (item.linkedOptions ?? []);
+      const revOpts = Array.isArray(rev?.options) && rev.options.length > 0 ? rev.options : (rev?.linkedOptions ?? []);
+      const baseLinked = Array.isArray(item.linkedOptions) && item.linkedOptions.length > 0 ? item.linkedOptions : [];
+      const revLinked = Array.isArray(rev?.linkedOptions) && rev.linkedOptions.length > 0 ? rev.linkedOptions : [];
       return {
         ...item,
         ...(rev || {}),
         id: String(item.id || item.questionId || rev?.id || idx + 1),
         prompt,
+        options: revOpts.length > 0 ? revOpts : baseOpts,
+        linkedOptions: revLinked.length > 0 ? revLinked : baseLinked,
+        groupId: item.groupId ?? rev?.groupId ?? null,
+        groupKind: item.groupKind ?? rev?.groupKind ?? null,
+        passageText: item.passageText ?? rev?.passageText ?? null,
+        passageImageUrl: item.passageImageUrl ?? rev?.passageImageUrl ?? null,
+        clozeMode: item.clozeMode ?? rev?.clozeMode ?? null,
         userAnswer: item.userAnswer ?? item.studentAnswer ?? rev?.userAnswer ?? rev?.studentAnswer,
       };
     });
@@ -450,7 +478,7 @@ export function ExternalQuizPlayerPanel({
                   onClick={() => setSelectedQuizId(q.id)}
                   className="inline-flex items-center gap-1.5 rounded-xl bg-[#ad2033] px-4 py-2 text-xs font-black text-white shadow-sm transition hover:bg-[#911a2b]"
                 >
-                  <FiPlay /> {(q.attemptsCount ?? 0) > 0 ? 'Làm / Xem kết quả' : 'Bắt đầu làm bài'}
+                  <FiPlay /> {(q.attemptsCount ?? 0) > 0 ? 'Làm bài / Xem kết quả' : 'Bắt đầu làm bài'}
                 </button>
               ) : (
                 <span className="inline-flex items-center gap-1 rounded-xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-500 dark:bg-slate-800 dark:text-slate-400">
@@ -478,9 +506,37 @@ export function ExternalQuizPlayerPanel({
     || (explicitCanViewSolution === undefined && ['never', 'embargoed', 'after_due', 'after_graded'].includes(String(reviewPolicy || '')));
   const embargoUntil = displayedResult?.embargoUntil ?? detail?.embargoUntil ?? detail?.quiz?.embargoUntil ?? null;
 
-  const limitReached = errorCode === 'ATTEMPT_LIMIT_REACHED'
-    || detail?.canStartAttempt === false
-    || (typeof detail?.attemptsRemaining === 'number' && detail.attemptsRemaining <= 0);
+  const limitReached = detail?.isAdminBypass
+    ? false
+    : (errorCode === 'ATTEMPT_LIMIT_REACHED'
+      || detail?.canStartAttempt === false
+      || (typeof detail?.attemptsRemaining === 'number' && detail.attemptsRemaining <= 0));
+
+  const hasPreviousAttempt = Boolean(
+    displayedAttempt
+    || (detail?.attemptsCount ?? quizInfo?.attemptsUsed ?? quizInfo?.attemptsCount ?? 0) > 0,
+  );
+  const startOrRetakeButton = !activeAttempt ? (
+    limitReached ? (
+      <p className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-700 dark:text-amber-300">
+        <FiLock /> Bạn đã dùng hết số lượt làm bài cho phép (ATTEMPT_LIMIT_REACHED).
+      </p>
+    ) : (
+      <button
+        type="button"
+        disabled={starting}
+        onClick={() => void handleStartAttempt(hasPreviousAttempt)}
+        className="inline-flex items-center gap-2 rounded-xl bg-[#ad2033] px-5 py-2.5 text-sm font-black text-white shadow-sm transition hover:bg-[#911a2b] disabled:opacity-50"
+      >
+        <FiPlay />
+        {starting
+          ? 'Đang khởi tạo...'
+          : hasPreviousAttempt
+            ? 'Làm bài lại'
+            : 'Bắt đầu làm bài'}
+      </button>
+    )
+  ) : null;
 
   return (
     <section className="space-y-5 rounded-2xl border border-[#ddcfc2] bg-[#fffdf9] p-4 dark:border-[#34435a] dark:bg-[#101e33] sm:p-6">
@@ -600,123 +656,166 @@ export function ExternalQuizPlayerPanel({
               const qType = String(question.questionType || 'single_choice').toLowerCase();
               const currentAns = answers[question.id];
               const safeImg = isSafeImageUrl(question.imageUrl);
-              const tfOptions: ExternalQuizOptionDto[] = question.options?.length
-                ? question.options
+              const safePassageImg = isSafeImageUrl(question.passageImageUrl);
+              const showGroupBanner = shouldRenderGroupBanner(questions, qIdx);
+              const baseChoiceOptions = question.options?.length ? question.options : (question.linkedOptions ?? []);
+              const tfOptions: ExternalQuizOptionDto[] = baseChoiceOptions.length
+                ? baseChoiceOptions
                 : [
                     { key: 'true', label: 'A', text: 'Đúng' },
                     { key: 'false', label: 'B', text: 'Sai' },
                   ];
+              const isChoiceQuestion =
+                qType === 'single_choice'
+                || qType === 'true_false'
+                || qType === 'reading_item'
+                || ((qType === 'fill_blank_item' || qType === 'fill_blank') && baseChoiceOptions.length > 0);
 
               return (
-                <div
-                  key={question.id}
-                  id={`ext-quiz-q-${question.id}`}
-                  className="rounded-xl border border-[#e3d4c5] bg-white p-4 shadow-sm dark:border-[#2c3a52] dark:bg-[#0b172b]"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <span className="rounded-md bg-[#ad2033]/10 px-2.5 py-0.5 text-xs font-black text-[#ad2033] dark:text-[#f08d9c]">
-                      Câu {qIdx + 1}
-                    </span>
-                    {question.points !== undefined ? (
-                      <span className="text-xs font-bold text-[#8b8178] dark:text-slate-400">
-                        {question.points} điểm
-                      </span>
-                    ) : null}
-                  </div>
-
-                  <div className="mt-2.5 text-[#18243b] dark:text-slate-100">
-                    <RichMathText value={question.prompt} />
-                  </div>
-
-                  {safeImg ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={safeImg}
-                      alt={`Minh họa câu ${qIdx + 1}`}
-                      className="mt-3 max-h-64 rounded-lg border border-slate-200 object-contain dark:border-slate-700"
-                    />
+                <div key={question.id} className="space-y-3">
+                  {showGroupBanner ? (
+                    <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 text-sm dark:border-emerald-900/50 dark:bg-emerald-950/25">
+                      <p className="text-[11px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
+                        {question.linkedOptions?.length ? 'Ngữ cảnh & Kho lựa chọn' : 'Bài đọc / Ngữ cảnh chung'}
+                      </p>
+                      {question.passageText ? (
+                        <div className="mt-1.5 text-[#18243b] dark:text-slate-100">
+                          <RichMathText value={question.passageText} />
+                        </div>
+                      ) : null}
+                      {safePassageImg ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={safePassageImg}
+                          alt="Hình minh họa nhóm câu hỏi"
+                          className="mt-2 max-h-64 rounded-lg border border-slate-200 object-contain dark:border-slate-700"
+                        />
+                      ) : null}
+                      {question.linkedOptions && question.linkedOptions.length > 0 ? (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {question.linkedOptions.map((opt, oIdx) => (
+                            <span
+                              key={optionValue(opt, oIdx)}
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-white px-2.5 py-1 text-xs font-semibold text-emerald-950 dark:border-emerald-800 dark:bg-[#0b172b] dark:text-emerald-200"
+                            >
+                              <strong className="text-emerald-700 dark:text-emerald-300">{optionLabel(opt, oIdx)}.</strong>
+                              <span>{opt.text}</span>
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
                   ) : null}
 
-                  <div className="mt-4 space-y-2">
-                    {(qType === 'single_choice' || qType === 'true_false') ? (
-                      (qType === 'true_false' ? tfOptions : (question.options ?? [])).map((opt, optIdx) => {
-                        const val = optionValue(opt, optIdx);
-                        const checked = String(currentAns ?? '') === val;
-                        return (
-                          <label
-                            key={val}
-                            className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition ${
-                              checked
-                                ? 'border-[#247d7e] bg-[#eff9f7] dark:border-[#49b6ac] dark:bg-[#132c3d]'
-                                : 'border-[#e6d9cc] bg-[#fffdf9] hover:border-[#c9b4a0] dark:border-[#2c3a52] dark:bg-[#101e33]'
-                            }`}
-                          >
-                            <input
-                              type="radio"
-                              name={`quiz-q-${question.id}`}
-                              checked={checked}
-                              disabled={submitting}
-                              onChange={() => updateAnswer(question.id, val)}
-                              className="mt-1 h-4 w-4 accent-[#247d7e]"
-                            />
-                            <span className="font-bold text-[#247d7e] dark:text-[#6ac6bd]">
-                              {optionLabel(opt, optIdx)}.
-                            </span>
-                            <div className="min-w-0 flex-1 text-[#29354b] dark:text-slate-200">
-                              <RichMathText value={opt.text} />
-                            </div>
-                          </label>
-                        );
-                      })
-                    ) : qType === 'multiple_choice' ? (
-                      (question.options ?? []).map((opt, optIdx) => {
-                        const val = optionValue(opt, optIdx);
-                        const selectedArr = Array.isArray(currentAns) ? currentAns.map(String) : [];
-                        const checked = selectedArr.includes(val);
-                        return (
-                          <label
-                            key={val}
-                            className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition ${
-                              checked
-                                ? 'border-[#247d7e] bg-[#eff9f7] dark:border-[#49b6ac] dark:bg-[#132c3d]'
-                                : 'border-[#e6d9cc] bg-[#fffdf9] hover:border-[#c9b4a0] dark:border-[#2c3a52] dark:bg-[#101e33]'
-                            }`}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              disabled={submitting}
-                              onChange={() => toggleMultipleChoice(question.id, val)}
-                              className="mt-1 h-4 w-4 accent-[#247d7e]"
-                            />
-                            <span className="font-bold text-[#247d7e] dark:text-[#6ac6bd]">
-                              {optionLabel(opt, optIdx)}.
-                            </span>
-                            <div className="min-w-0 flex-1 text-[#29354b] dark:text-slate-200">
-                              <RichMathText value={opt.text} />
-                            </div>
-                          </label>
-                        );
-                      })
-                    ) : qType === 'essay' ? (
-                      <textarea
-                        rows={4}
-                        value={typeof currentAns === 'string' ? currentAns : ''}
-                        disabled={submitting}
-                        onChange={(event) => updateAnswer(question.id, event.target.value)}
-                        placeholder="Nhập câu trả lời tự luận của bạn..."
-                        className="w-full rounded-xl border border-[#d9cabc] bg-[#fffdf9] p-3 text-sm outline-none focus:border-[#247d7e] focus:ring-4 focus:ring-[#247d7e]/10 dark:border-[#34435a] dark:bg-[#071426] dark:text-slate-100"
+                  <div
+                    id={`ext-quiz-q-${question.id}`}
+                    className="rounded-xl border border-[#e3d4c5] bg-white p-4 shadow-sm dark:border-[#2c3a52] dark:bg-[#0b172b]"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="rounded-md bg-[#ad2033]/10 px-2.5 py-0.5 text-xs font-black text-[#ad2033] dark:text-[#f08d9c]">
+                        Câu {qIdx + 1}
+                      </span>
+                      {question.points !== undefined ? (
+                        <span className="text-xs font-bold text-[#8b8178] dark:text-slate-400">
+                          {question.points} điểm
+                        </span>
+                      ) : null}
+                    </div>
+
+                    <div className="mt-2.5 text-[#18243b] dark:text-slate-100">
+                      <RichMathText value={question.prompt} />
+                    </div>
+
+                    {safeImg ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={safeImg}
+                        alt={`Minh họa câu ${qIdx + 1}`}
+                        className="mt-3 max-h-64 rounded-lg border border-slate-200 object-contain dark:border-slate-700"
                       />
-                    ) : (
-                      <input
-                        type="text"
-                        value={typeof currentAns === 'string' ? currentAns : ''}
-                        disabled={submitting}
-                        onChange={(event) => updateAnswer(question.id, event.target.value)}
-                        placeholder="Nhập đáp án điền vào chỗ trống..."
-                        className="w-full rounded-xl border border-[#d9cabc] bg-[#fffdf9] px-3.5 py-2.5 text-sm outline-none focus:border-[#247d7e] focus:ring-4 focus:ring-[#247d7e]/10 dark:border-[#34435a] dark:bg-[#071426] dark:text-slate-100"
-                      />
-                    )}
+                    ) : null}
+
+                    <div className="mt-4 space-y-2">
+                      {isChoiceQuestion ? (
+                        (qType === 'true_false' ? tfOptions : baseChoiceOptions).map((opt, optIdx) => {
+                          const val = optionValue(opt, optIdx);
+                          const checked = String(currentAns ?? '') === val;
+                          return (
+                            <label
+                              key={val}
+                              className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition ${
+                                checked
+                                  ? 'border-[#247d7e] bg-[#eff9f7] dark:border-[#49b6ac] dark:bg-[#132c3d]'
+                                  : 'border-[#e6d9cc] bg-[#fffdf9] hover:border-[#c9b4a0] dark:border-[#2c3a52] dark:bg-[#101e33]'
+                              }`}
+                            >
+                              <input
+                                type="radio"
+                                name={`quiz-q-${question.id}`}
+                                checked={checked}
+                                disabled={submitting}
+                                onChange={() => updateAnswer(question.id, val)}
+                                className="mt-1 h-4 w-4 accent-[#247d7e]"
+                              />
+                              <span className="font-bold text-[#247d7e] dark:text-[#6ac6bd]">
+                                {optionLabel(opt, optIdx)}.
+                              </span>
+                              <div className="min-w-0 flex-1 text-[#29354b] dark:text-slate-200">
+                                <RichMathText value={opt.text} />
+                              </div>
+                            </label>
+                          );
+                        })
+                      ) : qType === 'multiple_choice' ? (
+                        baseChoiceOptions.map((opt, optIdx) => {
+                          const val = optionValue(opt, optIdx);
+                          const selectedArr = Array.isArray(currentAns) ? currentAns.map(String) : [];
+                          const checked = selectedArr.includes(val);
+                          return (
+                            <label
+                              key={val}
+                              className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition ${
+                                checked
+                                  ? 'border-[#247d7e] bg-[#eff9f7] dark:border-[#49b6ac] dark:bg-[#132c3d]'
+                                  : 'border-[#e6d9cc] bg-[#fffdf9] hover:border-[#c9b4a0] dark:border-[#2c3a52] dark:bg-[#101e33]'
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                disabled={submitting}
+                                onChange={() => toggleMultipleChoice(question.id, val)}
+                                className="mt-1 h-4 w-4 accent-[#247d7e]"
+                              />
+                              <span className="font-bold text-[#247d7e] dark:text-[#6ac6bd]">
+                                {optionLabel(opt, optIdx)}.
+                              </span>
+                              <div className="min-w-0 flex-1 text-[#29354b] dark:text-slate-200">
+                                <RichMathText value={opt.text} />
+                              </div>
+                            </label>
+                          );
+                        })
+                      ) : (qType === 'essay' || qType === 'translation') ? (
+                        <textarea
+                          rows={4}
+                          value={typeof currentAns === 'string' ? currentAns : ''}
+                          disabled={submitting}
+                          onChange={(event) => updateAnswer(question.id, event.target.value)}
+                          placeholder="Nhập câu trả lời tự luận của bạn..."
+                          className="w-full rounded-xl border border-[#d9cabc] bg-[#fffdf9] p-3 text-sm outline-none focus:border-[#247d7e] focus:ring-4 focus:ring-[#247d7e]/10 dark:border-[#34435a] dark:bg-[#071426] dark:text-slate-100"
+                        />
+                      ) : (
+                        <input
+                          type="text"
+                          value={typeof currentAns === 'string' ? currentAns : ''}
+                          disabled={submitting}
+                          onChange={(event) => updateAnswer(question.id, event.target.value)}
+                          placeholder="Nhập đáp án điền vào chỗ trống..."
+                          className="w-full rounded-xl border border-[#d9cabc] bg-[#fffdf9] px-3.5 py-2.5 text-sm outline-none focus:border-[#247d7e] focus:ring-4 focus:ring-[#247d7e]/10 dark:border-[#34435a] dark:bg-[#071426] dark:text-slate-100"
+                        />
+                      )}
+                    </div>
                   </div>
                 </div>
               );
@@ -761,29 +860,43 @@ export function ExternalQuizPlayerPanel({
                     điểm
                   </p>
                 </div>
-                <span className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-black ${
-                  (displayedResult?.isPassed ?? displayedAttempt?.isPassed)
-                    ? 'bg-emerald-600 text-white'
-                    : 'bg-amber-600 text-white'
-                }`}>
-                  {(displayedResult?.isPassed ?? displayedAttempt?.isPassed) ? <FiCheckCircle /> : <FiXCircle />}
-                  {(displayedResult?.isPassed ?? displayedAttempt?.isPassed) ? 'Đạt yêu cầu' : 'Chưa đạt'}
-                </span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-black ${
+                    (displayedResult?.isPassed ?? displayedAttempt?.isPassed)
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-amber-600 text-white'
+                  }`}>
+                    {(displayedResult?.isPassed ?? displayedAttempt?.isPassed) ? <FiCheckCircle /> : <FiXCircle />}
+                    {(displayedResult?.isPassed ?? displayedAttempt?.isPassed) ? 'Đạt yêu cầu' : 'Chưa đạt'}
+                  </span>
+                  {startOrRetakeButton}
+                </div>
               </div>
               {displayedResult?.correctCount !== undefined && displayedResult?.totalQuestions !== undefined ? (
                 <p className="mt-2 text-xs font-bold opacity-85">
                   Số câu đúng: {displayedResult.correctCount}/{displayedResult.totalQuestions}
                 </p>
               ) : null}
+              <p className="mt-1 text-xs font-semibold text-[#5d5854] dark:text-slate-300">
+                Đã làm {detail?.attemptsCount ?? quizInfo?.attemptsUsed ?? quizInfo?.attemptsCount ?? 0} lượt
+                {detail?.isAdminBypass
+                  ? ' · Quyền Admin (không giới hạn lượt)'
+                  : typeof detail?.maxAttempts === 'number'
+                    ? ` / Tối đa ${detail.maxAttempts} lượt`
+                    : ''}
+              </p>
             </div>
           ) : (
-            <div className="rounded-xl border border-[#e3d4c5] bg-white p-5 dark:border-[#2c3a52] dark:bg-[#0b172b]">
-              <p className="font-bold text-[#1e2b44] dark:text-slate-200">
-                Bài kiểm tra gồm {questions.length || 'nhiều'} câu hỏi.
-              </p>
-              <p className="mt-1 text-xs text-[#6f665f] dark:text-slate-400">
-                Hệ thống tự động lưu nháp trong quá trình làm bài. Bạn có thể bấm nút bên dưới để bắt đầu ngay.
-              </p>
+            <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-[#e3d4c5] bg-white p-5 dark:border-[#2c3a52] dark:bg-[#0b172b]">
+              <div>
+                <p className="font-bold text-[#1e2b44] dark:text-slate-200">
+                  Bài kiểm tra gồm {questions.length || 'nhiều'} câu hỏi.
+                </p>
+                <p className="mt-1 text-xs text-[#6f665f] dark:text-slate-400">
+                  Hệ thống tự động lưu nháp trong quá trình làm bài. Bạn có thể bấm nút bên cạnh để bắt đầu ngay.
+                </p>
+              </div>
+              {startOrRetakeButton}
             </div>
           )}
 
@@ -809,49 +922,89 @@ export function ExternalQuizPlayerPanel({
                 {questions.map((question, idx) => {
                   const userAns = question.userAnswer ?? displayedAttempt?.answers?.[question.id];
                   const correct = question.isCorrect;
+                  const showGroupBanner = shouldRenderGroupBanner(questions, idx);
+                  const reviewOpts = question.options?.length ? question.options : (question.linkedOptions ?? []);
                   return (
-                    <div
-                      key={question.id}
-                      className="rounded-xl border border-[#e3d4c5] bg-white p-4 dark:border-[#2c3a52] dark:bg-[#0b172b]"
-                    >
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <span className="text-xs font-black text-[#ad2033] dark:text-[#f08d9c]">Câu {idx + 1}</span>
-                        {typeof correct === 'boolean' ? (
-                          <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-black ${
-                            correct
-                              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
-                              : 'bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300'
-                          }`}>
-                            {correct ? <FiCheckCircle /> : <FiXCircle />}
-                            {correct ? 'Đúng' : 'Sai'}
-                          </span>
-                        ) : null}
-                      </div>
-                      <div className="mt-2 text-[#18243b] dark:text-slate-100">
-                        <RichMathText value={question.prompt} />
-                      </div>
-                      <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
-                        <div className="rounded-lg bg-slate-50 p-2.5 dark:bg-[#101e33]">
-                          <span className="font-bold text-slate-500">Bạn chọn: </span>
-                          <span className="font-bold text-slate-900 dark:text-slate-100">
-                            {formatDisplayAnswer(userAns, question)}
-                          </span>
+                    <div key={question.id} className="space-y-2">
+                      {showGroupBanner ? (
+                        <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3.5 text-xs dark:border-emerald-900/50 dark:bg-emerald-950/25">
+                          <p className="font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
+                            {question.linkedOptions?.length ? 'Ngữ cảnh & Kho lựa chọn' : 'Bài đọc / Ngữ cảnh chung'}
+                          </p>
+                          {question.passageText ? (
+                            <div className="mt-1 text-[#18243b] dark:text-slate-100">
+                              <RichMathText value={question.passageText} />
+                            </div>
+                          ) : null}
+                          {question.linkedOptions && question.linkedOptions.length > 0 ? (
+                            <div className="mt-2 flex flex-wrap gap-1.5">
+                              {question.linkedOptions.map((opt, oIdx) => (
+                                <span
+                                  key={optionValue(opt, oIdx)}
+                                  className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-emerald-950 dark:border-emerald-800 dark:bg-[#0b172b] dark:text-emerald-200"
+                                >
+                                  <strong className="text-emerald-700 dark:text-emerald-300">{optionLabel(opt, oIdx)}.</strong>
+                                  <span>{opt.text}</span>
+                                </span>
+                              ))}
+                            </div>
+                          ) : null}
                         </div>
-                        {question.correctAnswer !== undefined ? (
-                          <div className="rounded-lg bg-emerald-50 p-2.5 dark:bg-emerald-950/30">
-                            <span className="font-bold text-emerald-700 dark:text-emerald-300">Đáp án đúng: </span>
-                            <span className="font-bold text-emerald-900 dark:text-emerald-100">
-                              {formatDisplayAnswer(question.correctAnswer, question)}
+                      ) : null}
+                      <div
+                        className="rounded-xl border border-[#e3d4c5] bg-white p-4 dark:border-[#2c3a52] dark:bg-[#0b172b]"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="text-xs font-black text-[#ad2033] dark:text-[#f08d9c]">Câu {idx + 1}</span>
+                          {typeof correct === 'boolean' ? (
+                            <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-black ${
+                              correct
+                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                                : 'bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300'
+                            }`}>
+                              {correct ? <FiCheckCircle /> : <FiXCircle />}
+                              {correct ? 'Đúng' : 'Sai'}
                             </span>
+                          ) : null}
+                        </div>
+                        <div className="mt-2 text-[#18243b] dark:text-slate-100">
+                          <RichMathText value={question.prompt} />
+                        </div>
+                        {reviewOpts.length > 0 ? (
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            {reviewOpts.map((opt, oIdx) => (
+                              <span
+                                key={optionValue(opt, oIdx)}
+                                className="rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-700 dark:border-slate-700 dark:bg-[#101e33] dark:text-slate-300"
+                              >
+                                <strong className="text-[#247d7e] dark:text-[#6ac6bd]">{optionLabel(opt, oIdx)}.</strong> {opt.text}
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
+                        <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
+                          <div className="rounded-lg bg-slate-50 p-2.5 dark:bg-[#101e33]">
+                            <span className="font-bold text-slate-500">Bạn chọn: </span>
+                            <span className="font-bold text-slate-900 dark:text-slate-100">
+                              {formatDisplayAnswer(userAns, question)}
+                            </span>
+                          </div>
+                          {question.correctAnswer !== undefined ? (
+                            <div className="rounded-lg bg-emerald-50 p-2.5 dark:bg-emerald-950/30">
+                              <span className="font-bold text-emerald-700 dark:text-emerald-300">Đáp án đúng: </span>
+                              <span className="font-bold text-emerald-900 dark:text-emerald-100">
+                                {formatDisplayAnswer(question.correctAnswer, question)}
+                              </span>
+                            </div>
+                          ) : null}
+                        </div>
+                        {question.explanation ? (
+                          <div className="mt-3 rounded-xl border border-indigo-200/70 bg-indigo-50/60 p-3 text-xs dark:border-indigo-900/50 dark:bg-indigo-950/25">
+                            <p className="mb-1 font-black text-indigo-700 dark:text-indigo-300">Giải thích</p>
+                            <RichMathText value={question.explanation} />
                           </div>
                         ) : null}
                       </div>
-                      {question.explanation ? (
-                        <div className="mt-3 rounded-xl border border-indigo-200/70 bg-indigo-50/60 p-3 text-xs dark:border-indigo-900/50 dark:bg-indigo-950/25">
-                          <p className="mb-1 font-black text-indigo-700 dark:text-indigo-300">Giải thích</p>
-                          <RichMathText value={question.explanation} />
-                        </div>
-                      ) : null}
                     </div>
                   );
                 })}
@@ -860,25 +1013,7 @@ export function ExternalQuizPlayerPanel({
           ) : null}
 
           <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-            {limitReached ? (
-              <p className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-700 dark:text-amber-300">
-                <FiLock /> Bạn đã dùng hết số lượt làm bài cho phép (ATTEMPT_LIMIT_REACHED).
-              </p>
-            ) : (
-              <button
-                type="button"
-                disabled={starting}
-                onClick={() => void handleStartAttempt(Boolean(displayedAttempt || (quizInfo?.attemptsCount ?? 0) > 0))}
-                className="inline-flex items-center gap-2 rounded-xl bg-[#ad2033] px-5 py-2.5 text-sm font-black text-white shadow-sm transition hover:bg-[#911a2b] disabled:opacity-50"
-              >
-                <FiPlay />
-                {starting
-                  ? 'Đang khởi tạo...'
-                  : (displayedAttempt || (quizInfo?.attemptsCount ?? 0) > 0)
-                    ? 'Làm lại bài kiểm tra'
-                    : 'Bắt đầu làm bài'}
-              </button>
-            )}
+            {startOrRetakeButton}
           </div>
         </div>
       )}

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import {
   FiAlertTriangle,
   FiDownload,
+  FiExternalLink,
   FiFileText,
   FiLock,
   FiRefreshCw,
@@ -218,6 +219,11 @@ export function ExternalFileViewerModal({
     }
   }, [canDownload, downloading, file, profileId, unitId]);
 
+  const handleOpenInNewTab = useCallback(() => {
+    if (!stream || loading) return;
+    learningApi.openStreamBlobInNewTab(stream);
+  }, [loading, stream]);
+
   if (!open || !file) return null;
 
   const isPdf = stream ? isPdfDocument(file, stream.mimeType, stream.fileName) : false;
@@ -252,6 +258,15 @@ export function ExternalFileViewerModal({
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
+            {stream && !loading ? (
+              <button
+                type="button"
+                onClick={handleOpenInNewTab}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-[#247d7e] bg-white px-3.5 py-2 text-xs font-black text-[#247d7e] transition hover:bg-[#eff9f7] dark:bg-[#0b172b] dark:text-[#6ac6bd]"
+              >
+                <FiExternalLink /> Mở tab mới
+              </button>
+            ) : null}
             {canDownload ? (
               <button
                 type="button"

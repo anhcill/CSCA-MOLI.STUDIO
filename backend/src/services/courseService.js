@@ -14,7 +14,21 @@ const { CourseApiError } = require("../utils/courseResponses");
 
 const ACTIVE_ENROLLMENT_STATUSES = new Set(["active", "completed"]);
 
-function mergeCourseOwnershipView(base, ownershipInfo, localOwned = false) {
+function mergeCourseOwnershipView(base, ownershipInfo, localOwned = false, { isAdmin = false } = {}) {
+  if (isAdmin) {
+    return {
+      ...base,
+      checkoutReady: base?.checkoutReady !== false,
+      ownershipStatus: "owned",
+      ownershipLabel: ownershipInfo?.owned ? ownershipInfo.label : "Quyền Admin",
+      owned: true,
+      canPurchase: false,
+      blockCode: null,
+      canLaunchCourse: Boolean(ownershipInfo?.canLaunchCourse || ownershipInfo?.courseOfferingId),
+      courseOfferingId: ownershipInfo?.courseOfferingId || null,
+      ssoTargetPath: ownershipInfo?.ssoTargetPath || null,
+    };
+  }
   const status = ownershipInfo && ownershipInfo.status !== "not_owned"
     ? ownershipInfo.status
     : (localOwned ? "owned" : "not_owned");
@@ -186,10 +200,17 @@ async function listCatalog(query, user) {
   const page = Math.max(1, Number.parseInt(query.page, 10) || 1);
   const limit = Math.min(50, Math.max(1, Number.parseInt(query.pageSize ?? query.limit, 10) || 12));
   const rows = await repository.listPublished({ userId: user?.id || null, subjectCode, accessType, page, limit });
+  const isAdminUser = String(user?.role || "").toLowerCase() === "admin";
   const ownershipByCourseId = await loadCourseOwnershipMap(user?.id || null, rows.map((r) => r.id));
   const total = toFiniteNumber(rows[0]?.total_count);
   return {
-    items: rows.map((r) => mergeCourseOwnershipView(mapCatalogItem(r), ownershipByCourseId.get(Number(r.id)), Boolean(r.enrollment_id))), page, pageSize: limit,
+    items: rows.map((r) =>
+      mergeCourseOwnershipView(
+        mapCatalogItem(r),
+        ownershipByCourseId.get(Number(r.id)),
+        Boolean(r.enrollment_id),
+        { isAdmin: isAdminUser },
+      )), page, pageSize: limit,
     totalItems: total, totalPages: Math.ceil(total / limit),
   };
 }
@@ -298,12 +319,14 @@ async function getCourseLanding(slug, user, options = {}) {
   ]);
   const videoEntitlement = user ? await videoAccess.find(user.id, row.id) : null;
   const access = accessView(user, row, enrollment, packageEntitlement, videoEntitlement);
+  const isAdminUser = String(user?.role || "").toLowerCase() === "admin";
   const ownershipInfo = (await loadCourseOwnershipMap(user?.id || null, [row.id], {
     refreshFromCourse: Boolean(user && isExternalOrigin),
   })).get(Number(row.id)) || null;
-  const effectiveCanLearn = isExternalOrigin
-    ? Boolean(access.canLearn || (ownershipInfo?.owned && ownershipInfo?.canLaunchCourse))
-    : access.canLearn;
+  const effectiveCanLearn = isAdminUser
+    || (isExternalOrigin
+      ? Boolean(access.canLearn || (ownershipInfo?.owned && ownershipInfo?.canLaunchCourse))
+      : access.canLearn);
 
   let totalLessons = toFiniteNumber(progressRow?.required_lessons);
   let completedLessons = toFiniteNumber(progressRow?.completed_lessons);
@@ -382,7 +405,7 @@ async function getCourseLanding(slug, user, options = {}) {
             : access.canEnroll
               ? "Đăng ký học"
               : "Xem quyền truy cập",
-      }, ownershipInfo, effectiveCanLearn),
+      }, ownershipInfo, effectiveCanLearn, { isAdmin: isAdminUser }),
     },
     curriculum: detailCurriculum,
   };

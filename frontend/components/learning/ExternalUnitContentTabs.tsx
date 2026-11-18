@@ -10,6 +10,7 @@ import {
   FiClock,
   FiCpu,
   FiDownload,
+  FiExternalLink,
   FiEye,
   FiFileText,
   FiHelpCircle,
@@ -35,6 +36,7 @@ import { ExternalFileViewerModal } from './ExternalFileViewerModal';
 import { ExternalNotesBookmarksPanel } from './ExternalNotesBookmarksPanel';
 import { ExternalQaPanel } from './ExternalQaPanel';
 import { ExternalQuizPlayerPanel } from './ExternalQuizPlayerPanel';
+import { ExternalVocabFlashcardDeck } from './ExternalVocabFlashcardDeck';
 
 export type ExternalTabId =
   | 'theory'
@@ -53,6 +55,7 @@ interface Props {
   unitParamId: string;
   ssoTargetPath: string | null;
   unit: ExternalUnitDetailDto | null;
+  unitSummary?: ExternalWorkspaceUnitSummaryDto | null;
   capabilities: ExternalWorkspaceCapabilitiesDto;
   isPublicPreviewAccess: boolean;
   units: ExternalWorkspaceUnitSummaryDto[];
@@ -183,6 +186,7 @@ export function ExternalUnitContentTabs({
   unitParamId,
   ssoTargetPath,
   unit,
+  unitSummary = null,
   capabilities,
   isPublicPreviewAccess,
   units,
@@ -197,9 +201,11 @@ export function ExternalUnitContentTabs({
   onAssignmentSubmitted,
 }: Props) {
   const [activeTab, setActiveTab] = useState<ExternalTabId>('theory');
+  const [vocabMode, setVocabMode] = useState<'list' | 'flashcard'>('list');
   const [playingVocabId, setPlayingVocabId] = useState<string | null>(null);
   const [viewerFile, setViewerFile] = useState<ExternalUnitFileDto | null>(null);
   const [downloadingFileId, setDownloadingFileId] = useState<string | null>(null);
+  const [openingNewTabFileId, setOpeningNewTabFileId] = useState<string | null>(null);
   const [fileDownloadError, setFileDownloadError] = useState('');
   const [notesCount, setNotesCount] = useState<number>(unit?.notes?.length ?? 0);
   const [bookmarksCount, setBookmarksCount] = useState<number>(unit?.bookmarks?.length ?? 0);
@@ -220,12 +226,32 @@ export function ExternalUnitContentTabs({
 
   useEffect(() => {
     setActiveTab('theory');
+    setVocabMode('list');
     setViewerFile(null);
     setFileDownloadError('');
     setNotesCount(unit?.notes?.length ?? 0);
     setBookmarksCount(unit?.bookmarks?.length ?? 0);
     setQaSummary({ total: unit?.qaThreads?.length ?? 0, unread: 0 });
   }, [activeUnitProjectionId, unit?.bookmarks?.length, unit?.notes?.length, unit?.qaThreads?.length]);
+
+  const handleOpenNewTab = async (file: ExternalUnitFileDto) => {
+    if (!profileId || openingNewTabFileId) return;
+    try {
+      setOpeningNewTabFileId(file.id);
+      setFileDownloadError('');
+      await learningApi.openExternalFileInNewTab({
+        profileId,
+        unitId: unitParamId,
+        fileId: file.id,
+        fallbackFileName: file.fileName,
+      });
+    } catch (err) {
+      const parsed = parseExternalApiError(err, 'Không thể mở tài liệu trong tab mới.');
+      setFileDownloadError(parsed.message);
+    } finally {
+      setOpeningNewTabFileId(null);
+    }
+  };
 
   useEffect(() => {
     if (requestedTab) {
@@ -280,12 +306,21 @@ export function ExternalUnitContentTabs({
     void audio.play().catch(() => setPlayingVocabId(null));
   };
 
+  const resolvedSummary = unitSummary || units.find((u) => u.unitProjectionId === activeUnitProjectionId) || null;
+  const isLockedUnit = Boolean(unit?.isLocked);
+  const vocabBadgeCount = isLockedUnit ? (resolvedSummary?.vocabCount ?? vocabulary.length) : vocabulary.length;
+  const formulaBadgeCount = isLockedUnit ? (resolvedSummary?.formulaCount ?? formulas.length) : formulas.length;
+  const fileBadgeCount = isLockedUnit ? (resolvedSummary?.fileCount ?? files.length) : files.length;
+  const assessBadgeCount = isLockedUnit
+    ? ((resolvedSummary?.quizCount ?? 0) + (resolvedSummary?.assignmentCount ?? 0))
+    : (quizzes.length + assignments.length);
+
   const tabs: Array<{ id: ExternalTabId; label: string; icon: typeof FiBookOpen; badge?: number }> = [
     { id: 'theory', label: 'Lý thuyết & Transcript', icon: FiBookOpen },
-    { id: 'vocabulary', label: `Từ vựng (${vocabulary.length})`, icon: FiLayers },
-    { id: 'formulas', label: `Công thức (${formulas.length})`, icon: FiCpu },
-    { id: 'files', label: `Tài liệu (${files.length})`, icon: FiFileText },
-    { id: 'assessments', label: `Quiz & Bài tập (${quizzes.length + assignments.length})`, icon: FiCheckCircle },
+    { id: 'vocabulary', label: `Từ vựng (${vocabBadgeCount})`, icon: FiLayers },
+    { id: 'formulas', label: `Công thức (${formulaBadgeCount})`, icon: FiCpu },
+    { id: 'files', label: `Tài liệu (${fileBadgeCount})`, icon: FiFileText },
+    { id: 'assessments', label: `Quiz & Bài tập (${assessBadgeCount})`, icon: FiCheckCircle },
     { id: 'notes', label: `Ghi chú (${notesCount + bookmarksCount})`, icon: FiBookmark },
     { id: 'qa', label: `Hỏi đáp (${qaSummary.total})`, icon: FiHelpCircle, badge: qaSummary.unread },
     { id: 'curriculum', label: `Danh sách bài (${units.length})`, icon: FiList },
@@ -400,53 +435,93 @@ export function ExternalUnitContentTabs({
         ) : null}
 
         {activeTab === 'vocabulary' ? (
-          vocabulary.length ? (
-            <div className="grid gap-4 sm:grid-cols-2">
-              {vocabulary.map((item, idx) => {
-                const key = item.id || `${item.term}-${idx}`;
-                const audioSafe = isSafeHttpOrRelativeUrl(item.audioUrl);
-                return (
-                  <div key={key} className="rounded-xl border border-[#dfd0c2] bg-[#fffdf9] p-4 shadow-sm dark:border-[#334159] dark:bg-[#101e33]">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-xl font-black text-[#18243b] dark:text-white">{item.term}</p>
-                        {item.pinyin ? <p className="text-xs font-bold text-[#247d7e] dark:text-[#6ac6bd]">{item.pinyin}</p> : null}
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        {item.partOfSpeech ? (
-                          <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                            {item.partOfSpeech}
-                          </span>
+          isLockedUnit ? (
+            <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs font-bold text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+              Bài học này đang bị khóa theo trình tự ({vocabBadgeCount} từ vựng). Hoàn thành bài học trước để mở khóa danh sách từ vựng và Flashcard.
+            </p>
+          ) : vocabulary.length ? (
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs font-bold text-[#6f665f] dark:text-slate-400">
+                  Tổng cộng {vocabulary.length} từ vựng trong buổi học này
+                </p>
+                <div className="inline-flex rounded-xl border border-[#dfd0c2] bg-[#fffdf9] p-1 dark:border-[#34435a] dark:bg-[#101e33]">
+                  <button
+                    type="button"
+                    onClick={() => setVocabMode('list')}
+                    className={`rounded-lg px-3 py-1.5 text-xs font-black transition ${
+                      vocabMode === 'list'
+                        ? 'bg-[#ad2033] text-white'
+                        : 'text-[#6f665f] hover:text-[#18243b] dark:text-slate-300'
+                    }`}
+                  >
+                    Danh sách từ
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setVocabMode('flashcard')}
+                    className={`rounded-lg px-3 py-1.5 text-xs font-black transition ${
+                      vocabMode === 'flashcard'
+                        ? 'bg-[#247d7e] text-white'
+                        : 'text-[#6f665f] hover:text-[#18243b] dark:text-slate-300'
+                    }`}
+                  >
+                    Học Flashcard
+                  </button>
+                </div>
+              </div>
+
+              {vocabMode === 'flashcard' ? (
+                <ExternalVocabFlashcardDeck vocabulary={vocabulary} />
+              ) : (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {vocabulary.map((item, idx) => {
+                    const key = item.id || `${item.term}-${idx}`;
+                    const audioSafe = isSafeHttpOrRelativeUrl(item.audioUrl);
+                    return (
+                      <div key={key} className="rounded-xl border border-[#dfd0c2] bg-[#fffdf9] p-4 shadow-sm dark:border-[#334159] dark:bg-[#101e33]">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-xl font-black text-[#18243b] dark:text-white">{item.term}</p>
+                            {item.pinyin ? <p className="text-xs font-bold text-[#247d7e] dark:text-[#6ac6bd]">{item.pinyin}</p> : null}
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            {item.partOfSpeech ? (
+                              <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                                {item.partOfSpeech}
+                              </span>
+                            ) : null}
+                            {audioSafe ? (
+                              <button
+                                type="button"
+                                onClick={() => playVocabAudio(key, audioSafe)}
+                                className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border transition ${
+                                  playingVocabId === key
+                                    ? 'border-[#247d7e] bg-[#247d7e] text-white'
+                                    : 'border-[#d8c8b9] text-[#247d7e] hover:bg-[#eff9f7] dark:border-[#34435a]'
+                                }`}
+                                aria-label={`Nghe phát âm ${item.term}`}
+                              >
+                                <FiVolume2 />
+                              </button>
+                            ) : null}
+                          </div>
+                        </div>
+                        {item.sinoVietnamese ? (
+                          <p className="mt-1 text-xs font-bold text-amber-700 dark:text-amber-300">Hán Việt: {item.sinoVietnamese}</p>
                         ) : null}
-                        {audioSafe ? (
-                          <button
-                            type="button"
-                            onClick={() => playVocabAudio(key, audioSafe)}
-                            className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border transition ${
-                              playingVocabId === key
-                                ? 'border-[#247d7e] bg-[#247d7e] text-white'
-                                : 'border-[#d8c8b9] text-[#247d7e] hover:bg-[#eff9f7] dark:border-[#34435a]'
-                            }`}
-                            aria-label={`Nghe phát âm ${item.term}`}
-                          >
-                            <FiVolume2 />
-                          </button>
+                        <p className="mt-2 font-semibold text-[#2a364e] dark:text-slate-200">{item.meaning}</p>
+                        {item.exampleSentence ? (
+                          <div className="mt-3 border-t border-[#efe4d8] pt-2 text-xs dark:border-[#26354b]">
+                            <p className="font-semibold text-[#1e2b44] dark:text-slate-200">{item.exampleSentence}</p>
+                            {item.exampleMeaning ? <p className="text-[#6f665f] dark:text-slate-400">{item.exampleMeaning}</p> : null}
+                          </div>
                         ) : null}
                       </div>
-                    </div>
-                    {item.sinoVietnamese ? (
-                      <p className="mt-1 text-xs font-bold text-amber-700 dark:text-amber-300">Hán Việt: {item.sinoVietnamese}</p>
-                    ) : null}
-                    <p className="mt-2 font-semibold text-[#2a364e] dark:text-slate-200">{item.meaning}</p>
-                    {item.exampleSentence ? (
-                      <div className="mt-3 border-t border-[#efe4d8] pt-2 text-xs dark:border-[#26354b]">
-                        <p className="font-semibold text-[#1e2b44] dark:text-slate-200">{item.exampleSentence}</p>
-                        {item.exampleMeaning ? <p className="text-[#6f665f] dark:text-slate-400">{item.exampleMeaning}</p> : null}
-                      </div>
-                    ) : null}
-                  </div>
-                );
-              })}
+                    );
+                  })}
+                </div>
+              )}
             </div>
           ) : (
             <p className="text-slate-500 dark:text-slate-400">Chưa có từ vựng nào cho bài học này.</p>
@@ -555,13 +630,23 @@ export function ExternalUnitContentTabs({
 
                       <div className="flex flex-wrap items-center gap-2">
                         {fileCanView ? (
-                          <button
-                            type="button"
-                            onClick={() => setViewerFile(file)}
-                            className="inline-flex items-center gap-1.5 rounded-xl bg-[#247d7e] px-3.5 py-2 text-xs font-black text-white shadow-sm transition hover:bg-[#1b6465]"
-                          >
-                            <FiEye /> Xem tài liệu
-                          </button>
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => setViewerFile(file)}
+                              className="inline-flex items-center gap-1.5 rounded-xl bg-[#247d7e] px-3.5 py-2 text-xs font-black text-white shadow-sm transition hover:bg-[#1b6465]"
+                            >
+                              <FiEye /> Xem tài liệu
+                            </button>
+                            <button
+                              type="button"
+                              disabled={openingNewTabFileId === file.id}
+                              onClick={() => void handleOpenNewTab(file)}
+                              className="inline-flex items-center gap-1.5 rounded-xl border border-[#247d7e] bg-white px-3.5 py-2 text-xs font-black text-[#247d7e] transition hover:bg-[#eff9f7] disabled:opacity-50 dark:bg-[#0b172b] dark:text-[#6ac6bd]"
+                            >
+                              <FiExternalLink /> {openingNewTabFileId === file.id ? 'Đang mở...' : 'Mở tab mới'}
+                            </button>
+                          </>
                         ) : (
                           <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-400">
                             <FiLock /> {isPublicPreviewAccess ? 'Mở khóa để xem' : 'Không cho phép xem'}

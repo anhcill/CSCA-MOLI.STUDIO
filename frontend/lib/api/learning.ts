@@ -39,12 +39,24 @@ export function generateIdempotencyKey(): string {
   return `idem-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 }
 
+interface GroupQuestionContext {
+  groupId?: string | number | null;
+  groupKind?: string | null;
+  groupType?: string | null;
+  passageText?: string;
+  passageTextCn?: string | null;
+  passageImageUrl?: string | null;
+  clozeMode?: string | null;
+  linkedOptions?: Array<{ key?: string; id?: string; label?: string; text: string }>;
+}
+
 function normalizeQuizQuestionEntry(
   rawEntry: Record<string, unknown>,
   fallbackIndex: number,
-  groupPassage?: string,
+  groupCtx?: GroupQuestionContext,
 ): ExternalQuizQuestionDto {
   const rawId = rawEntry.id ?? rawEntry.questionId ?? rawEntry.question_id;
+  const groupPassage = groupCtx?.passageText;
   const prompt = String(
     rawEntry.prompt
     ?? rawEntry.questionText
@@ -61,6 +73,11 @@ function normalizeQuizQuestionEntry(
     : typeof rawEntry.passage_text === 'string'
       ? rawEntry.passage_text
       : undefined;
+  const rawOpts = Array.isArray(rawEntry.options) ? rawEntry.options : [];
+  const rawLinked = Array.isArray(rawEntry.linkedOptions)
+    ? rawEntry.linkedOptions
+    : (Array.isArray(groupCtx?.linkedOptions) ? groupCtx.linkedOptions : []);
+  const effectiveOptions = rawOpts.length > 0 ? rawOpts : rawLinked;
 
   return {
     ...(rawEntry as unknown as ExternalQuizQuestionDto),
@@ -71,8 +88,30 @@ function normalizeQuizQuestionEntry(
       : typeof rawEntry.question_text === 'string'
         ? rawEntry.question_text
         : prompt,
+    options: effectiveOptions as ExternalQuizQuestionDto['options'],
+    ...(rawLinked.length > 0
+      ? { linkedOptions: rawLinked as ExternalQuizQuestionDto['linkedOptions'] }
+      : {}),
+    ...(rawEntry.groupId !== undefined || groupCtx?.groupId !== undefined
+      ? { groupId: (rawEntry.groupId ?? groupCtx?.groupId) as string | number | null }
+      : {}),
+    ...(rawEntry.groupKind || groupCtx?.groupKind
+      ? { groupKind: String(rawEntry.groupKind || groupCtx?.groupKind) }
+      : {}),
+    ...(rawEntry.groupType || groupCtx?.groupType
+      ? { groupType: String(rawEntry.groupType || groupCtx?.groupType) }
+      : {}),
     ...(existingPassage || groupPassage
       ? { passageText: existingPassage ?? groupPassage }
+      : {}),
+    ...(rawEntry.passageTextCn !== undefined || groupCtx?.passageTextCn !== undefined
+      ? { passageTextCn: (rawEntry.passageTextCn ?? groupCtx?.passageTextCn ?? null) as string | null }
+      : {}),
+    ...(rawEntry.passageImageUrl !== undefined || groupCtx?.passageImageUrl !== undefined
+      ? { passageImageUrl: (rawEntry.passageImageUrl ?? groupCtx?.passageImageUrl ?? null) as string | null }
+      : {}),
+    ...(rawEntry.clozeMode !== undefined || groupCtx?.clozeMode !== undefined
+      ? { clozeMode: (rawEntry.clozeMode ?? groupCtx?.clozeMode ?? null) as string | null }
       : {}),
     ...(userAnswer !== undefined
       ? { userAnswer: userAnswer as ExternalQuizQuestionDto['userAnswer'] }
@@ -97,12 +136,27 @@ function flattenExternalQuizItems(rawItems: unknown): ExternalQuizQuestionDto[] 
         : typeof obj.groupTitle === 'string'
           ? obj.groupTitle
           : undefined;
+    const groupLinked = Array.isArray(obj.linkedOptions)
+      ? obj.linkedOptions
+      : Array.isArray(obj.linked_options)
+        ? obj.linked_options
+        : [];
+    const groupCtx: GroupQuestionContext = {
+      groupId: (obj.id ?? obj.groupId ?? null) as string | number | null,
+      groupKind: typeof obj.kind === 'string' ? obj.kind : null,
+      groupType: typeof obj.groupType === 'string' ? obj.groupType : null,
+      passageText: groupPassage,
+      passageTextCn: typeof obj.passageTextCn === 'string' ? obj.passageTextCn : null,
+      passageImageUrl: typeof obj.passageImageUrl === 'string' ? obj.passageImageUrl : null,
+      clozeMode: typeof obj.clozeMode === 'string' ? obj.clozeMode : null,
+      linkedOptions: groupLinked as GroupQuestionContext['linkedOptions'],
+    };
 
     if (Array.isArray(obj.questions)) {
       for (const sub of obj.questions) {
         if (!sub || typeof sub !== 'object') continue;
         flattened.push(
-          normalizeQuizQuestionEntry(sub as Record<string, unknown>, flattened.length, groupPassage),
+          normalizeQuizQuestionEntry(sub as Record<string, unknown>, flattened.length, groupCtx),
         );
       }
       continue;
@@ -579,6 +633,69 @@ export const learningApi = {
     return result.fileName || fallbackFileName;
   },
 
+  openStreamBlobInNewTab(stream: ExternalFileStreamResult, targetWindow?: Window | null): void {
+    const mime = stream.mimeType || 'application/octet-stream';
+    const blob = new Blob([stream.data], { type: mime });
+    const objectUrl = URL.createObjectURL(blob);
+    const win = targetWindow && !targetWindow.closed ? targetWindow : window.open(objectUrl, '_blank');
+    if (win) {
+      try {
+        if (targetWindow && !targetWindow.closed) {
+          win.location.replace(objectUrl);
+        }
+      } catch {
+        window.open(objectUrl, '_blank', 'noopener,noreferrer');
+      }
+    } else {
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    }
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+  },
+
+  async openExternalFileInNewTab({
+    profileId,
+    unitId,
+    fileId,
+    fallbackFileName = 'document',
+  }: {
+    profileId: string;
+    unitId: string | number;
+    fileId: string | number;
+    fallbackFileName?: string;
+  }): Promise<void> {
+    const popup = typeof window !== 'undefined' ? window.open('about:blank', '_blank') : null;
+    if (popup && !popup.closed) {
+      try {
+        popup.document.title = `Đang mở ${fallbackFileName}...`;
+        popup.document.body.innerHTML =
+          '<div style="font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:95vh;color:#1e2b44;font-weight:700;">Đang tải tài liệu bảo mật...</div>';
+      } catch {
+        // Ignore cross-origin styling restrictions
+      }
+    }
+    try {
+      const stream = await this.fetchExternalFileStream({
+        profileId,
+        unitId,
+        fileId,
+        disposition: 'inline',
+        fallbackFileName,
+      });
+      this.openStreamBlobInNewTab(stream, popup);
+    } catch (err) {
+      if (popup && !popup.closed) {
+        popup.close();
+      }
+      throw err;
+    }
+  },
+
   async getExternalQuizDetail({
     profileId,
     unitId,
@@ -603,22 +720,29 @@ export const learningApi = {
       ? raw.attemptsCount
       : typeof quizObj.attemptsUsed === 'number'
         ? quizObj.attemptsUsed
-        : typeof raw.attemptCount === 'number'
-          ? raw.attemptCount
-          : attempts.length;
-    const maxAttemptsRaw = raw.maxAttempts ?? quizObj.maxAttempts;
+        : typeof quizObj.attemptsCount === 'number'
+          ? quizObj.attemptsCount
+          : typeof raw.attemptCount === 'number'
+            ? raw.attemptCount
+            : attempts.length;
+    const isAdminBypass = raw.isAdminBypass === true;
+    const maxAttemptsRaw = isAdminBypass
+      ? null
+      : (raw.maxAttempts ?? quizObj.maxAttempts ?? quizObj.attemptLimit);
     const maxAttempts = typeof maxAttemptsRaw === 'number' ? maxAttemptsRaw : null;
-    const attemptsRemaining = typeof raw.attemptsRemaining === 'number'
-      ? raw.attemptsRemaining
-      : maxAttempts !== null
-        ? Math.max(0, maxAttempts - attemptsCount)
-        : null;
+    const attemptsRemaining = isAdminBypass
+      ? null
+      : typeof raw.attemptsRemaining === 'number'
+        ? raw.attemptsRemaining
+        : maxAttempts !== null
+          ? Math.max(0, maxAttempts - attemptsCount)
+          : null;
     const activeAttempt = (raw.activeAttempt as ExternalQuizAttemptDto | null | undefined) ?? null;
     const latestAttempt = (raw.latestAttempt as ExternalQuizAttemptDto | null | undefined)
       ?? (attempts[0] ?? null);
     const canStartAttempt = typeof raw.canStartAttempt === 'boolean'
       ? raw.canStartAttempt
-      : attemptsRemaining === null || attemptsRemaining > 0 || activeAttempt !== null;
+      : isAdminBypass || attemptsRemaining === null || attemptsRemaining > 0 || activeAttempt !== null;
     const canViewSolution = (raw.canViewSolution as boolean | undefined)
       ?? (quizObj.canViewSolution as boolean | undefined);
     const normalizedQuiz: ExternalUnitQuizDto = {

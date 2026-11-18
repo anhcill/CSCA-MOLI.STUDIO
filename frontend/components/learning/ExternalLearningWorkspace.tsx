@@ -1125,6 +1125,7 @@ export function ExternalLearningWorkspace({
               unitParamId={unitParamId}
               ssoTargetPath={workspace.course.ssoTargetPath}
               unit={activeUnit}
+              unitSummary={navContext.activeUnitSummary ?? null}
               capabilities={workspace.profile.capabilities || {}}
               isPublicPreviewAccess={workspace.isPublicPreviewAccess}
               units={workspace.units}

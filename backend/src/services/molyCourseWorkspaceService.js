@@ -334,6 +334,26 @@ function createMolyCourseWorkspaceService({
       return { authenticated: false, entitled: false, blockCode: "AUTH_REQUIRED", ownershipInfo: null };
     }
 
+    const isAdminUser = ["admin", "creator"].includes(String(user.role || "").toLowerCase());
+    if (isAdminUser) {
+      let adminOwnershipInfo = null;
+      if (ownership && typeof ownership.evaluateCoursesForUser === "function") {
+        const map = await ownership.evaluateCoursesForUser(uid, [Number(localCourseId)]).catch(() => null);
+        adminOwnershipInfo = map?.get(Number(localCourseId)) || null;
+      }
+      return {
+        authenticated: true,
+        entitled: true,
+        isAdmin: true,
+        blockCode: null,
+        ownershipInfo: {
+          ...(adminOwnershipInfo || {}),
+          owned: true,
+          canLaunchCourse: true,
+        },
+      };
+    }
+
     if (ownership && typeof ownership.evaluateCoursesForUser === "function") {
       const map = await ownership.evaluateCoursesForUser(uid, [Number(localCourseId)]);
       const info = map.get(Number(localCourseId)) || null;
@@ -386,7 +406,13 @@ function createMolyCourseWorkspaceService({
     };
   }
 
-  function formatSidebarUnits(unitRows, courseSlug, remoteProfileId, liveUnits = null, { isPreviewAccess = false } = {}) {
+  function formatSidebarUnits(
+    unitRows,
+    courseSlug,
+    remoteProfileId,
+    liveUnits = null,
+    { isPreviewAccess = false, bypassLock = false } = {},
+  ) {
     const liveByKey = new Map();
     if (Array.isArray(liveUnits)) {
       for (const lu of liveUnits) {
@@ -417,10 +443,10 @@ function createMolyCourseWorkspaceService({
         href,
         isPublished: u.is_published === true,
         isPublicPreview,
-        isLocked: live ? Boolean(live.isLocked) : (isPreviewAccess ? !isPublicPreview : false),
+        isLocked: bypassLock ? false : (live ? Boolean(live.isLocked) : (isPreviewAccess ? !isPublicPreview : false)),
         isCompleted: live ? Boolean(live.isCompleted) : false,
         watchedPercent: live ? Number(live.watchedPercent ?? live.progressPercent ?? 0) : 0,
-        lockReason: live ? (live.lockReason || null) : (isPreviewAccess && !isPublicPreview ? "Học thử chỉ mở các bài được đánh dấu công khai." : null),
+        lockReason: bypassLock ? null : (live ? (live.lockReason || null) : (isPreviewAccess && !isPublicPreview ? "Học thử chỉ mở các bài được đánh dấu công khai." : null)),
         videoPartCount: Number(u.video_part_count || 0),
         hasTheory: Boolean(u.has_theory),
         vocabCount: Number(u.vocab_count || 0),
@@ -432,12 +458,13 @@ function createMolyCourseWorkspaceService({
     });
   }
 
-  function buildCacheKey(userId, remoteProfileId, deviceTokenHash = null) {
-    return `${userId}:${remoteProfileId}:${deviceTokenHash || "none"}`;
+  function buildCacheKey(userId, remoteProfileId, deviceTokenHash = null, role = null) {
+    return `${userId}:${String(role || "student").toLowerCase()}:${remoteProfileId}:${deviceTokenHash || "none"}`;
   }
 
-  function resolveUserScopes(profileRow) {
-    return profileRow.allow_file_download === true
+  function resolveUserScopes(profileRow, user = null) {
+    const isAdminUser = ["admin", "creator"].includes(String(user?.role || "").toLowerCase());
+    return isAdminUser || profileRow.allow_file_download === true
       ? [...ALLOWED_CLIENT_DELEGATED_SCOPES]
       : ALLOWED_CLIENT_DELEGATED_SCOPES.filter((scope) => scope !== "file:download");
   }
@@ -481,9 +508,10 @@ function createMolyCourseWorkspaceService({
     if (!client || typeof client.mintDelegatedLearningSession !== "function") {
       throw new CourseApiError(503, "COURSE_CLIENT_UNAVAILABLE", "Dịch vụ học tập liên kết tạm thời không khả dụng.");
     }
-    const scopes = resolveUserScopes(profileRow);
+    const isAdminUser = ["admin", "creator"].includes(String(user?.role || "").toLowerCase());
+    const scopes = resolveUserScopes(profileRow, user);
     const externalUserId = `moly:${user.id}`;
-    const deviceSlotProof = tryBuildDeviceProofHeader({ deviceCtx, externalUserId });
+    const deviceSlotProof = isAdminUser ? null : tryBuildDeviceProofHeader({ deviceCtx, externalUserId });
     const clientIp = deviceCtx?.ipAddress || extractClientIp(req);
     const userAgent = deviceCtx?.userAgent || extractUserAgent(req);
     let minted;
@@ -494,6 +522,7 @@ function createMolyCourseWorkspaceService({
         profileId: String(profileRow.remote_profile_id),
         scopes,
         ttlSeconds: 240,
+        ...(isAdminUser ? { actorRole: String(user.role).toLowerCase(), actorEmail: user.email || null } : {}),
         ...(deviceSlotProof ? { deviceSlotProof } : {}),
         ...(clientIp ? { clientIp } : {}),
         ...(userAgent ? { userAgent } : {}),
@@ -503,7 +532,7 @@ function createMolyCourseWorkspaceService({
       throw mapUpstreamError(err);
     }
 
-    const cacheKey = buildCacheKey(user.id, profileRow.remote_profile_id, deviceCtx?.deviceTokenHash || null);
+    const cacheKey = buildCacheKey(user.id, profileRow.remote_profile_id, deviceCtx?.deviceTokenHash || null, user.role);
     const parsedExp = minted?.expiresAt ? Date.parse(minted.expiresAt) : NaN;
     delegatedSessionCache.set(cacheKey, {
       sessionToken: minted.sessionToken,
@@ -522,8 +551,8 @@ function createMolyCourseWorkspaceService({
     correlationId,
     forceRefresh = false,
   }) {
-    const cacheKey = buildCacheKey(user.id, profileRow.remote_profile_id, deviceCtx?.deviceTokenHash || null);
-    const scopesKey = resolveUserScopes(profileRow).join(",");
+    const cacheKey = buildCacheKey(user.id, profileRow.remote_profile_id, deviceCtx?.deviceTokenHash || null, user?.role);
+    const scopesKey = resolveUserScopes(profileRow, user).join(",");
     const cached = !forceRefresh ? delegatedSessionCache.get(cacheKey) : null;
     if (
       cached
@@ -569,7 +598,7 @@ function createMolyCourseWorkspaceService({
       if (!shouldRetry) {
         throw mapUpstreamError(err);
       }
-      const cacheKey = buildCacheKey(user.id, profileRow.remote_profile_id, deviceCtx?.deviceTokenHash || null);
+      const cacheKey = buildCacheKey(user.id, profileRow.remote_profile_id, deviceCtx?.deviceTokenHash || null, user?.role);
       delegatedSessionCache.delete(cacheKey);
       const refreshed = await getOrMintDelegatedSession({
         user,
@@ -646,7 +675,9 @@ function createMolyCourseWorkspaceService({
         throw mapUpstreamError(err);
       }
 
-      const sidebarUnits = formatSidebarUnits(unitRows, courseRow.slug, remoteProfileId, liveWs?.units || null);
+      const sidebarUnits = formatSidebarUnits(unitRows, courseRow.slug, remoteProfileId, liveWs?.units || null, {
+        bypassLock: Boolean(access.isAdmin),
+      });
       const activeRemoteId = liveWs?.activeUnit?.id != null
         ? String(liveWs.activeUnit.id)
         : (requestedUnit ? String(requestedUnit.remote_unit_id) : null);

@@ -768,6 +768,7 @@ export interface ExternalUnitQuizDto {
   durationMinutes?: number | null;
   passingScore?: number | null;
   attemptsCount?: number;
+  attemptsUsed?: number;
   attemptLimit?: number | null;
   isCompleted?: boolean;
   bestScore?: number | null;
@@ -775,6 +776,7 @@ export interface ExternalUnitQuizDto {
   reviewPolicy?: ExternalQuizReviewPolicy | null;
   canViewSolution?: boolean;
   hasSolution?: boolean;
+  paperFileId?: string | null;
   solutionFileId?: string | null;
   embargoUntil?: string | null;
 }
@@ -900,6 +902,7 @@ export interface ExternalWorkspaceCapabilitiesDto {
   deviceLimit?: number;
   enforceTrustedDevices?: boolean;
   isPublicPreviewAccess?: boolean;
+  isAdmin?: boolean;
 }
 
 export interface ExternalWorkspaceSourceClassDto {
@@ -1063,24 +1066,37 @@ export type ExternalQuizQuestionType =
   | 'single_choice'
   | 'multiple_choice'
   | 'true_false'
+  | 'reading_item'
+  | 'fill_blank_item'
   | 'fill_blank'
   | 'short_answer'
   | 'essay'
+  | 'translation'
   | string;
 
 export interface ExternalQuizQuestionDto {
   id: string;
   questionId?: string;
   sortOrder?: number;
+  groupId?: string | number | null;
+  groupKind?: string | null;
+  groupType?: string | null;
+  passageText?: string | null;
+  passageTextCn?: string | null;
+  passageImageUrl?: string | null;
+  clozeMode?: string | null;
+  linkedOptions?: ExternalQuizOptionDto[];
   questionType: ExternalQuizQuestionType;
   prompt: string;
   questionText?: string;
+  questionTextCn?: string | null;
   promptHtml?: string | null;
   points?: number;
   options?: ExternalQuizOptionDto[];
   correctAnswer?: unknown;
   explanation?: string | null;
   imageUrl?: string | null;
+  explanationImageUrl?: string | null;
   userAnswer?: unknown;
   studentAnswer?: unknown;
   isCorrect?: boolean | null;
@@ -1128,8 +1144,11 @@ export interface ExternalQuizDetailDto {
   attempts?: ExternalQuizAttemptDto[];
   latestAttempt?: ExternalQuizAttemptDto | null;
   latestResult?: ExternalQuizResultDto | null;
+  attemptsCount?: number;
+  maxAttempts?: number | null;
   canStartAttempt?: boolean;
   attemptsRemaining?: number | null;
+  isAdminBypass?: boolean;
   canViewSolution?: boolean;
   reviewPolicy?: ExternalQuizReviewPolicy | null;
   embargoUntil?: string | null;

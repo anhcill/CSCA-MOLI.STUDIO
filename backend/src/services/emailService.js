@@ -894,19 +894,61 @@ class EmailService {
   }
 
   async sendVideoPurchaseEmail({ email, name, order }) {
-    const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
-    const label = order.type === 'combo' ? 'Combo gói và video' : 'Gói video';
-    const formatExpiry = value => value ? new Date(value).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) : 'Không giới hạn';
-    const videoEnd = formatExpiry(order.rights.videoExpiresAt);
-    const lines = [
-      `Xin chào ${name},`, `${label}: ${order.snapshot.name}`,
-      `Mã đơn: ${order.orderId}`, `Số tiền: ${order.amount.toLocaleString('vi-VN')} VND`,
-      `Quyền video: ${order.snapshot.video.name}. Hết hạn: ${videoEnd}.`,
-      ...(order.snapshot.vip ? [`Quyền gói: ${order.snapshot.vip.name}. Hết hạn: ${formatExpiry(order.rights.vipExpiresAt)}.`] : []),
-      'Vào mục Khóa học của tôi để tiếp tục học.',
+    const label = order?.type === 'combo' ? 'Combo gói và video' : 'Gói video';
+    const formatExpiry = value => (value ? new Date(value).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) : 'Không giới hạn');
+    const safeName = this.escapeHtml(name || 'bạn');
+    const packageName = order?.snapshot?.name || order?.snapshot?.video?.name || 'Khóa học video CSCA';
+    const videoName = order?.snapshot?.video?.name || packageName;
+    const videoEnd = formatExpiry(order?.rights?.videoExpiresAt);
+    const amountNum = Number(order?.amount || 0);
+    const amountDisplay = `${amountNum.toLocaleString('vi-VN')} đ`;
+    const vipEnd = order?.snapshot?.vip ? formatExpiry(order?.rights?.vipExpiresAt) : null;
+    const courseSlug = order?.snapshot?.courseSlug || null;
+    const ctaUrl = courseSlug ? this.frontendUrl(`/khoa-hoc/${encodeURIComponent(courseSlug)}`) : this.frontendUrl('/khoa-hoc');
+
+    const rows = [
+      { label: 'Sản phẩm', value: `${label}: ${packageName}` },
+      { label: 'Mã đơn hàng', value: order?.orderId || '—' },
+      { label: 'Quyền video', value: `${videoName} · Hạn: ${videoEnd}` },
+      ...(order?.snapshot?.vip ? [{ label: 'Quyền gói VIP', value: `${order.snapshot.vip.name} · Hạn: ${vipEnd}` }] : []),
+      { label: 'Số tiền thanh toán', valueHtml: `<span style="font-size:18px;font-weight:900;color:#059669">${this.escapeHtml(amountDisplay)}</span>` },
     ];
-    return this._send({ to: email, subject: `Xác nhận ${label} - MOLY.STUDIO`,
-      html: lines.map(line => `<p>${escape(line)}</p>`).join(''), text: lines.join('\n'), account: 'critical', throwOnError: true });
+
+    const content = `
+      ${this.heroCard({
+        emoji: '🎓',
+        title: `Xác nhận ${label}`,
+        subtitle: `Xin chào ${safeName}, đơn hàng của bạn đã được kích hoạt thành công.`,
+        tone: 'emerald',
+      })}
+      ${this.infoRows(rows)}
+      ${this.callout('<strong>Đã mở khóa quyền học!</strong> Bạn có thể vào mục <strong>Khóa học của tôi</strong> trên MOLY.STUDIO để bắt đầu học ngay bây giờ.', 'emerald')}
+      ${this.button('Vào học ngay', ctaUrl, 'emerald')}`;
+
+    const textLines = [
+      `Xin chào ${name || 'bạn'},`,
+      `${label}: ${packageName}`,
+      `Mã đơn: ${order?.orderId || ''}`,
+      `Số tiền: ${amountNum.toLocaleString('vi-VN')} VND`,
+      `Quyền video: ${videoName}. Hết hạn: ${videoEnd}.`,
+      ...(order?.snapshot?.vip ? [`Quyền gói: ${order.snapshot.vip.name}. Hết hạn: ${vipEnd}.`] : []),
+      `Vào mục Khóa học của tôi để tiếp tục học: ${ctaUrl}`,
+    ];
+
+    return this._send({
+      to: email,
+      subject: `🎓 Xác nhận thanh toán ${label} - MOLY.STUDIO`,
+      html: this._wrapper({
+        title: `Xác nhận ${label}`,
+        emoji: '🎓',
+        tone: 'emerald',
+        preheader: `Thanh toán ${packageName} thành công (${amountDisplay}).`,
+        content,
+      }),
+      text: textLines.join('\n'),
+      account: 'critical',
+      throwOnError: true,
+    });
   }
 
   async sendPaymentConfirmation({ email, name, packageName, amount, durationDays, transactionCode, method }) {

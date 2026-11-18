@@ -506,6 +506,29 @@ function createVideoPaymentService({ db, gateway, recalculateVip, sendEmail, now
     const rows=(await db.query(`${orderSql} WHERE o.user_id=$1 ORDER BY o.created_at DESC,o.transaction_id DESC LIMIT $2 OFFSET $3`,[userId,safeLimit+1,offset])).rows;
     return { items:rows.slice(0,safeLimit).map(orderDto),page:safePage,limit:safeLimit,hasMore:rows.length>safeLimit };
   }
+  const isSyntheticSsoPlaceholder = (value) =>
+    /@(sso\.csca\.local|learner\.moly\.invalid)$/i.test(String(value || '').trim());
+
+  async function resolveDeliverableEmail(userRow) {
+    const candidate = typeof userRow?.email === 'string' ? userRow.email.trim() : '';
+    const isSyntheticPlaceholder = !candidate || isSyntheticSsoPlaceholder(candidate);
+    if (!isSyntheticPlaceholder && candidate.includes('@')) return candidate;
+    const identityRes = await db.query(
+      `SELECT email_snapshot, metadata
+       FROM external_identities
+       WHERE user_id = $1 AND status = 'active'
+       ORDER BY id DESC LIMIT 1`,
+      [userRow.id],
+    ).catch(() => ({ rows: [] }));
+    const idRow = identityRes.rows[0];
+    const snapEmail = typeof idRow?.email_snapshot === 'string' ? idRow.email_snapshot.trim() : '';
+    const metaEmail = typeof idRow?.metadata?.email === 'string' ? idRow.metadata.email.trim() : '';
+    for (const alt of [snapEmail, metaEmail]) {
+      if (alt && alt.includes('@') && !isSyntheticSsoPlaceholder(alt)) return alt;
+    }
+    return null;
+  }
+
   async function deliverEmail(id) {
     if (!sendEmail) return;
     const claim=await db.query(`UPDATE video_payment_outbox SET status='sending',attempts=attempts+1,locked_until=NOW()+INTERVAL '2 minutes'
@@ -513,12 +536,27 @@ function createVideoPaymentService({ db, gateway, recalculateVip, sendEmail, now
     if (!claim.rows.length) return;
     try {
       const row=await orderById(db,id);
-      const user=(await db.query('SELECT email,full_name,username FROM users WHERE id=$1',[row.user_id])).rows[0];
-      const sent=await sendEmail({email:user.email,name:user.full_name||user.username,order:orderDto(row)});
-      if (sent?.sent===false) throw new Error('Email not sent');
+      const user=(await db.query('SELECT id,email,full_name,username FROM users WHERE id=$1',[row.user_id])).rows[0];
+      if (!user) throw new Error('USER_NOT_FOUND');
+      const targetEmail = await resolveDeliverableEmail(user);
+      if (!targetEmail) {
+        await db.query("UPDATE video_payment_outbox SET status='sent',sent_at=NOW(),locked_until=NULL,last_error='NO_ROUTABLE_EMAIL' WHERE transaction_id=$1",[id]);
+        return;
+      }
+      const orderPayload = orderDto(row);
+      const courseIds = orderPayload?.snapshot?.video?.courseIds;
+      if (Array.isArray(courseIds) && courseIds.length === 1) {
+        const slugRes = await db.query('SELECT slug FROM courses WHERE id=$1 LIMIT 1', [courseIds[0]]).catch(() => ({ rows: [] }));
+        if (slugRes.rows[0]?.slug) {
+          orderPayload.snapshot = { ...orderPayload.snapshot, courseSlug: slugRes.rows[0].slug };
+        }
+      }
+      const sent=await sendEmail({email:targetEmail,name:user.full_name||user.username,order:orderPayload});
+      if (sent?.sent===false) throw new Error(sent?.error || 'Email not sent');
       await db.query("UPDATE video_payment_outbox SET status='sent',sent_at=NOW(),locked_until=NULL,last_error=NULL WHERE transaction_id=$1",[id]);
-    } catch (_) {
-      await db.query("UPDATE video_payment_outbox SET status='pending',locked_until=NULL,last_error='EMAIL_RETRY_REQUIRED' WHERE transaction_id=$1",[id]);
+    } catch (error) {
+      const reason = String(error?.message || 'EMAIL_RETRY_REQUIRED').slice(0, 200);
+      await db.query("UPDATE video_payment_outbox SET status='pending',locked_until=NULL,last_error=$2 WHERE transaction_id=$1",[id, reason]);
     }
   }
   async function maintenance(limit=25) {

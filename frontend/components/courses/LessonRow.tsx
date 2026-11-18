@@ -20,11 +20,11 @@ export function LessonRow({
 
   const inner = (
     <>
-      <div className="flex min-w-0 items-center gap-3">
+      <div className="flex min-w-0 flex-1 items-center gap-3">
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white font-black text-slate-400 shadow-sm dark:bg-slate-800 dark:text-slate-400">
           {lesson.progressStatus === 'completed' ? <FiCheckCircle className="text-emerald-500" /> : index}
         </span>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="truncate font-bold text-slate-800 group-hover:text-indigo-700 dark:text-slate-200 dark:group-hover:text-indigo-300">
             {lesson.title}
           </p>

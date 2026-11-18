@@ -26,10 +26,12 @@ let workerTimer = null;
 let workerRunning = false;
 let lastReconcileAtMs = 0;
 let lastCatalogPullAtMs = 0;
+let lastPaymentMaintenanceAtMs = 0;
 
 function startOutboxWorker({
   intervalMs = Number.parseInt(String(process.env.COURSE_INTEGRATION_WORKER_INTERVAL_MS || "5000"), 10) || 5000,
   reconcileIntervalMs = Number.parseInt(String(process.env.COURSE_INTEGRATION_RECONCILE_INTERVAL_MS || "300000"), 10) || 300000,
+  paymentMaintenanceIntervalMs = Number.parseInt(String(process.env.VIDEO_PAYMENT_MAINTENANCE_INTERVAL_MS || "60000"), 10) || 60000,
 } = {}) {
   if (workerTimer || !client.isConfigured()) return null;
   if (isIntegrationKillSwitchActive()) {
@@ -85,6 +87,15 @@ function startOutboxWorker({
           workerLog.warn("scheduled_reconciliation_deferred", {
             code: err?.code || "RECON_ERROR",
             message: err?.message || "Scheduled reconciliation deferred.",
+          });
+        });
+      }
+      if (paymentMaintenanceIntervalMs > 0 && Date.now() - lastPaymentMaintenanceAtMs >= paymentMaintenanceIntervalMs) {
+        lastPaymentMaintenanceAtMs = Date.now();
+        await require("./videoPaymentRuntime").maintenance(25).catch((err) => {
+          workerLog.warn("video_payment_maintenance_deferred", {
+            code: err?.code || "PAYMENT_MAINTENANCE_ERROR",
+            message: err?.message || "Video payment maintenance deferred.",
           });
         });
       }
