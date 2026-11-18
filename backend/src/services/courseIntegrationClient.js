@@ -923,6 +923,7 @@ function createCourseIntegrationClient({
     deviceSlotProof = null,
     clientIp = null,
     userAgent = "",
+    idempotencyKey = null,
     correlationId,
     maxTransportAttempts = 1,
     timeoutMs,
@@ -937,6 +938,12 @@ function createCourseIntegrationClient({
       "X-Delegated-Session": String(sessionToken || ""),
       ...(proofHeader ? { "X-Device-Slot-Proof": proofHeader } : {}),
     };
+    // Playback minting is a POST on Course and therefore requires an
+    // idempotency key. Generate it once per mint request so transport retries
+    // reuse the same key while scheduled token refreshes receive a fresh key.
+    const resolvedIdempotencyKey = typeof idempotencyKey === "string" && idempotencyKey.trim()
+      ? idempotencyKey.trim()
+      : `playback:${String(videoId || "video")}:${crypto.randomUUID()}`;
     return postSigned(
       `/learning/videos/${vid}/playback-token`,
       {
@@ -949,8 +956,8 @@ function createCourseIntegrationClient({
       {
         apiVersion: "v2",
         killSwitchDomain: "delegated_learning",
-        idempotencyKey: null,
-        requireIdempotencyKey: false,
+        idempotencyKey: resolvedIdempotencyKey,
+        requireIdempotencyKey: true,
         extraHeaders,
         correlationId: resolveCorrelationId(correlationId),
         maxTransportAttempts,

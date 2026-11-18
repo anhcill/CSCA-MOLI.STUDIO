@@ -496,6 +496,7 @@ test("Day 4 Moly BFF: HttpOnly trusted cookie + HMAC device proof, <=60s playbac
         };
       }
       verifyProofHeader(headers["x-device-slot-proof"]);
+      assert.match(headers["idempotency-key"], /^playback:\d+:[0-9a-f-]{36}$/);
       assert.ok(body.ttlSeconds <= 60, `Expected ttlSeconds <= 60, got ${body.ttlSeconds}`);
       return {
         status: 200,
