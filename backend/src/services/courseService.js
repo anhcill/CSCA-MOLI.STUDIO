@@ -38,9 +38,9 @@ function mergeCourseOwnershipView(base, ownershipInfo, localOwned = false) {
   };
 }
 
-async function loadCourseOwnershipMap(userId, courseIds) {
+async function loadCourseOwnershipMap(userId, courseIds, options = {}) {
   try {
-    return await courseIntegrationRuntime.ownership.evaluateCoursesForUser(userId || null, courseIds);
+    return await courseIntegrationRuntime.ownership.evaluateCoursesForUser(userId || null, courseIds, options);
   } catch {
     return new Map();
   }
@@ -298,7 +298,9 @@ async function getCourseLanding(slug, user, options = {}) {
   ]);
   const videoEntitlement = user ? await videoAccess.find(user.id, row.id) : null;
   const access = accessView(user, row, enrollment, packageEntitlement, videoEntitlement);
-  const ownershipInfo = (await loadCourseOwnershipMap(user?.id || null, [row.id])).get(Number(row.id)) || null;
+  const ownershipInfo = (await loadCourseOwnershipMap(user?.id || null, [row.id], {
+    refreshFromCourse: Boolean(user && isExternalOrigin),
+  })).get(Number(row.id)) || null;
   const effectiveCanLearn = isExternalOrigin
     ? Boolean(access.canLearn || (ownershipInfo?.owned && ownershipInfo?.canLaunchCourse))
     : access.canLearn;

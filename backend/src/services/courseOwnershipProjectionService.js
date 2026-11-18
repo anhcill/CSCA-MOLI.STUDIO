@@ -626,6 +626,17 @@ function createCourseOwnershipProjectionService({
       return byCourseId;
     }
 
+    if (options.refreshFromCourse === true && client?.isConfigured?.()) {
+      // Refresh once for the whole landing-page course set so a corrected or
+      // newly granted Course right replaces stale cached projections before UI
+      // state is calculated.
+      await syncUserOwnershipFromCourse(userIdValue, {
+        localCourseIds: uniqueCourseIds,
+        correlationId: options.correlationId || null,
+        throwOnError: false,
+      });
+    }
+
     for (const cid of uniqueCourseIds) {
       const evaluated = await evaluatePackageOwnership(userIdValue, {
         courseIds: [cid],

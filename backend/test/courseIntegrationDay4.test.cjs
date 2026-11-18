@@ -1060,6 +1060,33 @@ test('Moly ownership projection exposes all 6 Day 4 UI states and videoAdminServ
   assert.equal(pkg.ownershipLabel, 'Đã sở hữu');
   assert.equal(pkg.canLaunchCourse, true);
   assert.equal(pkg.ssoTargetPath, '/video-courses/moly:off_202');
+
+  // A course landing request can force one live ownership refresh so a stale
+  // blocked projection is repaired without requiring another SSO login.
+  ctx.setOwnershipQueryHandler(async ({ external_course_ids }) => ({
+    identity: { local_user_id: 8801, status: 'active' },
+    checked_at: '2026-11-15T10:01:00.000Z',
+    items: (external_course_ids || []).map((id) => ({
+      external_course_id: id,
+      local_course_id: 501,
+      external_grant_id: 'csca-course:grant:landing-refresh',
+      owned: true,
+      status: 'active',
+      valid_from: '2026-01-01T00:00:00.000Z',
+      valid_until: null,
+      source_updated_at: '2026-11-15T10:01:00.000Z',
+    })),
+  }));
+  const refreshed = await ctx.ownership.evaluateCoursesForUser(learner.id, [201], {
+    refreshFromCourse: true,
+    currentNow: new Date('2026-11-15T10:02:00Z'),
+  });
+  assert.equal(refreshed.get(201).status, 'owned');
+  assert.equal(refreshed.get(201).canLaunchCourse, true);
+  assert.equal(
+    ctx.peerRequests.some((request) => request.url === '/api/integrations/v1/ownership/query'),
+    true,
+  );
 });
 
 test('P1 Security: 2-browser-context Login-CSRF & Safe-Link cookie isolation, passwordless candidate refresh, wrong PKCE verifier, tx replay/expiry', async (t) => {
