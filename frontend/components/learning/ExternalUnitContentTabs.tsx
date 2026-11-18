@@ -56,6 +56,9 @@ interface Props {
   ssoTargetPath: string | null;
   unit: ExternalUnitDetailDto | null;
   unitSummary?: ExternalWorkspaceUnitSummaryDto | null;
+  nextUnit?: ExternalWorkspaceUnitSummaryDto | null;
+  learningMode?: 'live' | 'recording' | string | null;
+  currentUnitWatchPercent?: number | null;
   capabilities: ExternalWorkspaceCapabilitiesDto;
   isPublicPreviewAccess: boolean;
   units: ExternalWorkspaceUnitSummaryDto[];
@@ -68,6 +71,7 @@ interface Props {
   onSeekVideo: (seconds: number) => void;
   onQuizSubmitted?: (response: ExternalQuizSubmitResponseDto) => void;
   onAssignmentSubmitted?: () => void;
+  onAdvanceToNextUnit?: () => void;
 }
 
 const ALLOWED_HTML_TAGS = new Set([
@@ -185,6 +189,9 @@ export function ExternalUnitContentTabs({
   unitParamId,
   unit,
   unitSummary = null,
+  nextUnit = null,
+  learningMode = null,
+  currentUnitWatchPercent = null,
   capabilities,
   isPublicPreviewAccess,
   units,
@@ -197,6 +204,7 @@ export function ExternalUnitContentTabs({
   onSeekVideo,
   onQuizSubmitted,
   onAssignmentSubmitted,
+  onAdvanceToNextUnit,
 }: Props) {
   const [activeTab, setActiveTab] = useState<ExternalTabId>('theory');
   const [vocabMode, setVocabMode] = useState<'list' | 'flashcard'>('list');
@@ -659,16 +667,6 @@ export function ExternalUnitContentTabs({
                   );
                 })}
               </ul>
-              <ExternalFileViewerModal
-                open={Boolean(viewerFile)}
-                file={viewerFile}
-                courseSlug={courseSlug}
-                profileId={profileId}
-                unitId={unitParamId}
-                profileAllowsDownload={profileAllowsDownload}
-                isPublicPreviewAccess={isPublicPreviewAccess}
-                onClose={() => setViewerFile(null)}
-              />
             </div>
           ) : (
             <p className="text-slate-500 dark:text-slate-400">Chưa có tài liệu đính kèm cho bài học này.</p>
@@ -684,7 +682,24 @@ export function ExternalUnitContentTabs({
                   unitId={unitParamId}
                   quizzes={quizzes}
                   isPublicPreviewAccess={isPublicPreviewAccess}
+                  nextUnit={nextUnit}
+                  learningMode={learningMode}
+                  currentUnitWatchPercent={currentUnitWatchPercent}
                   onQuizSubmitted={onQuizSubmitted}
+                  onOpenSolutionFile={(solutionId) => {
+                    const matched = files.find((f) => String(f.id) === String(solutionId));
+                    setViewerFile(matched || {
+                      id: String(solutionId),
+                      title: 'File đáp án & lời giải',
+                      fileName: `loi-giai-${solutionId}.pdf`,
+                      mimeType: 'application/pdf',
+                      fileKind: 'document',
+                      sizeBytes: 0,
+                      allowView: true,
+                      allowDownload: profileAllowsDownload,
+                    });
+                  }}
+                  onAdvanceToNextUnit={onAdvanceToNextUnit}
                 />
               ) : null}
 
@@ -758,6 +773,17 @@ export function ExternalUnitContentTabs({
           </div>
         ) : null}
       </div>
+
+      <ExternalFileViewerModal
+        open={Boolean(viewerFile)}
+        file={viewerFile}
+        courseSlug={courseSlug}
+        profileId={profileId}
+        unitId={unitParamId}
+        profileAllowsDownload={profileAllowsDownload}
+        isPublicPreviewAccess={isPublicPreviewAccess}
+        onClose={() => setViewerFile(null)}
+      />
     </article>
   );
 }

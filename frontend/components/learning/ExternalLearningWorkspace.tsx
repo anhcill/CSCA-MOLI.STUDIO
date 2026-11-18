@@ -1114,6 +1114,9 @@ export function ExternalLearningWorkspace({
               ssoTargetPath={workspace.course.ssoTargetPath}
               unit={activeUnit}
               unitSummary={navContext.activeUnitSummary ?? null}
+              nextUnit={navContext.next ?? null}
+              learningMode={workspace.profile.capabilities?.canReviewFreely ? 'live' : 'recording'}
+              currentUnitWatchPercent={liveUnitPercent ?? activeUnit?.watchProgress?.completionPercent ?? 0}
               capabilities={workspace.profile.capabilities || {}}
               isPublicPreviewAccess={workspace.isPublicPreviewAccess}
               units={workspace.units}
@@ -1126,6 +1129,7 @@ export function ExternalLearningWorkspace({
               onSeekVideo={handleSeekVideo}
               onQuizSubmitted={handleQuizSubmitted}
               onAssignmentSubmitted={() => { void silentRefreshWorkspace(); }}
+              onAdvanceToNextUnit={navContext.next?.href ? () => router.push(navContext.next!.href!) : undefined}
             />
           </div>
         </main>

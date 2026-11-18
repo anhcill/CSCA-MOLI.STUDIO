@@ -9,6 +9,11 @@ type MobilePdfViewerProps = {
   title: string;
   className?: string;
   scrollContainerOnly?: boolean;
+  hideToolbar?: boolean;
+  darkCanvasSurface?: boolean;
+  zoom?: number;
+  onZoomChange?: (zoom: number) => void;
+  onPageInfoChange?: (info: { currentPage: number; pageCount: number }) => void;
   onReady?: () => void;
   onError?: (message: string) => void;
 };
@@ -18,9 +23,9 @@ type PageRatio = {
   height: number;
 };
 
-const MIN_ZOOM = 0.5;
-const MAX_ZOOM = 2.5;
-const ZOOM_STEP = 0.15;
+export const PDF_MIN_ZOOM = 0.5;
+export const PDF_MAX_ZOOM = 2.5;
+export const PDF_ZOOM_STEP = 0.15;
 
 export default function MobilePdfViewer({
   url,
@@ -28,6 +33,11 @@ export default function MobilePdfViewer({
   title,
   className = '',
   scrollContainerOnly = false,
+  hideToolbar = false,
+  darkCanvasSurface = false,
+  zoom: controlledZoom,
+  onZoomChange,
+  onPageInfoChange,
   onReady,
   onError,
 }: MobilePdfViewerProps) {
@@ -47,10 +57,33 @@ export default function MobilePdfViewer({
   const [pageCount, setPageCount] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageInput, setPageInput] = useState('1');
-  const [zoom, setZoom] = useState(1);
+  const [internalZoom, setInternalZoom] = useState(1);
   const [containerWidth, setContainerWidth] = useState(820);
   const [initialLoading, setInitialLoading] = useState(true);
   const [renderGeneration, setRenderGeneration] = useState(0);
+
+  const zoom = typeof controlledZoom === 'number' && Number.isFinite(controlledZoom)
+    ? Math.min(PDF_MAX_ZOOM, Math.max(PDF_MIN_ZOOM, controlledZoom))
+    : internalZoom;
+  const zoomRef = useRef(zoom);
+  useEffect(() => {
+    zoomRef.current = zoom;
+  }, [zoom]);
+
+  const updateZoom = useCallback((nextZoom: number) => {
+    const clamped = Number(Math.min(PDF_MAX_ZOOM, Math.max(PDF_MIN_ZOOM, nextZoom)).toFixed(2));
+    setInternalZoom(clamped);
+    onZoomChange?.(clamped);
+  }, [onZoomChange]);
+
+  const updateZoomRef = useRef(updateZoom);
+  useEffect(() => {
+    updateZoomRef.current = updateZoom;
+  }, [updateZoom]);
+
+  useEffect(() => {
+    onPageInfoChange?.({ currentPage, pageCount });
+  }, [currentPage, onPageInfoChange, pageCount]);
 
   useEffect(() => {
     onReadyRef.current = onReady;
@@ -85,7 +118,7 @@ export default function MobilePdfViewer({
       if (!event.ctrlKey && !event.metaKey) return;
       event.preventDefault();
       const delta = event.deltaY < 0 ? 0.1 : -0.1;
-      setZoom((prev) => Number(Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, prev + delta)).toFixed(2)));
+      updateZoomRef.current(zoomRef.current + delta);
     };
     el.addEventListener('wheel', handleWheel, { passive: false });
     return () => el.removeEventListener('wheel', handleWheel);
@@ -354,106 +387,115 @@ export default function MobilePdfViewer({
   }, [pageCount]);
 
   const changeZoom = (delta: number) => {
-    setZoom((prev) => Number(Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, prev + delta)).toFixed(2)));
+    updateZoom(zoom + delta);
   };
 
   const resetZoom = () => {
-    setZoom(1);
+    updateZoom(1);
   };
 
   const pages = useMemo(() => Array.from({ length: pageCount }, (_, i) => i + 1), [pageCount]);
+  const useDarkSurface = darkCanvasSurface || hideToolbar;
 
   return (
     <div
-      className={`flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-slate-200 shadow-sm dark:border-[#243248] dark:bg-[#091529] ${scrollContainerOnly ? 'h-full min-h-0' : 'h-[calc(100svh-6rem)]'} ${className}`}
+      className={`flex flex-col overflow-hidden ${
+        useDarkSurface
+          ? 'rounded-none border-0 bg-[#1e1e1e] shadow-none'
+          : 'rounded-2xl border border-slate-200 bg-slate-200 shadow-sm dark:border-[#243248] dark:bg-[#091529]'
+      } ${scrollContainerOnly ? 'h-full min-h-0' : 'h-[calc(100svh-6rem)]'} ${className}`}
     >
-      <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-white/95 px-3 py-2 shadow-sm backdrop-blur dark:border-[#243248] dark:bg-[#0f1d33]/95">
-        <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={() => scrollToPage(currentPage - 1)}
-            disabled={!pageCount || currentPage <= 1}
-            aria-label="Trang trước"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-700 transition hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-          >
-            <FiChevronUp />
-          </button>
-          <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 sm:text-sm">
-            Trang
-            <input
-              type="number"
-              min={1}
-              max={Math.max(1, pageCount)}
-              value={pageInput}
-              onChange={(event) => {
-                setPageInput(event.target.value);
-                const val = Number(event.target.value);
-                if (Number.isFinite(val) && val >= 1 && val <= pageCount) {
-                  scrollToPage(val);
-                }
-              }}
-              onBlur={() => setPageInput(String(currentPage))}
-              className="h-8 w-14 rounded-lg border border-slate-300 bg-white text-center text-xs font-black outline-none focus:border-[#247d7e] dark:border-slate-600 dark:bg-[#091529] sm:text-sm"
-              aria-label="Số trang PDF"
-            />
-            <span className="text-slate-500 dark:text-slate-400">/ {pageCount || '…'}</span>
-          </label>
-          <button
-            type="button"
-            onClick={() => scrollToPage(currentPage + 1)}
-            disabled={!pageCount || currentPage >= pageCount}
-            aria-label="Trang sau"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-700 transition hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-          >
-            <FiChevronDown />
-          </button>
-        </div>
+      {!hideToolbar ? (
+        <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-white/95 px-3 py-2 shadow-sm backdrop-blur dark:border-[#243248] dark:bg-[#0f1d33]/95">
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => scrollToPage(currentPage - 1)}
+              disabled={!pageCount || currentPage <= 1}
+              aria-label="Trang trước"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-700 transition hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              <FiChevronUp />
+            </button>
+            <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 sm:text-sm">
+              Trang
+              <input
+                type="number"
+                min={1}
+                max={Math.max(1, pageCount)}
+                value={pageInput}
+                onChange={(event) => {
+                  setPageInput(event.target.value);
+                  const val = Number(event.target.value);
+                  if (Number.isFinite(val) && val >= 1 && val <= pageCount) {
+                    scrollToPage(val);
+                  }
+                }}
+                onBlur={() => setPageInput(String(currentPage))}
+                className="h-8 w-14 rounded-lg border border-slate-300 bg-white text-center text-xs font-black outline-none focus:border-[#247d7e] dark:border-slate-600 dark:bg-[#091529] sm:text-sm"
+                aria-label="Số trang PDF"
+              />
+              <span className="text-slate-500 dark:text-slate-400">/ {pageCount || '…'}</span>
+            </label>
+            <button
+              type="button"
+              onClick={() => scrollToPage(currentPage + 1)}
+              disabled={!pageCount || currentPage >= pageCount}
+              aria-label="Trang sau"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-700 transition hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              <FiChevronDown />
+            </button>
+          </div>
 
-        <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={() => changeZoom(-ZOOM_STEP)}
-            disabled={zoom <= MIN_ZOOM}
-            title="Thu nhỏ"
-            aria-label="Thu nhỏ"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-700 transition hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-          >
-            <FiZoomOut className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onClick={resetZoom}
-            title="Khớp vừa màn hình (100%)"
-            className="h-8 min-w-[3.5rem] rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-black tabular-nums text-slate-800 transition hover:bg-slate-100 dark:border-slate-700 dark:bg-[#091529] dark:text-slate-100 dark:hover:bg-slate-800"
-          >
-            {Math.round(zoom * 100)}%
-          </button>
-          <button
-            type="button"
-            onClick={() => changeZoom(ZOOM_STEP)}
-            disabled={zoom >= MAX_ZOOM}
-            title="Phóng to"
-            aria-label="Phóng to"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-700 transition hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-          >
-            <FiZoomIn className="h-4 w-4" />
-          </button>
-          {Math.abs(zoom - 1) > 0.01 ? (
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => changeZoom(-PDF_ZOOM_STEP)}
+              disabled={zoom <= PDF_MIN_ZOOM}
+              title="Thu nhỏ"
+              aria-label="Thu nhỏ"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-700 transition hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              <FiZoomOut className="h-4 w-4" />
+            </button>
             <button
               type="button"
               onClick={resetZoom}
-              title="Vừa chiều rộng"
-              className="hidden items-center gap-1 rounded-lg border border-[#247d7e]/40 bg-[#247d7e]/10 px-2.5 py-1.5 text-xs font-bold text-[#247d7e] transition hover:bg-[#247d7e]/20 dark:text-[#6ac6bd] sm:inline-flex"
+              title="Khớp vừa màn hình (100%)"
+              className="h-8 min-w-[3.5rem] rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-black tabular-nums text-slate-800 transition hover:bg-slate-100 dark:border-slate-700 dark:bg-[#091529] dark:text-slate-100 dark:hover:bg-slate-800"
             >
-              <FiMaximize2 className="h-3.5 w-3.5" /> Vừa khung
+              {Math.round(zoom * 100)}%
             </button>
-          ) : null}
+            <button
+              type="button"
+              onClick={() => changeZoom(PDF_ZOOM_STEP)}
+              disabled={zoom >= PDF_MAX_ZOOM}
+              title="Phóng to"
+              aria-label="Phóng to"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-700 transition hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              <FiZoomIn className="h-4 w-4" />
+            </button>
+            {Math.abs(zoom - 1) > 0.01 ? (
+              <button
+                type="button"
+                onClick={resetZoom}
+                title="Vừa chiều rộng"
+                className="hidden items-center gap-1 rounded-lg border border-[#247d7e]/40 bg-[#247d7e]/10 px-2.5 py-1.5 text-xs font-bold text-[#247d7e] transition hover:bg-[#247d7e]/20 dark:text-[#6ac6bd] sm:inline-flex"
+              >
+                <FiMaximize2 className="h-3.5 w-3.5" /> Vừa khung
+              </button>
+            ) : null}
+          </div>
         </div>
-      </div>
+      ) : null}
 
       <div
         ref={scrollRef}
-        className="relative flex-1 overflow-auto bg-slate-300/80 p-3 dark:bg-[#060f1f] sm:p-5"
+        className={`relative flex-1 overflow-auto ${
+          useDarkSurface ? 'bg-[#1e1e1e] p-2 sm:p-4' : 'bg-slate-300/80 p-3 dark:bg-[#060f1f] sm:p-5'
+        }`}
         aria-label={title}
       >
         {initialLoading ? (

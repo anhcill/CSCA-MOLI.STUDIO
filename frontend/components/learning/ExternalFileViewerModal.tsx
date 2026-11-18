@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { FiDownload, FiExternalLink, FiX } from 'react-icons/fi';
 import learningApi, { parseExternalApiError } from '@/lib/api/learning';
 import { useAuthStore } from '@/lib/store/authStore';
 import type {
@@ -10,7 +9,7 @@ import type {
   ExternalUnitFileDto,
 } from '@/lib/types/courses';
 import {
-  formatExternalFileSize,
+  ExternalDocumentViewerHeader,
   ProtectedExternalDocumentBody,
 } from './ProtectedExternalDocumentView';
 
@@ -44,6 +43,19 @@ export function ExternalFileViewerModal({
   const [errorCode, setErrorCode] = useState<string | null>(null);
   const [viewerError, setViewerError] = useState('');
   const [reloadNonce, setReloadNonce] = useState(0);
+  const [zoom, setZoom] = useState(1);
+  const [pageInfo, setPageInfo] = useState<{ currentPage: number; pageCount: number }>({ currentPage: 1, pageCount: 0 });
+
+  useEffect(() => {
+    if (!open) return undefined;
+    setZoom(1);
+    setPageInfo({ currentPage: 1, pageCount: 0 });
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [file?.id, onClose, open]);
 
   const canDownload = Boolean(
     file
@@ -180,77 +192,43 @@ export function ExternalFileViewerModal({
       role="dialog"
       aria-modal="true"
       aria-label={file.title || file.fileName}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 p-2 backdrop-blur-sm sm:p-5"
-      onClick={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
+      className="fixed inset-0 z-[1200] flex h-dvh w-screen flex-col overflow-hidden bg-[#0f172a] text-white"
     >
-      <div className="flex h-[94svh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-[#d9cabc] bg-[#fffaf4] shadow-2xl dark:border-[#2d3b52] dark:bg-[#0b172b]">
-        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e5d9ce] bg-[#fffdf9] px-4 py-3 dark:border-[#2d3b52] dark:bg-[#101e33] sm:px-5">
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <h3 className="truncate text-base font-black text-[#18243b] dark:text-white">
-                {file.title || file.fileName}
-              </h3>
-              {file.isSlide ? (
-                <span className="rounded-md bg-indigo-100 px-2 py-0.5 text-[11px] font-black text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-200">
-                  Slide
-                </span>
-              ) : null}
-            </div>
-            <p className="mt-0.5 truncate text-xs text-[#6f665f] dark:text-slate-400">
-              {file.fileName} · {formatExternalFileSize(stream?.sizeBytes || file.sizeBytes)}
-            </p>
-          </div>
+      <ExternalDocumentViewerHeader
+        title={file.title || file.fileName}
+        fileName={file.fileName}
+        canDownload={canDownload}
+        downloading={downloading}
+        loading={loading}
+        zoom={zoom}
+        pageInfo={pageInfo}
+        showZoomControls={Boolean(stream)}
+        onZoomChange={setZoom}
+        onDownload={() => void handleDownload()}
+        onOpenInNewTab={courseSlug && profileId && file.allowView !== false ? handleOpenInNewTab : undefined}
+        onClose={onClose}
+        closeLabel="Đóng"
+      />
 
-          <div className="flex shrink-0 items-center gap-2">
-            {courseSlug && profileId && file.allowView !== false ? (
-              <button
-                type="button"
-                onClick={handleOpenInNewTab}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-[#247d7e] bg-white px-3.5 py-2 text-xs font-black text-[#247d7e] transition hover:bg-[#eff9f7] dark:bg-[#0b172b] dark:text-[#6ac6bd]"
-              >
-                <FiExternalLink /> Mở tab mới
-              </button>
-            ) : null}
-            {canDownload ? (
-              <button
-                type="button"
-                onClick={() => void handleDownload()}
-                disabled={downloading || loading}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-[#247d7e] px-3.5 py-2 text-xs font-black text-white shadow-sm transition hover:bg-[#1b6465] disabled:opacity-50"
-              >
-                <FiDownload />
-                {downloading ? 'Đang tải...' : 'Tải xuống'}
-              </button>
-            ) : null}
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="Đóng trình xem tài liệu"
-              className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-[#d8c8b9] bg-white text-[#29354b] transition hover:bg-slate-100 dark:border-[#34435a] dark:bg-[#0b172b] dark:text-slate-200 dark:hover:bg-slate-800"
-            >
-              <FiX className="h-4 w-4" />
-            </button>
-          </div>
-        </header>
-
-        <ProtectedExternalDocumentBody
-          file={file}
-          stream={stream}
-          loading={loading}
-          downloadProgress={downloadProgress}
-          error={error}
-          errorCode={errorCode}
-          viewerError={viewerError}
-          canDownload={canDownload}
-          downloading={downloading}
-          watermarkLabel={watermarkLabel}
-          onRetry={() => setReloadNonce((n) => n + 1)}
-          onDownload={() => void handleDownload()}
-          onViewerError={setViewerError}
-        />
-      </div>
+      <ProtectedExternalDocumentBody
+        file={file}
+        stream={stream}
+        loading={loading}
+        downloadProgress={downloadProgress}
+        error={error}
+        errorCode={errorCode}
+        viewerError={viewerError}
+        canDownload={canDownload}
+        downloading={downloading}
+        watermarkLabel={watermarkLabel}
+        fullPage
+        zoom={zoom}
+        onZoomChange={setZoom}
+        onPageInfoChange={setPageInfo}
+        onRetry={() => setReloadNonce((n) => n + 1)}
+        onDownload={() => void handleDownload()}
+        onViewerError={setViewerError}
+      />
     </div>
   );
 }

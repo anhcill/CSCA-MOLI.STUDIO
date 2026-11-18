@@ -761,10 +761,35 @@ export type ExternalQuizReviewPolicy =
   | 'embargoed'
   | string;
 
+export interface ExternalQuizEssayConfigDto {
+  enabled: boolean;
+  maxScore: number;
+  prompt?: string;
+}
+
+export interface ExternalQuizEssayAttachmentDto {
+  assetId: string;
+  id?: string;
+  name: string;
+  size?: number;
+  mimeType?: string;
+  url?: string;
+  uploadedAt?: string;
+}
+
+export interface ExternalQuizEssayAnswerDto {
+  text?: string;
+  notes?: string;
+  attachments?: ExternalQuizEssayAttachmentDto[];
+}
+
 export interface ExternalUnitQuizDto {
   id: string;
   title: string;
   description?: string | null;
+  instructions?: string | null;
+  essayConfig?: ExternalQuizEssayConfigDto | null;
+  activityScope?: string | null;
   durationMinutes?: number | null;
   passingScore?: number | null;
   attemptsCount?: number;
@@ -778,6 +803,9 @@ export interface ExternalUnitQuizDto {
   hasSolution?: boolean;
   paperFileId?: string | null;
   solutionFileId?: string | null;
+  availableFrom?: string | null;
+  availableUntil?: string | null;
+  dueDate?: string | null;
   embargoUntil?: string | null;
 }
 
@@ -1069,6 +1097,7 @@ export interface ExternalQuizOptionDto {
   text: string;
   textCn?: string | null;
   textEn?: string | null;
+  imageUrl?: string | null;
   isCorrect?: boolean;
 }
 
@@ -1087,6 +1116,7 @@ export type ExternalQuizQuestionType =
 export interface ExternalQuizQuestionDto {
   id: string;
   questionId?: string;
+  position?: number;
   sortOrder?: number;
   groupId?: string | number | null;
   groupKind?: string | null;
@@ -1111,10 +1141,28 @@ export interface ExternalQuizQuestionDto {
   explanationEn?: string | null;
   imageUrl?: string | null;
   explanationImageUrl?: string | null;
+  subQuestionNumber?: number | null;
   userAnswer?: unknown;
   studentAnswer?: unknown;
   isCorrect?: boolean | null;
+  isGraded?: boolean | null;
   earnedPoints?: number | null;
+  essayFeedback?: string | null;
+  teacherAttachments?: Array<{ name?: string; originalFilename?: string; url?: string; mimeType?: string }> | null;
+}
+
+export interface ExternalQuizItemDto {
+  id: string;
+  kind: 'question' | 'reading_group' | 'fill_blank_group' | string;
+  groupType?: string | null;
+  passageText?: string | null;
+  passageTextCn?: string | null;
+  passageTextEn?: string | null;
+  passageImageUrl?: string | null;
+  clozeMode?: string | null;
+  linkedOptions?: ExternalQuizOptionDto[];
+  question?: ExternalQuizQuestionDto;
+  questions: ExternalQuizQuestionDto[];
 }
 
 export interface ExternalQuizAttemptDto {
@@ -1147,12 +1195,16 @@ export interface ExternalQuizResultDto {
   hasSolution?: boolean;
   reviewPolicy?: ExternalQuizReviewPolicy | null;
   embargoUntil?: string | null;
+  essay?: Record<string, unknown> | null;
+  essayGrade?: Record<string, unknown> | null;
+  items?: ExternalQuizItemDto[];
   questions?: ExternalQuizQuestionDto[];
   review?: ExternalQuizQuestionDto[];
 }
 
 export interface ExternalQuizDetailDto {
   quiz: ExternalUnitQuizDto;
+  items?: ExternalQuizItemDto[];
   questions: ExternalQuizQuestionDto[];
   activeAttempt?: ExternalQuizAttemptDto | null;
   attempts?: ExternalQuizAttemptDto[];
@@ -1169,16 +1221,20 @@ export interface ExternalQuizDetailDto {
   embargoUntil?: string | null;
   solutionEmbargoedReason?: string | null;
   reviewItems?: ExternalQuizQuestionDto[];
+  reviewItemGroups?: ExternalQuizItemDto[];
 }
 
 export interface ExternalQuizSubmitResponseDto {
   attempt: ExternalQuizAttemptDto;
   result: ExternalQuizResultDto;
+  unlockedNextUnitId?: string | null;
+  nextUnitType?: string | null;
   unitProgress?: {
     totalDurationSeconds?: number;
     watchedSeconds?: number;
     completionPercent: number;
     isCompleted: boolean;
+    isVideoCompleted?: boolean;
     isQuizCompleted?: boolean;
   } | null;
   courseProgress?: ExternalWorkspaceProgressDto | null;

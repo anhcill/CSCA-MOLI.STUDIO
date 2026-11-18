@@ -21,6 +21,8 @@ import type {
   ExternalFileDownloadProgress,
   ExternalFileStreamResult,
   ExternalQuizDetailDto,
+  ExternalQuizEssayAttachmentDto,
+  ExternalQuizItemDto,
   ExternalQuizAttemptDto,
   ExternalQuizQuestionDto,
   ExternalQuizSubmitResponseDto,
@@ -72,11 +74,17 @@ function normalizeQuizOptionEntry(rawOpt: unknown) {
     : typeof opt.text_en === 'string'
       ? opt.text_en
       : null;
+  const imageUrl = typeof opt.imageUrl === 'string'
+    ? opt.imageUrl
+    : typeof opt.image_url === 'string'
+      ? opt.image_url
+      : null;
   return {
     ...opt,
     text,
     ...(textCn ? { textCn } : {}),
     ...(textEn ? { textEn } : {}),
+    ...(imageUrl ? { imageUrl } : {}),
   };
 }
 
@@ -192,7 +200,7 @@ function normalizeQuizQuestionEntry(
   };
 }
 
-function flattenExternalQuizItems(rawItems: unknown): ExternalQuizQuestionDto[] {
+export function flattenExternalQuizItems(rawItems: unknown): ExternalQuizQuestionDto[] {
   if (!Array.isArray(rawItems)) return [];
   const flattened: ExternalQuizQuestionDto[] = [];
 
@@ -249,9 +257,129 @@ function flattenExternalQuizItems(rawItems: unknown): ExternalQuizQuestionDto[] 
   return flattened;
 }
 
+function resolveItemGroupKind(groupKind?: string | null, groupType?: string | null, questionType?: string | null): 'reading_group' | 'fill_blank_group' | null {
+  if (groupKind === 'reading_group' || groupType === 'reading_passage' || questionType === 'reading_item') {
+    return 'reading_group';
+  }
+  if (groupKind === 'fill_blank_group' || groupType === 'fill_blank_pool' || questionType === 'fill_blank_item') {
+    return 'fill_blank_group';
+  }
+  return null;
+}
+
+export function normalizeExternalQuizItems(rawItems: unknown): ExternalQuizItemDto[] {
+  if (!Array.isArray(rawItems)) return [];
+  const items: ExternalQuizItemDto[] = [];
+  let runningCount = 0;
+  const activeFlatGroups = new Map<string, ExternalQuizItemDto>();
+
+  for (const entry of rawItems) {
+    if (!entry || typeof entry !== 'object') continue;
+    const obj = entry as Record<string, unknown>;
+
+    if (Array.isArray(obj.questions)) {
+      const groupPassage = typeof obj.passageText === 'string'
+        ? obj.passageText
+        : typeof obj.passage_text === 'string'
+          ? obj.passage_text
+          : typeof obj.groupTitle === 'string'
+            ? obj.groupTitle
+            : undefined;
+      const groupPassageCn = typeof obj.passageTextCn === 'string'
+        ? obj.passageTextCn
+        : typeof obj.passage_text_cn === 'string'
+          ? obj.passage_text_cn
+          : null;
+      const groupPassageEn = typeof obj.passageTextEn === 'string'
+        ? obj.passageTextEn
+        : typeof obj.passage_text_en === 'string'
+          ? obj.passage_text_en
+          : null;
+      const rawLinked = Array.isArray(obj.linkedOptions)
+        ? obj.linkedOptions
+        : Array.isArray(obj.linked_options)
+          ? obj.linked_options
+          : [];
+      const linkedOptions = rawLinked.map(normalizeQuizOptionEntry) as ExternalQuizItemDto['linkedOptions'];
+      const kind = resolveItemGroupKind(
+        typeof obj.kind === 'string' ? obj.kind : null,
+        typeof obj.groupType === 'string' ? obj.groupType : null,
+        null,
+      ) || 'reading_group';
+      const groupCtx: GroupQuestionContext = {
+        groupId: (obj.id ?? obj.groupId ?? null) as string | number | null,
+        groupKind: kind,
+        groupType: typeof obj.groupType === 'string' ? obj.groupType : (kind === 'fill_blank_group' ? 'fill_blank_pool' : 'reading_passage'),
+        passageText: groupPassage,
+        passageTextCn: groupPassageCn,
+        passageTextEn: groupPassageEn,
+        passageImageUrl: typeof obj.passageImageUrl === 'string' ? obj.passageImageUrl : null,
+        clozeMode: typeof obj.clozeMode === 'string' ? obj.clozeMode : null,
+        linkedOptions: linkedOptions as GroupQuestionContext['linkedOptions'],
+      };
+      const subQuestions = obj.questions
+        .filter((sub): sub is Record<string, unknown> => Boolean(sub && typeof sub === 'object'))
+        .map((sub) => {
+          const normalized = normalizeQuizQuestionEntry(sub, runningCount, groupCtx);
+          runningCount += 1;
+          return normalized;
+        });
+      items.push({
+        id: String(obj.id ?? obj.groupId ?? `group-${items.length + 1}`),
+        kind,
+        groupType: groupCtx.groupType,
+        passageText: groupPassage ?? null,
+        passageTextCn: groupPassageCn,
+        passageTextEn: groupPassageEn,
+        passageImageUrl: groupCtx.passageImageUrl ?? null,
+        clozeMode: groupCtx.clozeMode ?? null,
+        linkedOptions,
+        questions: subQuestions,
+      });
+      continue;
+    }
+
+    const q = normalizeQuizQuestionEntry(obj, runningCount);
+    runningCount += 1;
+    const inferredKind = resolveItemGroupKind(q.groupKind, q.groupType, q.questionType);
+    if (inferredKind && q.groupId != null) {
+      const mapKey = `${inferredKind}:${String(q.groupId)}`;
+      let grouped = activeFlatGroups.get(mapKey);
+      if (!grouped) {
+        grouped = {
+          id: String(q.groupId),
+          kind: inferredKind,
+          groupType: q.groupType || (inferredKind === 'fill_blank_group' ? 'fill_blank_pool' : 'reading_passage'),
+          passageText: q.passageText ?? null,
+          passageTextCn: q.passageTextCn ?? null,
+          passageTextEn: q.passageTextEn ?? null,
+          passageImageUrl: q.passageImageUrl ?? null,
+          clozeMode: q.clozeMode ?? null,
+          linkedOptions: q.linkedOptions ?? [],
+          questions: [],
+        };
+        activeFlatGroups.set(mapKey, grouped);
+        items.push(grouped);
+      }
+      grouped.questions.push(q);
+      continue;
+    }
+
+    items.push({
+      id: q.id,
+      kind: 'question',
+      question: q,
+      questions: [q],
+    });
+  }
+
+  return items;
+}
+
 function normalizeExternalQuizResult(
   rawResult: unknown,
   fallbackQuestions?: ExternalQuizQuestionDto[],
+  fallbackItems?: ExternalQuizItemDto[],
 ): ExternalQuizDetailDto['latestResult'] {
   if (!rawResult || typeof rawResult !== 'object') return null;
   const obj = rawResult as Record<string, unknown>;
@@ -262,6 +390,12 @@ function normalizeExternalQuizResult(
     : review.length > 0
       ? review
       : (fallbackQuestions ?? []);
+  const itemSource = Array.isArray(obj.items) && obj.items.length > 0
+    ? obj.items
+    : (Array.isArray(obj.review) && obj.review.length > 0
+      ? obj.review
+      : (Array.isArray(obj.questions) && obj.questions.length > 0 ? obj.questions : null));
+  const items = itemSource ? normalizeExternalQuizItems(itemSource) : (fallbackItems ?? []);
   const isPassed = typeof obj.isPassed === 'boolean'
     ? obj.isPassed
     : typeof obj.passed === 'boolean'
@@ -280,6 +414,7 @@ function normalizeExternalQuizResult(
     ...(isPassed !== undefined ? { isPassed, passed: isPassed } : {}),
     ...(percent !== undefined ? { percent, percentage: percent } : {}),
     ...(review.length > 0 ? { review } : {}),
+    ...(items.length > 0 ? { items } : {}),
     questions,
   } as unknown as ExternalQuizDetailDto['latestResult'];
 }
@@ -798,9 +933,9 @@ export const learningApi = {
     const quiz = (raw.quiz as ExternalUnitQuizDto | undefined)
       || (raw as unknown as ExternalUnitQuizDto);
     const quizObj = (quiz ?? {}) as unknown as Record<string, unknown>;
-    const questions = flattenExternalQuizItems(
-      raw.questions ?? quizObj.questions ?? raw.items ?? quizObj.items,
-    );
+    const rawItemSource = raw.items ?? quizObj.items ?? raw.questions ?? quizObj.questions;
+    const questions = flattenExternalQuizItems(rawItemSource);
+    const items = normalizeExternalQuizItems(rawItemSource);
     const attempts = Array.isArray(raw.attempts) ? (raw.attempts as ExternalQuizAttemptDto[]) : [];
     const attemptsCount = typeof raw.attemptsCount === 'number'
       ? raw.attemptsCount
@@ -838,6 +973,9 @@ export const learningApi = {
     const reviewItems = Array.isArray(raw.reviewItems)
       ? flattenExternalQuizItems(raw.reviewItems)
       : undefined;
+    const reviewItemGroups = Array.isArray(raw.reviewItems)
+      ? normalizeExternalQuizItems(raw.reviewItems)
+      : undefined;
     const normalizedQuiz: ExternalUnitQuizDto = {
       ...quiz,
       id: quizObj.id != null ? String(quizObj.id) : String(quizId),
@@ -849,11 +987,12 @@ export const learningApi = {
           : maxAttempts),
       ...(canViewSolution !== undefined ? { canViewSolution } : {}),
     };
-    const latestResult = normalizeExternalQuizResult(raw.latestResult, questions);
+    const latestResult = normalizeExternalQuizResult(raw.latestResult, questions, items);
 
     return {
       ...(raw as unknown as ExternalQuizDetailDto),
       quiz: normalizedQuiz,
+      items,
       questions,
       activeAttempt,
       attempts,
@@ -865,6 +1004,7 @@ export const learningApi = {
       isAdminBypass,
       canReviewFreely,
       ...(reviewItems ? { reviewItems } : {}),
+      ...(reviewItemGroups ? { reviewItemGroups } : {}),
     };
   },
 
@@ -883,6 +1023,7 @@ export const learningApi = {
   }): Promise<{
     attempt: ExternalQuizAttemptDto;
     quiz?: ExternalUnitQuizDto;
+    items?: ExternalQuizItemDto[];
     questions?: ExternalQuizQuestionDto[];
   }> {
     const response = await axios.post<ApiSuccessEnvelope<Record<string, unknown>>>(
@@ -896,13 +1037,17 @@ export const learningApi = {
     const attempt = (raw.attempt as ExternalQuizAttemptDto | undefined)
       || (raw as unknown as ExternalQuizAttemptDto);
     const quizObj = raw.quiz as Record<string, unknown> | undefined;
-    const questionSource = raw.questions ?? raw.items ?? quizObj?.questions ?? quizObj?.items;
+    const questionSource = raw.items ?? quizObj?.items ?? raw.questions ?? quizObj?.questions;
     const questions = Array.isArray(questionSource)
       ? flattenExternalQuizItems(questionSource)
+      : undefined;
+    const items = Array.isArray(questionSource)
+      ? normalizeExternalQuizItems(questionSource)
       : undefined;
     return {
       attempt,
       quiz: raw.quiz as ExternalUnitQuizDto | undefined,
+      items,
       questions,
     };
   },
@@ -940,16 +1085,19 @@ export const learningApi = {
     profileId,
     unitId,
     attemptId,
+    answers,
     idempotencyKey,
   }: {
     profileId: string;
     unitId: string | number;
     attemptId: string | number;
+    answers?: Record<string, unknown>;
     idempotencyKey?: string;
   }): Promise<ExternalQuizSubmitResponseDto> {
     const response = await axios.post<ApiSuccessEnvelope<Record<string, unknown>>>(
       `/learning/external/offerings/${encodeURIComponent(profileId)}/units/${encodeURIComponent(String(unitId))}/quizzes/attempts/${encodeURIComponent(String(attemptId))}/submit`,
       {
+        ...(answers !== undefined ? { answers } : {}),
         idempotencyKey: idempotencyKey || generateIdempotencyKey(),
       },
     );
@@ -980,6 +1128,40 @@ export const learningApi = {
         : undefined,
       canViewSolution,
     };
+  },
+
+  async uploadExternalQuizEssayAssets({
+    profileId,
+    unitId,
+    quizId,
+    files,
+    idempotencyKey,
+  }: {
+    profileId: string;
+    unitId: string | number;
+    quizId: string | number;
+    files: File[];
+    idempotencyKey?: string;
+  }): Promise<ExternalQuizEssayAttachmentDto[]> {
+    const formData = new FormData();
+    const resolvedKey = idempotencyKey || generateIdempotencyKey();
+    formData.append('idempotencyKey', resolvedKey);
+    files.forEach((file) => {
+      formData.append('files', file);
+    });
+    const response = await axios.post<ApiSuccessEnvelope<{ assets?: ExternalQuizEssayAttachmentDto[] }>>(
+      `/learning/external/offerings/${encodeURIComponent(profileId)}/units/${encodeURIComponent(String(unitId))}/quizzes/${encodeURIComponent(String(quizId))}/essay-assets`,
+      formData,
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+          'Idempotency-Key': resolvedKey,
+        },
+        timeout: 120000,
+      },
+    );
+    const raw = unwrapData<{ assets?: ExternalQuizEssayAttachmentDto[] }>(response.data);
+    return Array.isArray(raw?.assets) ? raw.assets : [];
   },
 
   async getExternalAssignmentDetail({

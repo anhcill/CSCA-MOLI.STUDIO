@@ -74,6 +74,16 @@ router.post(
   progressLimiter,
   controller.submitExternalQuizAttempt,
 );
+router.post(
+  "/external/offerings/:profileId/units/:unitId/quizzes/:quizId/essay-assets",
+  progressLimiter,
+  courseFiles("files"),
+  controller.uploadExternalQuizEssayAssets,
+);
+router.get(
+  "/external/offerings/:profileId/units/:unitId/submission-assets/:assetId",
+  controller.streamExternalSubmissionAsset,
+);
 router.get(
   "/external/offerings/:profileId/units/:unitId/assignments/:assignmentId",
   controller.getExternalAssignment,

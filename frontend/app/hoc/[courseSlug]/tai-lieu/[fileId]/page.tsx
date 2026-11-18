@@ -1,9 +1,7 @@
 'use client';
 
 import { use, useCallback, useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
-import Link from 'next/link';
-import { FiArrowLeft, FiDownload, FiLock } from 'react-icons/fi';
+import { useRouter, useSearchParams } from 'next/navigation';
 import learningApi, { parseExternalApiError } from '@/lib/api/learning';
 import { useAuthStore } from '@/lib/store/authStore';
 import type {
@@ -12,7 +10,7 @@ import type {
   ExternalUnitFileDto,
 } from '@/lib/types/courses';
 import {
-  formatExternalFileSize,
+  ExternalDocumentViewerHeader,
   ProtectedExternalDocumentBody,
 } from '@/components/learning/ProtectedExternalDocumentView';
 
@@ -22,6 +20,7 @@ export default function ProtectedExternalDocumentPage({
   params: Promise<{ courseSlug: string; fileId: string }>;
 }) {
   const { courseSlug, fileId } = use(params);
+  const router = useRouter();
   const searchParams = useSearchParams();
   const profileIdParam = searchParams.get('profileId');
   const unitIdParam = searchParams.get('unitId') || '';
@@ -39,6 +38,8 @@ export default function ProtectedExternalDocumentPage({
   const [errorCode, setErrorCode] = useState<string | null>(null);
   const [viewerError, setViewerError] = useState('');
   const [reloadNonce, setReloadNonce] = useState(0);
+  const [zoom, setZoom] = useState(1);
+  const [pageInfo, setPageInfo] = useState<{ currentPage: number; pageCount: number }>({ currentPage: 1, pageCount: 0 });
 
   const canDownload = Boolean(
     file
@@ -191,45 +192,30 @@ export default function ProtectedExternalDocumentPage({
     ? `/hoc/${encodeURIComponent(courseSlug)}/bai-hoc/${encodeURIComponent(unitIdParam)}${resolvedProfileId ? `?profileId=${encodeURIComponent(resolvedProfileId)}` : ''}`
     : `/khoa-hoc/${encodeURIComponent(courseSlug)}`;
 
-  return (
-    <div className="flex h-[100dvh] flex-col overflow-hidden bg-[#f5efe6] dark:bg-[#071225]">
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e5d9ce] bg-[#fffdf9] px-4 py-3 shadow-sm dark:border-[#2d3b52] dark:bg-[#101e33] sm:px-6">
-        <div className="flex min-w-0 flex-1 items-center gap-3">
-          <Link
-            href={backHref}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-[#d8c8b9] bg-white px-3 py-2 text-xs font-black text-[#29354b] hover:bg-slate-50 dark:border-[#34435a] dark:bg-[#0b172b] dark:text-slate-200"
-          >
-            <FiArrowLeft /> Quay lại bài học
-          </Link>
-          <div className="min-w-0">
-            <h1 className="truncate text-sm font-black text-[#18243b] dark:text-white sm:text-base">
-              {file?.title || file?.fileName || 'Trình xem tài liệu bảo mật'}
-            </h1>
-            {file ? (
-              <p className="truncate text-xs text-[#6f665f] dark:text-slate-400">
-                {file.fileName} · {formatExternalFileSize(stream?.sizeBytes || file.sizeBytes)}
-              </p>
-            ) : null}
-          </div>
-        </div>
+  const handleClosePage = useCallback(() => {
+    if (typeof window !== 'undefined' && window.opener) {
+      window.close();
+      return;
+    }
+    router.push(backHref);
+  }, [backHref, router]);
 
-        <div className="flex shrink-0 items-center gap-2">
-          {canDownload ? (
-            <button
-              type="button"
-              onClick={() => void handleDownload()}
-              disabled={downloading || loading}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-[#247d7e] px-3.5 py-2 text-xs font-black text-white shadow-sm transition hover:bg-[#1b6465] disabled:opacity-50"
-            >
-              <FiDownload /> {downloading ? 'Đang tải...' : 'Tải xuống'}
-            </button>
-          ) : (
-            <span className="inline-flex items-center gap-1.5 rounded-xl bg-amber-100 px-3 py-2 text-xs font-bold text-amber-900 dark:bg-amber-950/60 dark:text-amber-200">
-              <FiLock /> Chỉ xem · Khóa tải về
-            </span>
-          )}
-        </div>
-      </header>
+  return (
+    <div className="fixed inset-0 z-[1200] flex h-[100dvh] w-screen flex-col overflow-hidden bg-[#0f172a] text-white">
+      <ExternalDocumentViewerHeader
+        title={file?.title || file?.fileName || 'Trình xem tài liệu bảo mật'}
+        fileName={file?.fileName}
+        canDownload={canDownload}
+        downloading={downloading}
+        loading={loading}
+        zoom={zoom}
+        pageInfo={pageInfo}
+        showZoomControls={Boolean(stream)}
+        onZoomChange={setZoom}
+        onDownload={() => void handleDownload()}
+        onClose={handleClosePage}
+        closeLabel="Đóng"
+      />
 
       <ProtectedExternalDocumentBody
         file={file || {
@@ -250,6 +236,9 @@ export default function ProtectedExternalDocumentPage({
         downloading={downloading}
         watermarkLabel={watermarkLabel}
         fullPage
+        zoom={zoom}
+        onZoomChange={setZoom}
+        onPageInfoChange={setPageInfo}
         onRetry={() => setReloadNonce((n) => n + 1)}
         onDownload={() => void handleDownload()}
         onViewerError={setViewerError}

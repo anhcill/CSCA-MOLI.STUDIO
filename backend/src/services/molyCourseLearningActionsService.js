@@ -153,6 +153,46 @@ function createMolyCourseLearningActionsService({
     );
   }
 
+  function formatUpstreamStreamResult(upstreamResult, {
+    disposition = "inline",
+    fallbackFilename = "file",
+    fallbackMimeType = "application/octet-stream",
+    fallbackSizeBytes = null,
+    rangeHeader = null,
+  } = {}) {
+    const upstreamHeaders = upstreamResult.headers || {};
+    const upstreamDispHeader = String(upstreamHeaders["content-disposition"] || "");
+    const rawFilename = decodeDispositionFilename(upstreamDispHeader) || fallbackFilename;
+    const contentType = upstreamHeaders["content-type"] || fallbackMimeType;
+    const acceptRanges = upstreamHeaders["accept-ranges"] || "bytes";
+    const contentRange = upstreamHeaders["content-range"] || null;
+    const streamOrBuf = upstreamResult.bodyStream || upstreamResult.bodyBufferOrStream || upstreamResult.bodyBuffer || Buffer.alloc(0);
+    const isBuf = Buffer.isBuffer(streamOrBuf);
+    const fallbackLength = isBuf
+      ? String(streamOrBuf.length)
+      : (!rangeHeader && fallbackSizeBytes != null ? String(fallbackSizeBytes) : null);
+    const contentLength = upstreamHeaders["content-length"] || fallbackLength;
+
+    return {
+      mode: "stream",
+      status: upstreamResult.status === 206 ? 206 : 200,
+      headers: {
+        "Content-Type": contentType,
+        "Accept-Ranges": acceptRanges,
+        ...(contentRange ? { "Content-Range": contentRange } : {}),
+        ...(contentLength ? { "Content-Length": contentLength } : {}),
+        "Content-Disposition": buildContentDisposition(disposition, rawFilename),
+        "Cache-Control": "private, no-store",
+        "X-Frame-Options": "SAMEORIGIN",
+        "X-Content-Type-Options": "nosniff",
+      },
+      bodyStream: isBuf ? null : streamOrBuf,
+      bodyBuffer: isBuf ? streamOrBuf : null,
+      cleanupStream: upstreamResult.abort || upstreamResult.release || null,
+      releaseStreamTimer: upstreamResult.release || null,
+    };
+  }
+
   // Day 5: Secure Delegated File Streaming / Metadata
   async function streamExternalUnitFile({
     profileId,
@@ -284,40 +324,46 @@ function createMolyCourseLearningActionsService({
       };
     }
 
-    const upstreamHeaders = upstreamResult.headers || {};
-    const upstreamDispHeader = String(upstreamHeaders["content-disposition"] || "");
-    const rawFilename = fileRow?.original_filename
-      || fileRow?.title
-      || decodeDispositionFilename(upstreamDispHeader)
-      || `document-${cleanFileId}`;
-    const contentType = upstreamHeaders["content-type"] || fileRow?.mime_type || "application/octet-stream";
-    const acceptRanges = upstreamHeaders["accept-ranges"] || "bytes";
-    const contentRange = upstreamHeaders["content-range"] || null;
-    const streamOrBuf = upstreamResult.bodyStream || upstreamResult.bodyBufferOrStream || upstreamResult.bodyBuffer || Buffer.alloc(0);
-    const isBuf = Buffer.isBuffer(streamOrBuf);
-    const fallbackLength = isBuf
-      ? String(streamOrBuf.length)
-      : (!rangeHeader && fileRow?.size_bytes != null ? String(fileRow.size_bytes) : null);
-    const contentLength = upstreamHeaders["content-length"] || fallbackLength;
+    return formatUpstreamStreamResult(upstreamResult, {
+      disposition: normalizedDisp,
+      fallbackFilename: fileRow?.original_filename || fileRow?.title || `document-${cleanFileId}`,
+      fallbackMimeType: fileRow?.mime_type || "application/octet-stream",
+      fallbackSizeBytes: fileRow?.size_bytes ?? null,
+      rangeHeader,
+    });
+  }
 
-    return {
-      mode: "stream",
-      status: upstreamResult.status === 206 ? 206 : 200,
-      headers: {
-        "Content-Type": contentType,
-        "Accept-Ranges": acceptRanges,
-        ...(contentRange ? { "Content-Range": contentRange } : {}),
-        ...(contentLength ? { "Content-Length": contentLength } : {}),
-        "Content-Disposition": buildContentDisposition(normalizedDisp, rawFilename),
-        "Cache-Control": "private, no-store",
-        "X-Frame-Options": "SAMEORIGIN",
-        "X-Content-Type-Options": "nosniff",
-      },
-      bodyStream: isBuf ? null : streamOrBuf,
-      bodyBuffer: isBuf ? streamOrBuf : null,
-      cleanupStream: upstreamResult.abort || upstreamResult.release || null,
-      releaseStreamTimer: upstreamResult.release || null,
-    };
+  async function streamExternalSubmissionAsset({
+    profileId,
+    unitId,
+    assetId,
+    disposition = "inline",
+    delegatedSessionToken = null,
+    user = null,
+    req = null,
+    res = null,
+    correlationId = null,
+  } = {}) {
+    const corr = resolveCorrelationId(correlationId);
+    const cleanAssetId = String(assetId || "").trim();
+    if (!cleanAssetId) throw new CourseApiError(400, "INVALID_PARAMETER", "assetId is required.");
+    const normalizedDisp = String(disposition || "inline").toLowerCase() === "attachment" ? "attachment" : "inline";
+    const ctx = await resolveEntitledUnitActionContext({ profileId, unitId, user, req, res });
+    const upstreamResult = await runDelegated(
+      ctx,
+      { user, req, delegatedSessionToken, correlationId: corr },
+      (sessionToken) => client.streamDelegatedSubmissionAsset({
+        sessionToken,
+        assetId: cleanAssetId,
+        profileId: ctx.remoteProfileId,
+        disposition: normalizedDisp,
+        correlationId: corr,
+      }),
+    );
+    return formatUpstreamStreamResult(upstreamResult, {
+      disposition: normalizedDisp,
+      fallbackFilename: `asset-${cleanAssetId}`,
+    });
   }
 
   // Day 6: Quizzes & Assignments
@@ -450,6 +496,7 @@ function createMolyCourseLearningActionsService({
     profileId,
     unitId,
     attemptId,
+    answers = undefined,
     idempotencyKey = null,
     delegatedSessionToken = null,
     user = null,
@@ -469,6 +516,7 @@ function createMolyCourseLearningActionsService({
         sessionToken,
         attemptId: cleanAttemptId,
         profileId: ctx.remoteProfileId,
+        ...(answers !== undefined ? { answers } : {}),
         idempotencyKey: idempotencyKey || undefined,
         correlationId: corr,
       }),
@@ -585,6 +633,67 @@ function createMolyCourseLearningActionsService({
     });
 
     return result;
+  }
+
+  async function uploadExternalQuizEssayAssets({
+    profileId,
+    unitId,
+    quizId,
+    files = [],
+    idempotencyKey = null,
+    delegatedSessionToken = null,
+    user = null,
+    req = null,
+    res = null,
+    correlationId = null,
+  } = {}) {
+    const corr = resolveCorrelationId(correlationId);
+    const cleanQuizId = String(quizId || "").trim();
+    if (!cleanQuizId) throw new CourseApiError(400, "INVALID_PARAMETER", "quizId is required.");
+    const safeFiles = Array.isArray(files) ? files : [];
+    if (!safeFiles.length) {
+      throw new CourseApiError(422, "VALIDATION_ERROR", "Cần chọn ít nhất một tệp để tải lên.");
+    }
+    const ctx = await resolveEntitledUnitActionContext({ profileId, unitId, user, req, res });
+    const uploadedAssets = await runDelegated(
+      ctx,
+      { user, req, delegatedSessionToken, correlationId: corr },
+      async (sessionToken) => {
+        const items = [];
+        for (let idx = 0; idx < safeFiles.length; idx += 1) {
+          const f = safeFiles[idx];
+          const digest = crypto.createHash("sha256").update(f.buffer || Buffer.alloc(0)).digest("hex").slice(0, 12);
+          const assetIdem = idempotencyKey
+            ? `${idempotencyKey}:qessay:${idx}`
+            : `quiz-essay:${cleanQuizId}:${user.id}:${digest}`;
+          const uploaded = await client.uploadDelegatedQuizEssayAsset({
+            sessionToken,
+            quizId: cleanQuizId,
+            profileId: ctx.remoteProfileId,
+            unitId: ctx.remoteUnitId,
+            assetKind: "file",
+            originalFilename: f.originalname || `essay-${idx + 1}.bin`,
+            mimeType: f.mimetype || "application/octet-stream",
+            sizeBytes: Number(f.size || f.buffer?.length || 0),
+            contentBase64: (f.buffer || Buffer.alloc(0)).toString("base64"),
+            idempotencyKey: assetIdem,
+            correlationId: corr,
+          });
+          const assetId = String(uploaded?.assetId || uploaded?.id || "");
+          items.push({
+            assetId,
+            id: `asset-${assetId}`,
+            name: uploaded?.originalFilename || f.originalname || `essay-${idx + 1}`,
+            size: Number(uploaded?.sizeBytes ?? f.size ?? 0),
+            mimeType: uploaded?.mimeType || f.mimetype || "application/octet-stream",
+            url: `/api/learning/external/offerings/${encodeURIComponent(String(profileId))}/units/${encodeURIComponent(String(unitId))}/submission-assets/${encodeURIComponent(assetId)}`,
+            uploadedAt: new Date().toISOString(),
+          });
+        }
+        return items;
+      },
+    );
+    return { assets: uploadedAssets };
   }
 
   async function getExternalAssignment({
@@ -1087,10 +1196,12 @@ function createMolyCourseLearningActionsService({
 
   return {
     streamExternalUnitFile,
+    streamExternalSubmissionAsset,
     getExternalQuiz,
     startExternalQuizAttempt,
     saveExternalQuizAnswers,
     submitExternalQuizAttempt,
+    uploadExternalQuizEssayAssets,
     getExternalAssignment,
     submitExternalAssignment,
     listExternalNotes,

@@ -1288,3 +1288,105 @@ test("GET /api/me/course-enrollments excludes csca_course native 0/0 rows, expos
   assert.equal(afterItem.enrollment.resumeUnitHref, `/hoc/toan-csca-705/bai-hoc/u-${unit2.id}?profileId=prof-705`);
   assert.equal(afterItem.course.resumeUnitHref, afterItem.enrollment.resumeUnitHref);
 });
+
+test("Day 6 quiz essay assets upload, submission-assets proxy stream, and atomic submit answers", async (t) => {
+  const pngBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x01]);
+  let capturedSubmitBody = null;
+  let capturedEssayUploadBody = null;
+
+  const ctx = await setupDay5To7Env(t, async ({ method, url, body }) => {
+    if (method === "POST" && url.endsWith("/learning/sessions")) {
+      return {
+        status: 201,
+        body: {
+          success: true,
+          data: { sessionToken: "dsess-qessay", sessionId: "dsess-id-qe", expiresAt: new Date(Date.now() + 240_000).toISOString() },
+        },
+      };
+    }
+    if (method === "POST" && url.includes("/learning/quizzes/quiz-99/submission-assets")) {
+      capturedEssayUploadBody = body;
+      return {
+        status: 201,
+        body: {
+          success: true,
+          data: {
+            assetId: "901",
+            id: "901",
+            assetKind: "file",
+            originalFilename: body.originalFilename,
+            mimeType: body.mimeType,
+            sizeBytes: body.sizeBytes,
+            status: "ready",
+          },
+        },
+      };
+    }
+    if (method === "GET" && url.includes("/learning/submission-assets/901/access")) {
+      return {
+        status: 200,
+        headers: {
+          "content-type": "image/png",
+          "content-disposition": "inline; filename=\"essay-handwriting.png\"",
+          "content-length": String(pngBytes.length),
+        },
+        rawBuffer: pngBytes,
+      };
+    }
+    if (method === "POST" && url.includes("/learning/quizzes/attempts/att-99/submit")) {
+      capturedSubmitBody = body;
+      return {
+        status: 200,
+        body: {
+          success: true,
+          data: {
+            quizId: "quiz-99",
+            attempt: { id: "att-99", quizId: "quiz-99", status: "submitted", score: 10, maxScore: 10, passed: true, submittedAt: "2026-11-18T22:45:00Z" },
+            canViewSolution: true,
+            isQuizCompleted: true,
+            isUnitCompleted: true,
+            courseCompletionPct: 100,
+            syncRevision: 9,
+          },
+        },
+      };
+    }
+    return { status: 404, body: { success: false, code: "NOT_FOUND" } };
+  });
+
+  const { unit1, token } = await seedSyncedCourseWithTwoUnits(ctx.db, {
+    courseId: 706,
+    profileId: "prof-706",
+    userId: 93,
+  });
+
+  const upRes = await request(ctx.app)
+    .post(`/api/learning/external/offerings/prof-706/units/u-${unit1.id}/quizzes/quiz-99/essay-assets`)
+    .set("Authorization", `Bearer ${token}`)
+    .attach("files", pngBytes, { filename: "essay-handwriting.png", contentType: "image/png" });
+  assert.equal(upRes.status, 200);
+  assert.equal(upRes.body.data.assets.length, 1);
+  assert.equal(upRes.body.data.assets[0].assetId, "901");
+  assert.match(upRes.body.data.assets[0].url, /\/submission-assets\/901$/);
+  assert.equal(capturedEssayUploadBody.originalFilename, "essay-handwriting.png");
+
+  const streamRes = await request(ctx.app)
+    .get(upRes.body.data.assets[0].url)
+    .set("Authorization", `Bearer ${token}`)
+    .buffer(true)
+    .parse((res, cb) => {
+      const chunks = [];
+      res.on("data", (c) => chunks.push(c));
+      res.on("end", () => cb(null, Buffer.concat(chunks)));
+    });
+  assert.equal(streamRes.status, 200);
+  assert.deepEqual(streamRes.body, pngBytes);
+
+  const atomicAnswers = { q1: "A", essay1: { text: "Bai viet", attachments: [{ assetId: "901", name: "essay-handwriting.png" }] } };
+  const subRes = await request(ctx.app)
+    .post(`/api/learning/external/offerings/prof-706/units/u-${unit1.id}/quizzes/attempts/att-99/submit`)
+    .set("Authorization", `Bearer ${token}`)
+    .send({ answers: atomicAnswers });
+  assert.equal(subRes.status, 200);
+  assert.deepEqual(capturedSubmitBody.answers, atomicAnswers);
+});

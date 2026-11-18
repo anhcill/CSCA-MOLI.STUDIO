@@ -1064,43 +1064,20 @@ function createCourseIntegrationClient({
   }
 
   // Day 5: Signed delegated file streaming / metadata
-  async function streamDelegatedFile({
+  async function streamDelegatedPath({
+    relativePath,
+    queryParams = {},
     sessionToken = null,
-    fileId,
-    unitId = null,
-    profileId = null,
-    disposition = "inline",
-    mode = "stream",
     rangeHeader = null,
     correlationId,
     maxTransportAttempts = 1,
     timeoutMs,
-  } = {}) {
-    const fid = encodeURIComponent(String(fileId || "").trim());
-    const normalizedMode = String(mode || "stream").toLowerCase() === "metadata" ? "metadata" : "stream";
-    const normalizedDisp = String(disposition || "inline").toLowerCase() === "attachment" ? "attachment" : "inline";
-    const queryParams = {
-      ...(unitId != null ? { unitId: String(unitId) } : {}),
-      ...(profileId != null ? { profileId: String(profileId) } : {}),
-      disposition: normalizedDisp,
-      mode: normalizedMode,
-    };
-
-    if (normalizedMode === "metadata") {
-      return delegatedGet(`/learning/files/${fid}/stream`, {
-        sessionToken,
-        queryParams,
-        correlationId,
-        maxTransportAttempts,
-        timeoutMs,
-      });
-    }
-
+  }) {
     const integrationLog = logger && logger !== console && typeof logger.info === "function"
       ? logger
       : createIntegrationLogger({ component: "course-client", env });
     const reqCorr = resolveCorrelationId(correlationId);
-    assertDomainKillSwitch("delegated_learning", integrationLog, `/learning/files/${fid}/stream`, reqCorr, "GET");
+    assertDomainKillSwitch("delegated_learning", integrationLog, relativePath, reqCorr, "GET");
     const callStartMs = Date.now();
     const cfg = assertConfigured();
 
@@ -1109,7 +1086,7 @@ function createCourseIntegrationClient({
       if (v !== undefined && v !== null && v !== "") search.set(k, String(v));
     }
     const qs = search.toString();
-    const basePath = `/api/integrations/v2/learning/files/${fid}/stream${qs ? `?${qs}` : ""}`;
+    const basePath = `/api/integrations/v2${relativePath}${qs ? `?${qs}` : ""}`;
     const parsedBase = new URL(cfg.baseUrl);
     const originalUrl = `${parsedBase.pathname.replace(/\/+$/, "")}${basePath}`;
     const url = `${parsedBase.origin}${originalUrl}`;
@@ -1295,6 +1272,73 @@ function createCourseIntegrationClient({
     throw lastError || new CourseIntegrationClientError(502, "COURSE_LMS_REQUEST_FAILED", "File stream failed.", { retryable: true });
   }
 
+  async function streamDelegatedFile({
+    sessionToken = null,
+    fileId,
+    unitId = null,
+    profileId = null,
+    disposition = "inline",
+    mode = "stream",
+    rangeHeader = null,
+    correlationId,
+    maxTransportAttempts = 1,
+    timeoutMs,
+  } = {}) {
+    const fid = encodeURIComponent(String(fileId || "").trim());
+    const normalizedMode = String(mode || "stream").toLowerCase() === "metadata" ? "metadata" : "stream";
+    const normalizedDisp = String(disposition || "inline").toLowerCase() === "attachment" ? "attachment" : "inline";
+    const queryParams = {
+      ...(unitId != null ? { unitId: String(unitId) } : {}),
+      ...(profileId != null ? { profileId: String(profileId) } : {}),
+      disposition: normalizedDisp,
+      mode: normalizedMode,
+    };
+
+    if (normalizedMode === "metadata") {
+      return delegatedGet(`/learning/files/${fid}/stream`, {
+        sessionToken,
+        queryParams,
+        correlationId,
+        maxTransportAttempts,
+        timeoutMs,
+      });
+    }
+
+    return streamDelegatedPath({
+      relativePath: `/learning/files/${fid}/stream`,
+      queryParams,
+      sessionToken,
+      rangeHeader,
+      correlationId,
+      maxTransportAttempts,
+      timeoutMs,
+    });
+  }
+
+  function streamDelegatedSubmissionAsset({
+    sessionToken,
+    assetId,
+    profileId = null,
+    disposition = "inline",
+    correlationId,
+    maxTransportAttempts = 1,
+    timeoutMs,
+  } = {}) {
+    const aid = encodeURIComponent(String(assetId || "").trim());
+    const normalizedDisp = String(disposition || "inline").toLowerCase() === "attachment" ? "attachment" : "inline";
+    return streamDelegatedPath({
+      relativePath: `/learning/submission-assets/${aid}/access`,
+      queryParams: {
+        ...(profileId != null ? { profileId: String(profileId) } : {}),
+        disposition: normalizedDisp,
+      },
+      sessionToken,
+      correlationId,
+      maxTransportAttempts,
+      timeoutMs,
+    });
+  }
+
   // Day 6: Quizzes & Assignments
   function fetchDelegatedQuiz({ sessionToken, profileId, unitId, quizId, correlationId, maxTransportAttempts = 1, timeoutMs } = {}) {
     const pid = encodeURIComponent(String(profileId || "").trim());
@@ -1335,12 +1379,44 @@ function createCourseIntegrationClient({
     );
   }
 
-  function submitDelegatedQuizAttempt({ sessionToken, attemptId, profileId = null, idempotencyKey = null, correlationId, maxTransportAttempts = 1, timeoutMs } = {}) {
+  function submitDelegatedQuizAttempt({ sessionToken, attemptId, profileId = null, answers = undefined, idempotencyKey = null, correlationId, maxTransportAttempts = 1, timeoutMs } = {}) {
     const aid = encodeURIComponent(String(attemptId || "").trim());
     return delegatedMutate(
       `/learning/quizzes/attempts/${aid}/submit`,
       {
         ...(profileId != null ? { profileId: String(profileId) } : {}),
+        ...(answers !== undefined ? { answers } : {}),
+      },
+      { sessionToken, method: "POST", idempotencyKey, correlationId, maxTransportAttempts, timeoutMs },
+    );
+  }
+
+  function uploadDelegatedQuizEssayAsset({
+    sessionToken,
+    quizId,
+    profileId = null,
+    unitId = null,
+    assetKind = "file",
+    originalFilename,
+    mimeType,
+    sizeBytes,
+    contentBase64,
+    idempotencyKey = null,
+    correlationId,
+    maxTransportAttempts = 1,
+    timeoutMs,
+  } = {}) {
+    const qid = encodeURIComponent(String(quizId || "").trim());
+    return delegatedMutate(
+      `/learning/quizzes/${qid}/submission-assets`,
+      {
+        ...(profileId != null ? { profileId: String(profileId) } : {}),
+        ...(unitId != null ? { unitId: String(unitId) } : {}),
+        assetKind: String(assetKind || "file"),
+        originalFilename: String(originalFilename || "essay-attachment.bin"),
+        mimeType: String(mimeType || "application/octet-stream"),
+        sizeBytes: Math.max(0, Number(sizeBytes || 0)),
+        contentBase64: String(contentBase64 || ""),
       },
       { sessionToken, method: "POST", idempotencyKey, correlationId, maxTransportAttempts, timeoutMs },
     );
@@ -1684,10 +1760,12 @@ function createCourseIntegrationClient({
     requestDelegatedPlaybackToken,
     sendDelegatedVideoProgress,
     streamDelegatedFile,
+    streamDelegatedSubmissionAsset,
     fetchDelegatedQuiz,
     startDelegatedQuizAttempt,
     saveDelegatedQuizAnswers,
     submitDelegatedQuizAttempt,
+    uploadDelegatedQuizEssayAsset,
     fetchDelegatedAssignment,
     uploadDelegatedAssignmentAsset,
     submitDelegatedAssignment,

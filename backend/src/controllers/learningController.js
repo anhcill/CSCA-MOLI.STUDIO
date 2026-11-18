@@ -108,6 +108,45 @@ const updateExternalVideoProgress = handler((req, res) =>
   }),
 );
 
+function sendExternalStreamResponse(res, result) {
+  for (const [headerName, headerVal] of Object.entries(result.headers || {})) {
+    if (headerVal != null) res.setHeader(headerName, headerVal);
+  }
+  res.status(result.status || 200);
+
+  if (Buffer.isBuffer(result.bodyBuffer)) {
+    result.releaseStreamTimer?.();
+    return res.send(result.bodyBuffer);
+  }
+  const rawStream = result.bodyStream;
+  const nodeStream = typeof rawStream?.pipe === "function"
+    ? rawStream
+    : (typeof rawStream?.getReader === "function" ? Readable.fromWeb(rawStream) : null);
+  if (nodeStream) {
+    let cleanedUp = false;
+    const cleanup = () => {
+      if (cleanedUp) return;
+      cleanedUp = true;
+      result.cleanupStream?.();
+      if (!res.writableEnded) {
+        nodeStream.destroy?.();
+      }
+    };
+    res.on("close", cleanup);
+    nodeStream.on("end", () => {
+      cleanedUp = true;
+      result.releaseStreamTimer?.();
+    });
+    nodeStream.on("error", () => {
+      cleanup();
+      if (!res.writableEnded) res.destroy();
+    });
+    return nodeStream.pipe(res);
+  }
+  result.releaseStreamTimer?.();
+  return res.end();
+}
+
 // Day 5: Secure delegated file streaming / metadata
 const streamExternalFile = async (req, res) => {
   try {
@@ -127,42 +166,26 @@ const streamExternalFile = async (req, res) => {
     if (result?.mode === "metadata") {
       return sendData(res, result.data);
     }
-    for (const [headerName, headerVal] of Object.entries(result.headers || {})) {
-      if (headerVal != null) res.setHeader(headerName, headerVal);
-    }
-    res.status(result.status || 200);
+    return sendExternalStreamResponse(res, result);
+  } catch (error) {
+    return sendExternalCourseError(res, error);
+  }
+};
 
-    if (Buffer.isBuffer(result.bodyBuffer)) {
-      result.releaseStreamTimer?.();
-      return res.send(result.bodyBuffer);
-    }
-    const rawStream = result.bodyStream;
-    const nodeStream = typeof rawStream?.pipe === "function"
-      ? rawStream
-      : (typeof rawStream?.getReader === "function" ? Readable.fromWeb(rawStream) : null);
-    if (nodeStream) {
-      let cleanedUp = false;
-      const cleanup = () => {
-        if (cleanedUp) return;
-        cleanedUp = true;
-        result.cleanupStream?.();
-        if (!res.writableEnded) {
-          nodeStream.destroy?.();
-        }
-      };
-      res.on("close", cleanup);
-      nodeStream.on("end", () => {
-        cleanedUp = true;
-        result.releaseStreamTimer?.();
-      });
-      nodeStream.on("error", () => {
-        cleanup();
-        if (!res.writableEnded) res.destroy();
-      });
-      return nodeStream.pipe(res);
-    }
-    result.releaseStreamTimer?.();
-    return res.end();
+const streamExternalSubmissionAsset = async (req, res) => {
+  try {
+    const result = await courseIntegrationRuntime.workspace.streamExternalSubmissionAsset({
+      profileId: req.params.profileId,
+      unitId: req.params.unitId,
+      assetId: req.params.assetId,
+      disposition: req.query?.disposition || "inline",
+      delegatedSessionToken: req.headers["x-delegated-session"] || null,
+      user: req.user || null,
+      req,
+      res,
+      correlationId: req.headers["x-correlation-id"] || null,
+    });
+    return sendExternalStreamResponse(res, result);
   } catch (error) {
     return sendExternalCourseError(res, error);
   }
@@ -211,6 +234,15 @@ const submitExternalQuizAttempt = externalHandler((req, res) =>
   courseIntegrationRuntime.workspace.submitExternalQuizAttempt({
     ...commonActionContext(req, res),
     attemptId: req.params.attemptId,
+    answers: req.body?.answers,
+  }),
+);
+
+const uploadExternalQuizEssayAssets = externalHandler((req, res) =>
+  courseIntegrationRuntime.workspace.uploadExternalQuizEssayAssets({
+    ...commonActionContext(req, res),
+    quizId: req.params.quizId,
+    files: req.files || [],
   }),
 );
 
@@ -323,10 +355,12 @@ module.exports = {
   getExternalWorkspace, getExternalUnit,
   getExternalVideoPlaybackToken, updateExternalVideoProgress,
   streamExternalFile,
+  streamExternalSubmissionAsset,
   getExternalQuiz,
   startExternalQuizAttempt,
   saveExternalQuizAnswers,
   submitExternalQuizAttempt,
+  uploadExternalQuizEssayAssets,
   getExternalAssignment,
   submitExternalAssignment,
   listExternalNotes,
