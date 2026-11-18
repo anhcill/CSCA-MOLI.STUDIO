@@ -6,7 +6,6 @@ import {
   FiAlertTriangle,
   FiDownload,
   FiFileText,
-  FiLock,
   FiRefreshCw,
   FiShield,
 } from 'react-icons/fi';
@@ -282,11 +281,7 @@ export function ProtectedExternalDocumentBody({
                 >
                   <FiDownload /> {downloading ? 'Đang tải...' : 'Tải tài liệu về máy'}
                 </button>
-              ) : (
-                <p className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-amber-100 px-4 py-2 text-xs font-bold text-amber-900 dark:bg-amber-950/60 dark:text-amber-200">
-                  <FiLock /> Chế độ chỉ xem · Quyền tải xuống đang bị khóa đối với tài liệu này.
-                </p>
-              )}
+              ) : null}
             </div>
           )}
         </div>

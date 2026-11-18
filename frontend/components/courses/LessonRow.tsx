@@ -30,7 +30,7 @@ export function LessonRow({
           </p>
           <p className="mt-1 flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-500 dark:text-slate-400">
             <span className="inline-flex items-center gap-1">
-              <TypeIcon /> {lesson.unitType === 'class_session' ? 'Buổi học Live Mirror' : typeLabels[lesson.lessonType]}
+              <TypeIcon /> {lesson.unitType === 'class_session' ? 'Bài học video' : typeLabels[lesson.lessonType]}
             </span>
             {(lesson.isFreePreview || lesson.isPublicPreview) ? (
               <span className="rounded-full bg-emerald-100 px-2 py-0.5 font-black text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">

@@ -40,7 +40,6 @@ import {
   errorText,
 } from './shared';
 import { CourseOwnershipBadge } from '@/components/courses/CourseOwnershipBadge';
-import { CourseSsoLaunchButton } from '@/components/courses/CourseSsoLaunchButton';
 
 function describePurchaseBlock(product: ShopProduct): string {
   const reason = product.purchaseBlockReason || '';
@@ -770,13 +769,6 @@ export default function VideoCheckout() {
                 </Message>
 
                 <div className="flex flex-wrap gap-2">
-                  {product.canLaunchCourse && (
-                    <CourseSsoLaunchButton
-                      courseId={product.courses[0]?.id}
-                      targetPath={product.ssoTargetPath}
-                      label="Vào học ngay"
-                    />
-                  )}
                   {(product.owned || product.ownershipStatus === 'owned') && (
                     <Link href="/hoc" className={buttonClass}>
                       <FiPlayCircle /> Mở trang học tập

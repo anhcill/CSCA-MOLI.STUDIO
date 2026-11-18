@@ -16,7 +16,6 @@ import coursesApi from '@/lib/api/courses';
 import type { CourseDetailDto } from '@/lib/types/courses';
 import { MOLY_ZALO_URL } from '@/lib/constants/moly';
 import { CourseOwnershipBadge } from '@/components/courses/CourseOwnershipBadge';
-import { CourseSsoLaunchButton } from '@/components/courses/CourseSsoLaunchButton';
 
 const levelLabels = {
   basic: 'Cơ bản',
@@ -86,8 +85,6 @@ export function CourseAccessCard({ course }: { course: CourseDetailDto }) {
   const names = packageNames(course);
   const ownershipStatus = course.access.ownershipStatus ?? course.ownershipStatus ?? null;
   const ownershipLabel = course.access.ownershipLabel ?? course.ownershipLabel ?? null;
-  const canLaunchCourse = Boolean(course.access.canLaunchCourse ?? course.canLaunchCourse);
-  const ssoTargetPath = course.access.ssoTargetPath ?? course.ssoTargetPath ?? null;
   const blockCode = course.access.blockCode ?? course.blockCode ?? null;
   const isUnpricedBlocked = !course.access.canLearn && !course.owned
     && (course.checkoutReady === false || blockCode === 'PRICE_NOT_CONFIGURED');
@@ -248,31 +245,18 @@ export function CourseAccessCard({ course }: { course: CourseDetailDto }) {
               <FiPlayCircle className="text-xl" />
               {course.progress ? 'Tiếp tục học trên Moly' : 'Vào học ngay trên Moly'}
             </button>
-            {canLaunchCourse ? (
-              <CourseSsoLaunchButton courseId={course.id} targetPath={ssoTargetPath} label="Mở trên CSCA-Course" className="!bg-slate-100 !text-slate-800 hover:!bg-slate-200 dark:!bg-slate-800 dark:!text-slate-100" />
-            ) : null}
             <Link href="/hoc" className="inline-flex w-full items-center justify-center rounded-xl px-4 py-2 text-sm font-black text-indigo-700 transition hover:bg-indigo-50 dark:text-indigo-300 dark:hover:bg-indigo-950/40">Khóa học của tôi →</Link>
           </div>
         ) : (
-          <>
-            {canLaunchCourse ? (
-              <div className="mb-3">
-                <CourseSsoLaunchButton courseId={course.id} targetPath={ssoTargetPath} label="Vào học" />
-              </div>
-            ) : null}
-
-            {(!canLaunchCourse || course.curriculum.some((section) => section.lessons.length > 0)) ? (
-              <button
-                type="button"
-                onClick={handleAction}
-                disabled={busy || ownershipStatus === 'pending_sync' || ownershipStatus === 'grant_blocked' || isUnpricedBlocked}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-sky-700 px-5 py-4 font-black text-white shadow-[0_10px_25px_rgba(3,105,161,0.22)] transition hover:-translate-y-0.5 hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-sky-600 dark:hover:bg-sky-700"
-              >
-                {course.access.canLearn || course.access.canEnroll ? <FiPlayCircle className="text-xl" /> : <FiPackage className="text-xl" />}
-                {busy ? 'Đang xử lý...' : actionLabel(course)}
-              </button>
-            ) : null}
-          </>
+          <button
+            type="button"
+            onClick={handleAction}
+            disabled={busy || ownershipStatus === 'pending_sync' || ownershipStatus === 'grant_blocked' || isUnpricedBlocked}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-sky-700 px-5 py-4 font-black text-white shadow-[0_10px_25px_rgba(3,105,161,0.22)] transition hover:-translate-y-0.5 hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-sky-600 dark:hover:bg-sky-700"
+          >
+            {course.access.canLearn || course.access.canEnroll ? <FiPlayCircle className="text-xl" /> : <FiPackage className="text-xl" />}
+            {busy ? 'Đang xử lý...' : actionLabel(course)}
+          </button>
         )}
         {firstFreePreviewLesson ? (
           <button

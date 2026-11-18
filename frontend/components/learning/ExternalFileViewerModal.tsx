@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { FiDownload, FiExternalLink, FiLock, FiX } from 'react-icons/fi';
+import { FiDownload, FiExternalLink, FiX } from 'react-icons/fi';
 import learningApi, { parseExternalApiError } from '@/lib/api/learning';
 import { useAuthStore } from '@/lib/store/authStore';
 import type {
@@ -223,11 +223,7 @@ export function ExternalFileViewerModal({
                 <FiDownload />
                 {downloading ? 'Đang tải...' : 'Tải xuống'}
               </button>
-            ) : (
-              <span className="inline-flex items-center gap-1.5 rounded-xl bg-amber-100 px-3 py-2 text-xs font-bold text-amber-900 dark:bg-amber-950/60 dark:text-amber-200">
-                <FiLock /> Chỉ xem · Khóa tải về
-              </span>
-            )}
+            ) : null}
             <button
               type="button"
               onClick={onClose}

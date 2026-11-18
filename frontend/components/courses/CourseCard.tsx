@@ -8,7 +8,7 @@ import {
 } from 'react-icons/fi';
 import type { CourseCatalogItemDto, CscaSubjectCode } from '@/lib/types/courses';
 import { CourseOwnershipBadge } from '@/components/courses/CourseOwnershipBadge';
-import { CourseSsoLaunchButton } from '@/components/courses/CourseSsoLaunchButton';
+import { publicCourseProfileLabel } from '@/lib/coursePresentation';
 
 const levelLabels = { basic: 'Cơ bản', intermediate: 'Trung cấp', advanced: 'Nâng cao' };
 const subjectMeta: Record<CscaSubjectCode, { label: string; cover: string }> = {
@@ -55,11 +55,11 @@ function offeringBadgeLabel(course: CourseCatalogItemDto): string | null {
   const active = profiles.filter((p) => p.status === 'active');
   const pool = active.length ? active : profiles;
   const firstWithBadge = pool.find((p) => p.badgeLabel?.trim());
-  if (firstWithBadge?.badgeLabel) return firstWithBadge.badgeLabel.trim();
+  if (firstWithBadge?.badgeLabel) return publicCourseProfileLabel(firstWithBadge.badgeLabel, firstWithBadge.mode);
   const hasMirror = pool.some((p) => p.mode === 'MIRROR');
   const hasIndep = pool.some((p) => p.mode === 'INDEPENDENT');
-  if (hasMirror && hasIndep) return 'Live & Tự học';
-  return hasMirror ? 'Bản ghi lớp Live' : 'Khóa video độc lập';
+  if (hasMirror && hasIndep) return 'Video & tự học';
+  return hasMirror ? 'Khóa học video' : 'Khóa học tự học';
 }
 
 function StatusBadges({ course }: { course: CourseCatalogItemDto }) {
@@ -147,16 +147,9 @@ export function CourseCard({ course, variant = 'compact' }: { course: CourseCata
             <div className="flex flex-col justify-center gap-3 border-t border-[#e4d8ce] p-6 dark:border-[#2d3a50] lg:border-l lg:border-t-0">
               <p className="text-center font-sans text-4xl font-black text-[#b9aa9d] dark:text-[#5b687c]">勤学</p>
               {course.contentOrigin === 'csca_course' && (course.owned || course.ownershipStatus === 'owned') && course.firstUnitHref ? (
-                <>
-                  <Link href={course.firstUnitHref} className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#af1f33] px-4 py-3 text-sm font-black text-white shadow transition hover:bg-[#92172a]">
-                    {course.progress ? 'Tiếp tục học' : 'Vào học trên Moly'} <FiArrowRight />
-                  </Link>
-                  {course.canLaunchCourse ? (
-                    <CourseSsoLaunchButton courseId={course.id} targetPath={course.ssoTargetPath} label="Mở CSCA-Course" />
-                  ) : null}
-                </>
-              ) : course.canLaunchCourse ? (
-                <CourseSsoLaunchButton courseId={course.id} targetPath={course.ssoTargetPath} label="Vào học" />
+                <Link href={course.firstUnitHref} className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#af1f33] px-4 py-3 text-sm font-black text-white shadow transition hover:bg-[#92172a]">
+                  {course.progress ? 'Tiếp tục học trên Moly' : 'Vào học trên Moly'} <FiArrowRight />
+                </Link>
               ) : course.checkoutReady === false && !course.owned && !course.progress ? (
                 <Link href={detailHref} className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#6b7280] px-4 py-3 text-sm font-black text-white shadow">
                   Chưa mở bán <FiArrowRight />
@@ -208,22 +201,13 @@ export function CourseCard({ course, variant = 'compact' }: { course: CourseCata
         <div className={`mt-5 ${featured ? '[&_span]:text-slate-300 [&>div]:border-white/15' : ''}`}><CourseMetrics course={course} /></div>
         <ProgressBar course={course} />
         {course.contentOrigin === 'csca_course' && (course.owned || course.ownershipStatus === 'owned') && course.firstUnitHref ? (
-          <div className="mt-4 space-y-2">
+          <div className="mt-4">
             <Link href={course.firstUnitHref} className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[#af1f33] px-4 py-3 text-sm font-black text-white shadow transition hover:bg-[#92172a]">
               {course.progress ? 'Tiếp tục học trên Moly' : 'Vào học trên Moly'} <FiArrowRight />
             </Link>
-            {course.canLaunchCourse ? (
-              <CourseSsoLaunchButton courseId={course.id} targetPath={course.ssoTargetPath} label="Mở trên CSCA-Course" className="!bg-slate-100 !text-slate-800 hover:!bg-slate-200 dark:!bg-slate-800 dark:!text-slate-100" />
-            ) : null}
           </div>
         ) : (
-          <>
-            {course.canLaunchCourse ? (
-              <div className="mt-4">
-                <CourseSsoLaunchButton courseId={course.id} targetPath={course.ssoTargetPath} label="Vào học" />
-              </div>
-            ) : null}
-            <Link href={course.progress ? continueHref : detailHref} className={`${course.canLaunchCourse ? 'mt-2.5' : 'mt-5'} inline-flex items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-black transition ${featured && !course.canLaunchCourse ? 'bg-[#ad1f33] text-white hover:bg-[#941629]' : 'border border-[#d8c9bd] text-[#243149] hover:border-[#a97752] dark:border-[#3a475c] dark:text-slate-200'}`}>
+          <Link href={course.progress ? continueHref : detailHref} className={`mt-5 inline-flex items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-black transition ${featured ? 'bg-[#ad1f33] text-white hover:bg-[#941629]' : 'border border-[#d8c9bd] text-[#243149] hover:border-[#a97752] dark:border-[#3a475c] dark:text-slate-200'}`}>
               {course.progress
                 ? 'Tiếp tục học'
                 : course.ownershipStatus === 'expired'
@@ -237,8 +221,7 @@ export function CourseCard({ course, variant = 'compact' }: { course: CourseCata
                         : course.ownershipStatus === 'not_owned' && course.accessType !== 'free'
                           ? 'Mua khóa học'
                           : 'Xem chi tiết'} <FiArrowRight />
-            </Link>
-          </>
+          </Link>
         )}
       </div>
     </article>

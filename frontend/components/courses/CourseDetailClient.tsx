@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { FiCheck, FiLayers, FiRefreshCw, FiTarget } from 'react-icons/fi';
 import coursesApi from '@/lib/api/courses';
 import type { CourseDetailDto } from '@/lib/types/courses';
+import { publicCourseModeLabel, publicCourseProfileLabel } from '@/lib/coursePresentation';
 import { CourseAccessCard } from './CourseAccessCard';
 import { CourseHero } from './CourseHero';
 import { CurriculumAccordion } from './CurriculumAccordion';
@@ -76,7 +77,7 @@ export function CourseDetailClient({ slug }: { slug: string }) {
                 <div className="mt-3 flex flex-wrap gap-2">
                   {course.projectedProfiles.map((profile) => {
                     const isActive = (course.activeProfileId || course.projectedProfiles?.[0]?.remoteProfileId) === profile.remoteProfileId;
-                    const modeText = profile.mode === 'MIRROR' ? 'Live Mirror' : 'Tự học Độc lập';
+                    const modeText = publicCourseModeLabel(profile.mode);
                     return (
                       <button
                         key={profile.remoteProfileId}
@@ -97,7 +98,7 @@ export function CourseDetailClient({ slug }: { slug: string }) {
                         }`}>
                           {modeText}
                         </span>
-                        <span>{profile.title || modeText}</span>
+                        <span>{publicCourseProfileLabel(profile.title, profile.mode)}</span>
                       </button>
                     );
                   })}

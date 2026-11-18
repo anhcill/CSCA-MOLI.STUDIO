@@ -611,9 +611,16 @@ function createCourseSsoService({
 
   async function resolveConsumeOutcome(client, exchanged, { current, corr }) {
     const namespacedCourseId = normalizeNamespacedCourseId(exchanged.source_user_id);
-    const sourceRole = normalizeSourceRole(exchanged.role);
+    const sourceRole = normalizeSourceRole(exchanged.source_role || exchanged.role);
     const learningPersona = exchanged.learning_persona === true;
     const email = normalizeEmail(exchanged.email);
+    const linkedTargetUserId = Number(exchanged.linked_target_user_id);
+    const requestedAdminBridge = learningPersona
+      && sourceRole === "admin"
+      && exchanged.email_verified === true
+      && Boolean(email)
+      && Number.isSafeInteger(linkedTargetUserId)
+      && linkedTargetUserId > 0;
     const targetPath = validateSsoTargetPath(exchanged.target_path, { targetSystem: "moly" });
     await client.query("SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))", [
       "csca-course:identity", namespacedCourseId,
@@ -639,7 +646,12 @@ function createCourseSsoService({
       if (!existingIdentity.is_active || existingIdentity.device_limit_locked_at) {
         throw new SsoPolicyError(403, "SSO_USER_REVOKED", "Moly user account is inactive or locked.");
       }
-      if (PRIVILEGED_ROLES.has(String(existingIdentity.role || "").toLowerCase()) || PRIVILEGED_ROLES.has(sourceRole)) {
+      const exactAdminBridge = requestedAdminBridge
+        && String(existingIdentity.role || "").toLowerCase() === "admin"
+        && normalizeEmail(existingIdentity.email) === email
+        && Number(existingIdentity.u_id) === linkedTargetUserId;
+      if ((PRIVILEGED_ROLES.has(String(existingIdentity.role || "").toLowerCase()) || PRIVILEGED_ROLES.has(sourceRole))
+        && !exactAdminBridge) {
         await recordMolyConflict(client, {
           conflictType: "PRIVILEGED_ROLE_COLLISION",
           externalUserId: namespacedCourseId,
@@ -673,6 +685,51 @@ function createCourseSsoService({
         targetPath,
         externalUserId: namespacedCourseId,
         learningPersona,
+        privilegedBridge: exactAdminBridge,
+      };
+    }
+
+    if (requestedAdminBridge) {
+      const adminCandidate = (await client.query(
+        `SELECT id, username, email, full_name, avatar, avatar_url,
+                role, is_active, is_verified, is_vip, subscription_tier,
+                vip_expires_at, vip_package_id, vip_allowed_subjects, created_at,
+                device_limit_locked_at
+         FROM users
+         WHERE id = $1 AND LOWER(email) = LOWER($2) AND role = 'admin'
+         FOR UPDATE`,
+        [linkedTargetUserId, email],
+      )).rows[0];
+      if (!adminCandidate || !adminCandidate.is_active || adminCandidate.device_limit_locked_at) {
+        await recordMolyConflict(client, {
+          conflictType: "PRIVILEGED_ROLE_COLLISION",
+          externalUserId: namespacedCourseId,
+          candidateUserId: Number.isSafeInteger(linkedTargetUserId) ? linkedTargetUserId : null,
+          emailHint: email,
+          correlationId: corr,
+          reason: "Admin bridge target is missing, inactive, locked, or does not match the verified email.",
+        });
+        throw new SsoPolicyError(403, "PRIVILEGED_ROLE_COLLISION", "Admin accounts do not match across systems.");
+      }
+
+      await client.query(
+        `INSERT INTO external_identities (
+           source_system, external_user_id, user_id, status,
+           link_method, source_updated_at, last_synced_at, correlation_id
+         ) VALUES (
+           'csca-course', $1, $2, 'active',
+           'auto_safe_link', $3, $3, $4
+         )`,
+        [namespacedCourseId, adminCandidate.id, current.toISOString(), corr],
+      );
+
+      return {
+        outcome: "AUTHENTICATED",
+        user: adminCandidate,
+        targetPath,
+        externalUserId: namespacedCourseId,
+        learningPersona: true,
+        privilegedBridge: true,
       };
     }
 
@@ -688,8 +745,14 @@ function createCourseSsoService({
     }
 
     if (email) {
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))", [
+        "csca-course:verified-email", email,
+      ]);
       const candidates = (await client.query(
-        `SELECT id, username, email, role, password, is_active, device_limit_locked_at
+        `SELECT id, username, email, full_name, avatar, avatar_url,
+                role, password, is_active, email_verified, is_verified, is_vip,
+                subscription_tier, vip_expires_at, vip_package_id, vip_allowed_subjects,
+                created_at, device_limit_locked_at
          FROM users
          WHERE LOWER(email) = LOWER($1)
          ORDER BY id ASC`,
@@ -713,6 +776,41 @@ function createCourseSsoService({
         const candidate = candidates[0];
         if (!candidate.is_active || candidate.device_limit_locked_at) {
           throw new SsoPolicyError(403, "SSO_USER_REVOKED", "Matching Moly account is inactive or locked.");
+        }
+
+        const candidateEmailVerified = candidate.email_verified === true || candidate.is_verified === true;
+        if (exchanged.email_verified === true && candidateEmailVerified) {
+          const otherActiveIdentity = (await client.query(
+            `SELECT id
+             FROM external_identities
+             WHERE source_system = 'csca-course'
+               AND user_id = $1
+               AND status = 'active'
+             LIMIT 1`,
+            [candidate.id],
+          )).rows[0];
+          if (!otherActiveIdentity) {
+            await client.query(
+              `INSERT INTO external_identities (
+                 source_system, external_user_id, user_id, status,
+                 link_method, source_updated_at, last_synced_at, correlation_id
+               ) VALUES (
+                 'csca-course', $1, $2, 'active',
+                 'auto_safe_link', $3, $3, $4
+               )`,
+              [namespacedCourseId, candidate.id, current.toISOString(), corr],
+            );
+            const authenticatedCandidate = { ...candidate };
+            delete authenticatedCandidate.password;
+            return {
+              outcome: "AUTHENTICATED",
+              user: authenticatedCandidate,
+              targetPath,
+              externalUserId: namespacedCourseId,
+              learningPersona,
+              verifiedEmailLinked: true,
+            };
+          }
         }
 
         const linkToken = generateOpaqueSsoCode(32);
@@ -801,12 +899,15 @@ function createCourseSsoService({
     targetPath,
     externalUserId,
     learningPersona = false,
+    privilegedBridge = false,
     syncPeer,
     nonce,
     corr,
     devicePrep = null,
   }) {
-    await assertMolyLearnerPolicy(db, user.id);
+    if (!privilegedBridge) {
+      await assertMolyLearnerPolicy(db, user.id);
+    }
     if (syncPeer && courseClient?.isConfigured?.()) {
       await courseClient.bindSsoPeerIdentity({
         externalUserId: `moly:${user.id}`,
@@ -1020,6 +1121,7 @@ function createCourseSsoService({
       targetPath: resolved.targetPath,
       externalUserId: resolved.externalUserId,
       learningPersona: resolved.learningPersona === true,
+      privilegedBridge: resolved.privilegedBridge === true,
       syncPeer: true,
       nonce: exchanged.nonce || state,
       corr,

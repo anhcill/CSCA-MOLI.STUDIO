@@ -5,7 +5,6 @@ import { useSearchParams } from 'next/navigation';
 import { videoShop,type Page,type ShopProduct,type ProductType,type Promotion } from '@/lib/api/videoShop';
 import { ShopShell,Message,Pager,money,subjects,buttonClass,panelClass,errorText,secondaryClass } from './shared';
 import { CourseOwnershipBadge } from '@/components/courses/CourseOwnershipBadge';
-import { CourseSsoLaunchButton } from '@/components/courses/CourseSsoLaunchButton';
 export default function VideoCatalog({ embedded = false, productType = 'video' }: { embedded?: boolean; productType?: ProductType }) {
   const params=useSearchParams(),courseId=Number(params.get('courseId'));
   const [type,setType]=useState<ProductType>(productType),[page,setPage]=useState(1),[data,setData]=useState<Page<ShopProduct>|null>(null);
@@ -40,7 +39,6 @@ export default function VideoCatalog({ embedded = false, productType = 'video' }
         {!isUnpriced&&p.originalPriceVnd!=null&&p.originalPriceVnd>(p.priceVnd??0)&&<del className="text-sm text-slate-500">{money(p.originalPriceVnd)}</del>}
         <dl className="my-5 space-y-2 text-sm"><div><dt className="font-bold">Quyền video</dt><dd>{p.video?.durationMode==='lifetime'?'Không giới hạn':`${p.video?.durationDays} ngày`} · {p.video?.requiresSubjectChoice?'Chọn 1 môn':p.video?.allowedSubjects.map(s=>subjects[s]).join(', ')}</dd></div>{p.vip&&<div><dt className="font-bold">{p.vip.name}</dt><dd>{'vipDurationDays' in p?String(p.vipDurationDays):''} ngày quyền gói</dd></div>}</dl>
         <ul className="mb-5 space-y-2 text-sm">{p.courses.map(c=><li key={c.id}><Link href={`/khoa-hoc/${c.slug}`} className="underline decoration-slate-300 underline-offset-4">{c.title}</Link></li>)}{p.features.map(f=><li key={f}>✓ {f}</li>)}</ul>
-        {p.canLaunchCourse ? <div className="mb-3"><CourseSsoLaunchButton courseId={p.courses[0]?.id} targetPath={p.ssoTargetPath} label="Vào học" /></div> : null}
         {p.ownershipStatus === 'pending_sync' || p.purchaseBlockReason === 'PENDING_SYNC' ? (
           <button type="button" onClick={()=>setRetry(r=>r+1)} className={`${secondaryClass} mt-auto`}>Đang đồng bộ quyền · Làm mới</button>
         ) : p.ownershipStatus === 'verification_required' || p.purchaseBlockReason === 'IDENTITY_VERIFICATION_REQUIRED' ? (

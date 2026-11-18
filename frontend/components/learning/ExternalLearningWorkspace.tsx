@@ -15,7 +15,6 @@ import {
   FiPlayCircle,
   FiRefreshCw,
   FiShield,
-  FiUser,
 } from 'react-icons/fi';
 import learningApi, { generateIdempotencyKey } from '@/lib/api/learning';
 import type {
@@ -27,7 +26,7 @@ import type {
   ExternalWorkspaceProgressDto,
   ExternalWorkspaceUnitSummaryDto,
 } from '@/lib/types/courses';
-import { CourseSsoLaunchButton } from '@/components/courses/CourseSsoLaunchButton';
+import { publicCourseModeLabel, publicCourseProfileLabel } from '@/lib/coursePresentation';
 import { ExternalUnitContentTabs, type ExternalTabId } from './ExternalUnitContentTabs';
 import { LearningFooter } from './LearningFooter';
 import { LearningHeader } from './LearningHeader';
@@ -130,7 +129,7 @@ function parseErrorMessage(err: unknown): { code: string | null; message: string
     if (code === 'DEVICE_SLOT_LIMIT_REACHED') {
       return {
         code,
-        message: 'Tài khoản đã đạt giới hạn thiết bị tin cậy (tối đa 2 trình duyệt). Vui lòng thu hồi bớt thiết bị cũ trên CSCA-Course trước khi học ở trình duyệt mới.',
+        message: 'Tài khoản đã đạt giới hạn thiết bị tin cậy. Vui lòng đăng xuất thiết bị cũ hoặc liên hệ hỗ trợ trước khi học ở trình duyệt mới.',
       };
     }
     if (code === 'DEVICE_BINDING_REVOKED' || code === 'UNTRUSTED_DEVICE_PROOF') {
@@ -799,7 +798,7 @@ export function ExternalLearningWorkspace({
   }
 
   const isMirror = workspace.profile.mode === 'MIRROR';
-  const modeLabel = isMirror ? 'Live Mirror' : 'Tự học Độc lập';
+  const modeLabel = publicCourseModeLabel(workspace.profile.mode);
   const isLocked = isUnitLocked;
   const lockReason = workspace.selectedUnitLock?.reason
     || activeUnit?.lockReason
@@ -858,10 +857,9 @@ export function ExternalLearningWorkspace({
               }`}>
                 <FiLayers /> {modeLabel}
               </span>
-              {isMirror && workspace.sourceClass ? (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 px-3 py-1 font-bold text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-200">
-                  <FiUser /> Lớp: {workspace.sourceClass.title}
-                  {workspace.sourceClass.instructorName ? ` · GV: ${workspace.sourceClass.instructorName}` : ''}
+              {workspace.profile.capabilities?.canReviewFreely ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-1 font-black text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200">
+                  Lớp Live · Mở tự do toàn bộ buổi & BTVN
                 </span>
               ) : null}
               {deviceLimit ? (
@@ -891,7 +889,7 @@ export function ExternalLearningWorkspace({
                           : 'border-[#d8c8b9] bg-white text-[#414c61] hover:border-indigo-400 dark:border-[#34435a] dark:bg-[#101e33] dark:text-slate-200'
                       }`}
                     >
-                      {p.title || (p.mode === 'MIRROR' ? 'Live Mirror' : 'Tự học')}
+                      {publicCourseProfileLabel(p.title, p.mode)}
                     </button>
                   );
                 })}
@@ -988,13 +986,9 @@ export function ExternalLearningWorkspace({
                         <FiPlayCircle /> Quay lại bài đang mở
                       </Link>
                     ) : null}
-                    <div className="w-60">
-                      <CourseSsoLaunchButton
-                        courseId={workspace.course.id}
-                        targetPath={workspace.course.ssoTargetPath}
-                        label="Hoàn thành trên CSCA-Course"
-                      />
-                    </div>
+                    {!navContext.firstUnlocked?.href ? (
+                      <p className="max-w-sm text-xs font-semibold text-slate-300">Hãy hoàn thành bài học trước ngay trên Moly rồi tải lại trang.</p>
+                    ) : null}
                   </div>
                 </div>
               ) : playbackError ? (
@@ -1023,13 +1017,7 @@ export function ExternalLearningWorkspace({
                       </button>
                     )}
                     {playbackErrorCode === 'DEVICE_SLOT_LIMIT_REACHED' || playbackErrorCode === 'DEVICE_LIMIT_LOCKED' ? (
-                      <div className="w-56">
-                        <CourseSsoLaunchButton
-                          courseId={workspace.course.id}
-                          targetPath="/profile"
-                          label="Quản lý thiết bị trên Course"
-                        />
-                      </div>
+                      <p className="max-w-xs text-xs font-semibold text-amber-200">Tài khoản đã đạt giới hạn thiết bị. Vui lòng đăng xuất thiết bị cũ hoặc liên hệ hỗ trợ.</p>
                     ) : null}
                   </div>
                 </div>
@@ -1075,7 +1063,7 @@ export function ExternalLearningWorkspace({
                   ) : null}
                   <div className="relative z-10 max-w-lg space-y-3 rounded-2xl border border-white/15 bg-[#061126]/85 p-6 backdrop-blur">
                     <p className="text-xs font-black uppercase tracking-wider text-[#49b6ac]">
-                      {activeVideo.provider || 'CSCA-Course Video'}
+                      {activeVideo.provider || 'Video bài học'}
                       {activeVideo.durationSeconds ? ` · ${formatClock(activeVideo.durationSeconds)}` : ''}
                     </p>
                     <h2 className="text-lg font-black">{activeVideo.title}</h2>
@@ -1087,13 +1075,13 @@ export function ExternalLearningWorkspace({
                         <FiClock /> Mốc đã chọn: {formatClock(seekTargetSeconds)}
                       </p>
                     ) : null}
-                    <div className="mx-auto max-w-xs pt-2">
-                      <CourseSsoLaunchButton
-                        courseId={workspace.course.id}
-                        targetPath={workspace.course.ssoTargetPath}
-                        label="Phát video trên CSCA-Course"
-                      />
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setTokenRetryNonce((n) => n + 1)}
+                      className="mx-auto inline-flex items-center gap-2 rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-black text-white hover:bg-teal-500"
+                    >
+                      <FiRefreshCw /> Tải lại video trên Moly
+                    </button>
                   </div>
                 </div>
               ) : (

@@ -1,5 +1,6 @@
 import { FiBookOpen, FiClock, FiUsers } from 'react-icons/fi';
 import type { CourseDetailDto, CscaSubjectCode } from '@/lib/types/courses';
+import { publicCourseProfileLabel } from '@/lib/coursePresentation';
 
 const subjectLabels: Record<CscaSubjectCode, string> = {
   MATH: 'Toán CSCA', PHYSICS: 'Vật lý CSCA', CHEMISTRY: 'Hóa học CSCA', CHINESE_SCI: 'Trung văn Tự nhiên', CHINESE_SOC: 'Trung văn Xã hội',
@@ -22,7 +23,7 @@ export function CourseHero({ course }: { course: CourseDetailDto }) {
             <span className="rounded-full border border-slate-200 bg-slate-100 px-3 py-1.5 text-xs font-black text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">{levelLabels[course.level]}</span>
             {course.profiles?.slice(0, 2).map((profile) => (
               <span key={profile.externalOfferingId || profile.id} className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 dark:border-emerald-900/70 dark:bg-emerald-950/40 dark:text-emerald-300">
-                {profile.badgeLabel || (profile.mode === 'MIRROR' ? 'Bản ghi lớp Live' : 'Khóa video độc lập')}
+                {publicCourseProfileLabel(profile.badgeLabel, profile.mode)}
               </span>
             ))}
             {course.isNew ? <span className="rounded-full bg-emerald-400 px-3 py-1.5 text-xs font-black text-emerald-950">MỚI</span> : null}

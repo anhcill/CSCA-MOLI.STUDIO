@@ -818,13 +818,18 @@ test('Expired code, open redirect launch, and revocation at exchange time fail c
   assert.equal(expRes.body.code, 'SSO_CODE_EXPIRED');
 });
 
-test('Case 3: Unlinked email collision never auto-merges, verifies via password/session, resolves conflict, and blocks privileged accounts', async (t) => {
+test('Case 3: Safe-link collisions, verified admin-to-admin bridge, and unsafe privileged blocks', async (t) => {
   const ctx = await setupDay4MolyEnv(t);
   const hash = await bcrypt.hash('MolyPass123!', 6);
 
   const student = (await ctx.db.query(
     `INSERT INTO users (email, username, password, role, is_active, is_verified)
-     VALUES ('dual.learner@example.com', 'moly_dual', $1, 'student', true, true) RETURNING *`,
+     VALUES ('dual.learner@example.com', 'moly_dual', $1, 'student', true, false) RETURNING *`,
+    [hash],
+  )).rows[0];
+  const verifiedStudent = (await ctx.db.query(
+    `INSERT INTO users (email, username, password, role, is_active, email_verified, is_verified)
+     VALUES ('verified.learner@example.com', 'moly_verified', $1, 'student', true, true, true) RETURNING *`,
     [hash],
   )).rows[0];
   const admin = (await ctx.db.query(
@@ -872,6 +877,71 @@ test('Case 3: Unlinked email collision never auto-merges, verifies via password/
   assert.equal((await ctx.db.query(
     "SELECT COUNT(*)::int AS count FROM integration_conflicts WHERE external_user_id='csca-course:9001'",
   )).rows[0].count, 1);
+
+  // A signed Course admin learner persona may reuse the exact pre-linked Moly
+  // admin account. The target id + verified email + both admin roles must all
+  // match; the Moly role is preserved and never copied from Course.
+  ctx.setSsoExchangeHandler(async ({ nonce }) => ({
+    status: 200,
+    body: {
+      success: true,
+      data: {
+        source_system: 'csca-course',
+        source_user_id: '9002',
+        email: 'moly.admin@example.com',
+        email_verified: true,
+        role: 'student',
+        source_role: 'admin',
+        learning_persona: true,
+        linked_target_user_id: String(admin.id),
+        target_path: '/khoa-hoc',
+        nonce,
+      },
+    },
+  }));
+  const adminBridgeAgent = request.agent(ctx.app);
+  const adminBridgeTx = await startMolyBrowserSso(adminBridgeAgent, { targetPath: '/khoa-hoc' });
+  const adminBridgeRes = await adminBridgeAgent
+    .post('/api/sso/consume')
+    .send({ code: 'c-admin-bridge', state: adminBridgeTx.state });
+  assert.equal(adminBridgeRes.status, 200);
+  assert.equal(adminBridgeRes.body.data.status, 'AUTHENTICATED');
+  assert.equal(adminBridgeRes.body.data.user.id, admin.id);
+  assert.equal(adminBridgeRes.body.data.user.role, 'admin');
+  const bridgedIdentity = (await ctx.db.query(
+    "SELECT * FROM external_identities WHERE external_user_id = 'csca-course:9002'",
+  )).rows[0];
+  assert.equal(Number(bridgedIdentity.user_id), Number(admin.id));
+
+  // Different local ids are expected. A trusted, verified email match links
+  // the existing learner instead of creating a duplicate shadow account.
+  ctx.setSsoExchangeHandler(async ({ nonce }) => ({
+    status: 200,
+    body: {
+      success: true,
+      data: {
+        source_system: 'csca-course',
+        source_user_id: '9003',
+        email: 'verified.learner@example.com',
+        email_verified: true,
+        role: 'student',
+        source_role: 'user',
+        target_path: '/khoa-hoc',
+        nonce,
+      },
+    },
+  }));
+  const verifiedAgent = request.agent(ctx.app);
+  const verifiedTx = await startMolyBrowserSso(verifiedAgent, { targetPath: '/khoa-hoc' });
+  const verifiedRes = await verifiedAgent
+    .post('/api/sso/consume')
+    .send({ code: 'c-verified-email', state: verifiedTx.state });
+  assert.equal(verifiedRes.status, 200);
+  assert.equal(verifiedRes.body.data.status, 'AUTHENTICATED');
+  assert.equal(Number(verifiedRes.body.data.user.id), Number(verifiedStudent.id));
+  assert.equal((await ctx.db.query(
+    "SELECT link_method FROM external_identities WHERE external_user_id = 'csca-course:9003'",
+  )).rows[0].link_method, 'auto_safe_link');
 
   // Student email collision returns LINK_REQUIRED without issuing JWT, and binds link cookie to initiator browser
   ctx.setSsoExchangeHandler(async ({ nonce }) => ({
@@ -936,7 +1006,7 @@ test('Case 3: Unlinked email collision never auto-merges, verifies via password/
     [student.id],
   )).rows[0];
   assert.equal(conflictAfter.status, 'resolved');
-  assert.equal(ctx.boundPeerIdentities[0].target_user_id, '601');
+  assert.ok(ctx.boundPeerIdentities.some((identity) => identity.target_user_id === '601'));
 
   // Reusing linkToken fails after link cookie is cleared & row completed
   const reuseConfirm = await agentA

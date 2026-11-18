@@ -14,7 +14,6 @@ import {
 import learningApi from '@/lib/api/learning';
 import type { MyLearningItemDto } from '@/lib/types/courses';
 import { CourseOwnershipBadge } from '@/components/courses/CourseOwnershipBadge';
-import { CourseSsoLaunchButton } from '@/components/courses/CourseSsoLaunchButton';
 
 const courseSyncExplicitlyDisabled = process.env.NEXT_PUBLIC_COURSE_SYNC_ENABLED === 'false';
 
@@ -192,16 +191,12 @@ export function MyLearningClient() {
                       <div className="min-w-0">
                         <p className="text-xs font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-300">Khóa học đồng bộ</p>
                         <p className="mt-1 text-sm font-semibold text-slate-700 dark:text-slate-200">
-                          Truy cập bài giảng video trực tiếp trên nền tảng CSCA-Course.
+                          Nội dung đang được hoàn tất trên Moly. Bạn có thể mở trang khóa học để kiểm tra lại.
                         </p>
                       </div>
-                      <div className="flex shrink-0 flex-wrap items-center gap-2">
-                        {course.canLaunchCourse ? (
-                          <div className="w-full sm:w-auto">
-                            <CourseSsoLaunchButton courseId={course.id} targetPath={course.ssoTargetPath} label="Vào học trên CSCA-Course" />
-                          </div>
-                        ) : null}
-                      </div>
+                      <Link href={`/khoa-hoc/${course.slug}`} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 font-black text-white transition hover:bg-indigo-700">
+                        Xem khóa học <FiArrowRight />
+                      </Link>
                     </div>
                   </>
                 ) : (
@@ -236,16 +231,6 @@ export function MyLearningClient() {
                         <Link href={target} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 font-black text-white shadow-lg shadow-indigo-600/20 transition hover:bg-indigo-700">
                           {progress >= 100 ? <><FiCheckCircle /> Xem lại</> : started ? <><FiPlay /> Tiếp tục học</> : <>Vào học ngay <FiArrowRight /></>}
                         </Link>
-                        {course.canLaunchCourse ? (
-                          <div className="w-full sm:w-auto">
-                            <CourseSsoLaunchButton
-                              courseId={course.id}
-                              targetPath={course.ssoTargetPath}
-                              label={isCscaCourse ? 'Mở trên CSCA-Course' : 'Vào học'}
-                              className={isCscaCourse ? '!bg-slate-200 !text-slate-800 hover:!bg-slate-300 dark:!bg-slate-800 dark:!text-slate-100' : ''}
-                            />
-                          </div>
-                        ) : null}
                       </div>
                     </div>
                   </>

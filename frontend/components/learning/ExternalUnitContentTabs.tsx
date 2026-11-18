@@ -29,7 +29,6 @@ import type {
   ExternalWorkspaceCapabilitiesDto,
   ExternalWorkspaceUnitSummaryDto,
 } from '@/lib/types/courses';
-import { CourseSsoLaunchButton } from '@/components/courses/CourseSsoLaunchButton';
 import RichMathText from '@/components/common/RichMathText';
 import { ExternalAssignmentPanel } from './ExternalAssignmentPanel';
 import { ExternalFileViewerModal } from './ExternalFileViewerModal';
@@ -181,11 +180,9 @@ function renderLatexToHtml(latex: string): string {
 }
 
 export function ExternalUnitContentTabs({
-  courseId,
   courseSlug,
   profileId,
   unitParamId,
-  ssoTargetPath,
   unit,
   unitSummary = null,
   capabilities,
@@ -702,21 +699,6 @@ export function ExternalUnitContentTabs({
                 />
               ) : null}
 
-              {!isPublicPreviewAccess ? (
-                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#e5d9ce] pt-4 text-xs dark:border-[#2d3b52]">
-                  <span className="text-[#6f665f] dark:text-slate-400">
-                    Cần mở phiên bản đầy đủ trên CSCA-Course?
-                  </span>
-                  <div className="w-56">
-                    <CourseSsoLaunchButton
-                      courseId={courseId}
-                      targetPath={ssoTargetPath}
-                      label="Mở trên CSCA-Course"
-                      className="!bg-slate-200 !py-2 !text-xs !text-slate-800 hover:!bg-slate-300 dark:!bg-slate-800 dark:!text-slate-100"
-                    />
-                  </div>
-                </div>
-              ) : null}
             </div>
           ) : (
             <p className="text-slate-500 dark:text-slate-400">Bài học này không có quiz hoặc bài tập.</p>
