@@ -213,6 +213,12 @@ export function CourseAccessCard({ course }: { course: CourseDetailDto }) {
         {ownershipStatus === 'verification_required' ? (
           <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-800 dark:border-rose-800/70 dark:bg-rose-950/40 dark:text-rose-200">
             <p>Email tài khoản đang trùng trên hai hệ thống và cần xác minh liên kết an toàn trước khi đồng bộ quyền.</p>
+            <Link
+              href={`/sso/start?target_path=${encodeURIComponent(`/khoa-hoc/${course.slug}`)}`}
+              className="mt-2 inline-flex items-center gap-1 font-black text-rose-900 underline dark:text-rose-100"
+            >
+              Xác minh & liên kết tài khoản CSCA-Course →
+            </Link>
           </div>
         ) : null}
         {ownershipStatus === 'grant_blocked' ? (
@@ -276,6 +282,19 @@ export function CourseAccessCard({ course }: { course: CourseDetailDto }) {
           >
             <FiPlayCircle className="text-lg" /> Xem bài học thử miễn phí
           </button>
+        ) : null}
+        {isCscaCourse && !course.access.canLearn && !course.owned && ownershipStatus !== 'verification_required' && ownershipStatus !== 'pending_sync' && ownershipStatus !== 'grant_blocked' ? (
+          <div className="mt-3 rounded-2xl border border-indigo-200/80 bg-indigo-50/70 p-3.5 text-xs font-semibold text-indigo-950 dark:border-indigo-900/60 dark:bg-indigo-950/30 dark:text-indigo-100">
+            <p>Đã có quyền từ lớp Live hoặc lớp Record bên CSCA-Course?</p>
+            <Link
+              href={`/sso/start?target_path=${encodeURIComponent(`/khoa-hoc/${course.slug}`)}`}
+              className="mt-1 inline-flex items-center gap-1 font-black text-indigo-700 underline dark:text-indigo-300"
+            >
+              {course.access.reasonCode === 'AUTH_REQUIRED'
+                ? 'Đăng nhập bằng tài khoản CSCA-Course →'
+                : 'Liên kết tài khoản CSCA-Course để Vào học →'}
+            </Link>
+          </div>
         ) : null}
         {isUnpricedBlocked ? (
           <a href={MOLY_ZALO_URL} target="_blank" rel="noreferrer" className="mt-3 inline-flex w-full items-center justify-center rounded-xl border border-slate-200 px-4 py-3 text-sm font-black text-slate-700 transition hover:border-indigo-300 hover:text-indigo-700 dark:border-slate-700 dark:text-slate-200 dark:hover:border-indigo-700 dark:hover:text-indigo-300">Liên hệ hỗ trợ qua Zalo</a>

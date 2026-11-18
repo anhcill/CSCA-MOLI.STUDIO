@@ -782,6 +782,14 @@ export default function VideoCheckout() {
                       <FiPlayCircle /> Mở trang học tập
                     </Link>
                   )}
+                  {(product.ownershipStatus === 'verification_required' || product.purchaseBlockReason === 'IDENTITY_VERIFICATION_REQUIRED') && (
+                    <Link
+                      href={`/sso/start?target_path=${encodeURIComponent(`/thanh-toan-khoa-hoc?type=${type}&productId=${id}`)}`}
+                      className={buttonClass}
+                    >
+                      <FiExternalLink /> Xác minh & liên kết CSCA-Course
+                    </Link>
+                  )}
                   {(product.ownershipStatus === 'pending_sync' || product.purchaseBlockReason === 'PENDING_SYNC') && (
                     <button
                       type="button"
@@ -800,6 +808,17 @@ export default function VideoCheckout() {
               </div>
             ) : (
               <fieldset disabled={busy} className="space-y-4">
+                {logged && owned.length === 0 && !product.owned && product.courses.some((c) => c.content_origin === 'csca_course') && (
+                  <div className="rounded-xl border border-indigo-200 bg-indigo-50/70 p-3 text-xs font-semibold text-indigo-950 dark:border-indigo-900/60 dark:bg-indigo-950/30 dark:text-indigo-100">
+                    <p>Nếu bạn đã tham gia lớp Live hoặc Record bên CSCA-Course, hãy liên kết tài khoản trước để mở quyền Vào học ngay (không cần mua lại).</p>
+                    <Link
+                      href={`/sso/start?target_path=${encodeURIComponent(`/thanh-toan-khoa-hoc?type=${type}&productId=${id}`)}`}
+                      className="mt-1 inline-flex items-center gap-1 font-black text-indigo-700 underline dark:text-indigo-300"
+                    >
+                      Liên kết tài khoản CSCA-Course →
+                    </Link>
+                  </div>
+                )}
                 {product.video?.requiresSubjectChoice && (
                   <label className="block text-sm font-bold">
                     Chọn môn học muốn mở khóa <span className="text-rose-600">*</span>

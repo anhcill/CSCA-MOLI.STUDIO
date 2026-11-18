@@ -911,4 +911,90 @@ describe("Day 2 Moly Studio Catalog Sync v2, Backfill, Legacy Protection, and Un
     assert.equal(Number(offersAfter.rows[0].id), Number(offer.id));
     assert.equal(Number(offersAfter.rows[0].price_vnd), 699000);
   });
+
+  test("Course with only archived/deleted profiles stays off public catalog and archiving last active profile archives course", async (t) => {
+    const { pg, db } = await setupMolyCatalogDb();
+    t.after(() => pg.close());
+    const catalogSync = createMolyCourseCatalogSyncService({ db });
+
+    await catalogSync.ingestCatalogEvents(makeCourseEnvelope({
+      courseId: "600",
+      revision: 12,
+      slug: "khoa-live-cu-600",
+      title: "Khóa học csca tháng 10 (Live container)",
+      priceVnd: 0,
+      isFree: false,
+      isPublished: true,
+      profiles: [{
+        profileId: "6001",
+        externalOfferingId: "archived-live-alias-600",
+        courseId: "600",
+        mode: "MIRROR",
+        managementClassId: "archived-live-alias-600",
+        status: "archived",
+        revision: 12,
+        deleted: true,
+        deletedAt: "2026-11-17T16:50:17.031Z",
+        sourceUpdatedAt: "2026-11-17T16:50:17.031Z",
+      }],
+    }));
+
+    const archivedOnlyCourse = (await pg.query(
+      `SELECT status FROM courses WHERE remote_course_id = '600'`,
+    )).rows[0];
+    assert.equal(archivedOnlyCourse.status, "archived");
+
+    // Course initially published with 1 active profile then tombstoned on last profile also archives parent course.
+    await catalogSync.ingestCatalogEvents(makeCourseEnvelope({
+      courseId: "601",
+      revision: 1,
+      slug: "khoa-601",
+      title: "Khóa 601",
+      priceVnd: 500000,
+      isFree: false,
+      isPublished: true,
+      profiles: [{
+        profileId: "6011",
+        externalOfferingId: "offer-6011",
+        courseId: "601",
+        mode: "INDEPENDENT",
+        managementClassId: "offer-6011",
+        status: "active",
+        revision: 1,
+        deleted: false,
+        sourceUpdatedAt: "2026-11-17T10:00:00.000Z",
+      }],
+    }));
+    assert.equal((await pg.query(`SELECT status FROM courses WHERE remote_course_id = '601'`)).rows[0].status, "published");
+
+    await catalogSync.ingestCatalogEvents({
+      schemaVersion: "2.0",
+      eventId: "csca-course:profile:6011:rev:2",
+      idempotencyKey: "csca-course:profile:6011:rev:2",
+      eventType: "profile.tombstoned",
+      sourceSystem: "csca-course",
+      targetSystem: "moly",
+      aggregateType: "profile",
+      aggregateId: "6011",
+      revision: 2,
+      sourceUpdatedAt: "2026-11-17T11:00:00.000Z",
+      occurredAt: "2026-11-17T11:00:00.000Z",
+      deleted: true,
+      deletedAt: "2026-11-17T11:00:00.000Z",
+      payload: {
+        profileId: "6011",
+        externalOfferingId: "offer-6011",
+        courseId: "601",
+        mode: "INDEPENDENT",
+        managementClassId: "offer-6011",
+        status: "archived",
+        revision: 2,
+        deleted: true,
+        deletedAt: "2026-11-17T11:00:00.000Z",
+        sourceUpdatedAt: "2026-11-17T11:00:00.000Z",
+      },
+    });
+    assert.equal((await pg.query(`SELECT status FROM courses WHERE remote_course_id = '601'`)).rows[0].status, "archived");
+    assert.equal((await pg.query(`SELECT status FROM video_packages WHERE source_course_id = '601'`)).rows[0].status, "archived");
+  });
 });

@@ -18,7 +18,7 @@ export type ShopProduct = Omit<VideoCommerceProductDto, 'canPurchase'> & {
   subjectPrices: Record<string, number>;
   video: VideoPackageDto | null;
   vip: { id: number; name: string } | null;
-  courses: { id: number; title: string; slug: string; subject_code: string }[];
+  courses: { id: number; title: string; slug: string; subject_code: string; content_origin?: string | null }[];
   owned?: boolean;
   ownershipStatus?: string | null;
   ownershipLabel?: string | null;

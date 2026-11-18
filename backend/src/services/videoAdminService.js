@@ -41,11 +41,25 @@ function createVideoAdminService({db,repository,payments,recalculateVip,sendRigh
     return {checked:rows.length};
   }
 
+  async function loadCourseSummaries(client, courseIds = []) {
+    if (!courseIds.length) return [];
+    const hasOriginCol = (await client.query(
+      `SELECT EXISTS (
+         SELECT 1 FROM pg_attribute
+         WHERE attrelid = to_regclass('courses')
+           AND NOT attisdropped
+           AND attname = 'content_origin'
+       ) AS has_origin`,
+    )).rows[0]?.has_origin === true;
+    const cols = hasOriginCol ? "id,title,slug,subject_code,content_origin" : "id,title,slug,subject_code";
+    return (await client.query(`SELECT ${cols} FROM courses WHERE id=ANY($1::bigint[]) ORDER BY id`, [courseIds])).rows;
+  }
+
   async function enrich(row,type,client=db,{userId=null}={}) {
     const value={...mapProduct(row,type),renewalMode:row.renewal_mode,subjectPrices:row.subject_prices||{}};
     const video=type==='video'?row:await repository.find('video',row.video_package_id,client);
     value.video=video?mapProduct(video,'video'):null;
-    value.courses=video?(await client.query('SELECT id,title,slug,subject_code FROM courses WHERE id=ANY($1::bigint[]) ORDER BY id',[video.course_ids||[]])).rows:[];
+    value.courses=video?await loadCourseSummaries(client, video.course_ids||[]):[];
     value.vip=type==='combo'?(await client.query('SELECT id,name FROM vip_packages WHERE id=$1',[row.vip_package_id])).rows[0]||null:null;
     value.configurationIssues=configurationIssues(value);
     value.canPurchase=false;

@@ -1429,6 +1429,38 @@ function createMolyCourseCatalogSyncService({
       ).rows[0];
     }
 
+    if (deleted || projStatus === "archived") {
+      const remainingActiveRes = await runner.query(
+        `SELECT COUNT(*)::int AS active_cnt
+         FROM course_profile_projections
+         WHERE source_system = $1
+           AND local_course_id = $2
+           AND deleted_at IS NULL
+           AND status <> 'archived'`,
+        [SOURCE_SYSTEM, Number(parentCourse.id)],
+      );
+      if (Number(remainingActiveRes.rows[0]?.active_cnt || 0) === 0) {
+        await runner.query(
+          `UPDATE courses
+           SET status = 'archived',
+               published_at = NULL
+           WHERE id = $1
+             AND content_origin = 'csca_course'
+             AND status = 'published'`,
+          [Number(parentCourse.id)],
+        );
+        await runner.query(
+          `UPDATE video_packages
+           SET status = 'archived',
+               updated_at = NOW()
+           WHERE source_system = $1
+             AND source_course_id = $2
+             AND status = 'active'`,
+          [SOURCE_SYSTEM, courseId],
+        ).catch(() => {});
+      }
+    }
+
     return {
       action: existingProj ? "updated" : "inserted",
       profileProjectionId: Number(savedProj.id),
@@ -1561,7 +1593,17 @@ function createMolyCourseCatalogSyncService({
     const effectiveSlug = slugOrKeyCollision
       ? `${desiredSlug.slice(0, 140)}-${courseId}`
       : desiredSlug;
-    const nextStatus = deleted ? "archived" : (isPublished ? "published" : "draft");
+    const courseProfiles = Array.isArray(coursePayload.profiles) ? coursePayload.profiles : null;
+    const hasOnlyArchivedProfiles = Boolean(
+      courseProfiles
+      && courseProfiles.length > 0
+      && !courseProfiles.some((p) => !p?.deleted && String(p?.status || "active").trim().toLowerCase() !== "archived"),
+    );
+    const nextStatus = deleted
+      ? "archived"
+      : hasOnlyArchivedProfiles
+        ? "archived"
+        : (isPublished ? "published" : "draft");
 
     let savedCourse;
     if (existing) {
@@ -1655,7 +1697,7 @@ function createMolyCourseCatalogSyncService({
 
     if (hasSourcePrice) {
       if (priceVnd > 0 && !deleted) {
-        const packageStatus = isPublished ? "active" : "archived";
+        const packageStatus = isPublished && !hasOnlyArchivedProfiles ? "active" : "archived";
         const syncedPackage = (
           await runner.query(
             `INSERT INTO video_packages (
@@ -1721,7 +1763,7 @@ function createMolyCourseCatalogSyncService({
       },
     });
 
-    if (deleted || !isPublished) {
+    if (deleted || !isPublished || hasOnlyArchivedProfiles) {
       await runner.query(
         `UPDATE course_profile_projections
          SET status = CASE WHEN $2::boolean THEN 'tombstoned' ELSE 'inactive' END,
