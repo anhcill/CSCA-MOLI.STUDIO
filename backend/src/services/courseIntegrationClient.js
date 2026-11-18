@@ -712,11 +712,12 @@ function createCourseIntegrationClient({
     }).then((res) => res.payload.data);
   }
 
-  function bindSsoPeerIdentity({ externalUserId, targetUserId, email = null, nonce = null, correlationId = null }, opts = {}) {
+  function bindSsoPeerIdentity({ externalUserId, targetUserId, email = null, learningPersona = false, nonce = null, correlationId = null }, opts = {}) {
     const body = {
       external_user_id: externalUserId,
       target_user_id: targetUserId,
       email,
+      learning_persona: learningPersona === true,
       nonce,
       correlation_id: correlationId,
     };

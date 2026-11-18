@@ -58,7 +58,7 @@ function accessHeading(course: CourseDetailDto, names: string[]) {
   if (course.accessType === 'free') return 'Khóa học miễn phí';
   if (course.accessType === 'contact') return 'Liên hệ để đăng ký';
   if (course.accessType === 'private') return 'Khóa học riêng';
-  return names.length ? 'Mở khóa theo gói' : 'Cần gói học phù hợp';
+  return names.length ? 'Mở khóa toàn bộ khóa học' : 'Học trọn khóa';
 }
 
 function actionLabel(course: CourseDetailDto) {
@@ -164,36 +164,36 @@ export function CourseAccessCard({ course }: { course: CourseDetailDto }) {
           <span className="absolute bottom-3 right-3 rounded-lg bg-slate-950/80 px-3 py-1.5 text-xs font-black text-white">{course.access.canLearn ? 'Vào học ngay' : firstFreePreviewLesson ? 'Có bài học thử' : 'Xem chương trình'}</span>
         </div>
       </div>
-      <div className="bg-gradient-to-br from-indigo-600 to-violet-700 px-6 py-6 text-white">
+      <div className="mt-4 border-y border-slate-200 bg-slate-50/80 px-6 py-5 dark:border-slate-800 dark:bg-slate-900/50">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-xs font-black uppercase tracking-[0.18em] text-indigo-200">Quyền truy cập khóa học</p>
+          <p className="text-[11px] font-black uppercase tracking-[0.16em] text-sky-700 dark:text-sky-300">Quyền truy cập khóa học</p>
           {ownershipStatus ? (
-            <CourseOwnershipBadge status={ownershipStatus} label={ownershipLabel} className="bg-white/95" />
+            <CourseOwnershipBadge status={ownershipStatus} label={ownershipLabel} />
           ) : null}
         </div>
-        <p className="mt-2 text-2xl font-black">{accessHeading(course, names)}</p>
+        <p className="mt-2 text-xl font-black text-slate-950 dark:text-white">{accessHeading(course, names)}</p>
         {!course.access.canLearn && displayPrice > 0 ? (
           <div className="mt-4 flex flex-wrap items-end gap-x-3 gap-y-1">
-            <span className="text-3xl font-black tracking-tight">{formatVnd(displayPrice)}</span>
-            {originalPrice > displayPrice ? <span className="pb-1 text-sm font-bold text-indigo-200 line-through">{formatVnd(originalPrice)}</span> : null}
+            <span className="text-3xl font-black tracking-tight text-sky-700 dark:text-sky-300">{formatVnd(displayPrice)}</span>
+            {originalPrice > displayPrice ? <span className="pb-1 text-sm font-bold text-slate-400 line-through">{formatVnd(originalPrice)}</span> : null}
           </div>
         ) : null}
         {course.access.canLearn ? (
-          <p className="mt-2 text-sm font-semibold text-indigo-100">Quyền học của bạn đang hoạt động.</p>
+          <p className="mt-2 text-sm font-semibold text-slate-600 dark:text-slate-300">Quyền học của bạn đang hoạt động.</p>
         ) : isUnpricedBlocked ? (
-          <p className="mt-2 text-sm font-semibold text-indigo-100">Khóa học đã được đồng bộ và đang chờ cấu hình gói học phí để mở bán.</p>
+          <p className="mt-2 text-sm font-semibold text-slate-600 dark:text-slate-300">Khóa học đã được đồng bộ và đang chờ cấu hình gói học phí để mở bán.</p>
         ) : names.length ? (
           <div className="mt-3 flex flex-wrap gap-2">
             {names.map((name) => (
-              <span key={name} className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-bold text-white">
+              <span key={name} className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-bold text-sky-800 dark:border-sky-900 dark:bg-sky-950/50 dark:text-sky-200">
                 {name}
               </span>
             ))}
           </div>
         ) : course.accessType !== 'free' ? (
-          <p className="mt-2 text-sm font-semibold text-indigo-100">Chọn gói có khóa học này trong trang thanh toán.</p>
+          <p className="mt-2 text-sm font-semibold text-slate-600 dark:text-slate-300">Thanh toán một lần để mở toàn bộ nội dung khóa học.</p>
         ) : (
-          <p className="mt-2 text-sm font-semibold text-indigo-100">Bắt đầu học ngay hôm nay.</p>
+          <p className="mt-2 text-sm font-semibold text-slate-600 dark:text-slate-300">Bắt đầu học ngay hôm nay.</p>
         )}
       </div>
 
@@ -266,7 +266,7 @@ export function CourseAccessCard({ course }: { course: CourseDetailDto }) {
                 type="button"
                 onClick={handleAction}
                 disabled={busy || ownershipStatus === 'pending_sync' || ownershipStatus === 'grant_blocked' || isUnpricedBlocked}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 py-4 font-black text-white shadow-lg transition hover:-translate-y-0.5 hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-800 dark:hover:bg-indigo-700"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-sky-700 px-5 py-4 font-black text-white shadow-[0_10px_25px_rgba(3,105,161,0.22)] transition hover:-translate-y-0.5 hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-sky-600 dark:hover:bg-sky-700"
               >
                 {course.access.canLearn || course.access.canEnroll ? <FiPlayCircle className="text-xl" /> : <FiPackage className="text-xl" />}
                 {busy ? 'Đang xử lý...' : actionLabel(course)}
@@ -284,11 +284,11 @@ export function CourseAccessCard({ course }: { course: CourseDetailDto }) {
           </button>
         ) : null}
         {isCscaCourse && !course.access.canLearn && !course.owned && ownershipStatus !== 'verification_required' && ownershipStatus !== 'pending_sync' && ownershipStatus !== 'grant_blocked' ? (
-          <div className="mt-3 rounded-2xl border border-indigo-200/80 bg-indigo-50/70 p-3.5 text-xs font-semibold text-indigo-950 dark:border-indigo-900/60 dark:bg-indigo-950/30 dark:text-indigo-100">
-            <p>Đã có quyền từ lớp Live hoặc lớp Record bên CSCA-Course?</p>
+          <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3.5 text-xs font-semibold text-slate-700 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-200">
+            <p>Đã học lớp Live hoặc lớp Record bên CSCA-Course?</p>
             <Link
               href={`/sso/start?target_path=${encodeURIComponent(`/khoa-hoc/${course.slug}`)}`}
-              className="mt-1 inline-flex items-center gap-1 font-black text-indigo-700 underline dark:text-indigo-300"
+              className="mt-1 inline-flex items-center gap-1 font-black text-sky-700 underline dark:text-sky-300"
             >
               {course.access.reasonCode === 'AUTH_REQUIRED'
                 ? 'Đăng nhập bằng tài khoản CSCA-Course →'

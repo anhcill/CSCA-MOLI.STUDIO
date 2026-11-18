@@ -612,6 +612,7 @@ function createCourseSsoService({
   async function resolveConsumeOutcome(client, exchanged, { current, corr }) {
     const namespacedCourseId = normalizeNamespacedCourseId(exchanged.source_user_id);
     const sourceRole = normalizeSourceRole(exchanged.role);
+    const learningPersona = exchanged.learning_persona === true;
     const email = normalizeEmail(exchanged.email);
     const targetPath = validateSsoTargetPath(exchanged.target_path, { targetSystem: "moly" });
     await client.query("SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))", [
@@ -671,6 +672,7 @@ function createCourseSsoService({
         },
         targetPath,
         externalUserId: namespacedCourseId,
+        learningPersona,
       };
     }
 
@@ -788,6 +790,7 @@ function createCourseSsoService({
       targetPath,
       externalUserId: namespacedCourseId,
       jitCreated: true,
+      learningPersona,
     };
   }
 
@@ -797,6 +800,7 @@ function createCourseSsoService({
     user,
     targetPath,
     externalUserId,
+    learningPersona = false,
     syncPeer,
     nonce,
     corr,
@@ -808,6 +812,7 @@ function createCourseSsoService({
         externalUserId: `moly:${user.id}`,
         targetUserId: stripCoursePrefix(externalUserId),
         email: user.email,
+        learningPersona,
         nonce: nonce || "sso-bind",
         correlationId: corr,
       });
@@ -1014,6 +1019,7 @@ function createCourseSsoService({
       user: resolved.user,
       targetPath: resolved.targetPath,
       externalUserId: resolved.externalUserId,
+      learningPersona: resolved.learningPersona === true,
       syncPeer: true,
       nonce: exchanged.nonce || state,
       corr,
