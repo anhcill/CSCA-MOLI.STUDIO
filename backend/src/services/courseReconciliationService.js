@@ -1822,6 +1822,7 @@ function createCourseReconciliationService({
       }
     }
 
+    const latestRemoteAssessByKey = new Map();
     for (const item of remoteAssessments) {
       const { rpid, prof, uid, extUid } = resolveItemUserAndProfile(item);
       const uType = String(item.unitType ?? item.unit_type ?? (item.classSessionId != null ? "class_session" : "lesson")).toLowerCase() === "class_session" ? "class_session" : "lesson";
@@ -1830,9 +1831,46 @@ function createCourseReconciliationService({
       const itemId = String(item.itemId ?? item.remoteItemId ?? item.remote_item_id ?? "").trim();
       if (!prof || !uid || !ruid || !itemId) continue;
 
-      const localRow = localAssessMap.get(`${uid}:${prof.id}:${itemType}:${itemId}`) || null;
+      const key = `${uid}:${prof.id}:${itemType}:${itemId}`;
       const remRev = Number(item.revision ?? item.syncRevision ?? item.lastRevision ?? item.last_revision ?? 1);
       const remUpdated = item.sourceUpdatedAt ?? item.source_updated_at ?? item.updatedAt;
+      const remUpdatedMs = remUpdated ? (Date.parse(String(remUpdated)) || 0) : 0;
+      const remAttemptNum = Number(item.attemptCount ?? item.attempt_count ?? item.attemptNumber ?? 0);
+      const remIdNum = Number(item.remoteAttemptOrSubId ?? item.remote_attempt_or_sub_id ?? item.id ?? 0) || 0;
+
+      const prev = latestRemoteAssessByKey.get(key);
+      const isNewer = !prev
+        || remRev > prev.remRev
+        || (remRev === prev.remRev && remUpdatedMs > prev.remUpdatedMs)
+        || (remRev === prev.remRev && remUpdatedMs === prev.remUpdatedMs && remAttemptNum > prev.remAttemptNum)
+        || (remRev === prev.remRev && remUpdatedMs === prev.remUpdatedMs && remAttemptNum === prev.remAttemptNum && remIdNum > prev.remIdNum);
+
+      if (isNewer) {
+        latestRemoteAssessByKey.set(key, {
+          item,
+          rpid,
+          prof,
+          uid,
+          extUid,
+          uType,
+          ruid,
+          itemType,
+          itemId,
+          remRev,
+          remUpdated,
+          remUpdatedMs,
+          remAttemptNum,
+          remIdNum,
+          maxAttemptCount: Math.max(prev?.maxAttemptCount || 0, remAttemptNum),
+        });
+      } else if (prev && remAttemptNum > prev.maxAttemptCount) {
+        prev.maxAttemptCount = remAttemptNum;
+      }
+    }
+
+    for (const [key, entry] of latestRemoteAssessByKey.entries()) {
+      const { item, rpid, prof, uid, extUid, uType, ruid, itemType, itemId, remRev, remUpdated, maxAttemptCount } = entry;
+      const localRow = localAssessMap.get(key) || null;
       const remDeleted = toIso(item.deletedAt ?? item.deleted_at);
       const remStatus = item.status || "in_progress";
       const revBehind = isRemoteNewerRevision(localRow, remRev, remUpdated);
@@ -1856,7 +1894,7 @@ function createCourseReconciliationService({
           remoteItemId: itemId,
           remoteAttemptOrSubId: item.remoteAttemptOrSubId ?? item.remote_attempt_or_sub_id ?? null,
           status: remStatus,
-          attemptCount: Number(item.attemptCount ?? item.attempt_count ?? 0),
+          attemptCount: maxAttemptCount,
           maxAttempts: item.maxAttempts ?? item.max_attempts ?? null,
           score: item.score ?? null,
           maxScore: item.maxScore ?? item.max_score ?? null,
