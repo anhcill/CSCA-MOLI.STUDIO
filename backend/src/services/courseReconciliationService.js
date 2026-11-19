@@ -1246,9 +1246,16 @@ function createCourseReconciliationService({
       const remDeleted = Boolean(rc.deleted || rc.deletedAt || rc.deleted_at || rc.status === "tombstoned");
       const revBehind = isRemoteNewerRevision(localCourse, remRev, remUpdated);
       const tombMismatch = localCourse ? remDeleted !== Boolean(localCourse.tombstoned_at) : !remDeleted;
-      const remotePub = rc.isPublished != null
+      const courseRemoteProfiles = remoteProfiles.filter(
+        (rp) => String(rp.courseId ?? rp.remoteCourseId ?? rp.remote_course_id ?? "").trim() === rcid,
+      );
+      const allCourseProfilesDeleted = courseRemoteProfiles.length > 0 && courseRemoteProfiles.every(
+        (rp) => Boolean(rp.deleted || rp.deletedAt || rp.deleted_at || ["tombstoned", "archived"].includes(String(rp.status || "").toLowerCase())),
+      );
+      const rawRemotePub = rc.isPublished != null
         ? Boolean(rc.isPublished)
         : (rc.status != null ? String(rc.status).toLowerCase() === "published" : null);
+      const remotePub = allCourseProfilesDeleted ? false : rawRemotePub;
       const pubMismatch = Boolean(localCourse && remotePub != null && remotePub !== (localCourse.status === "published"));
       if (!localCourse || revBehind || tombMismatch || pubMismatch) {
         if (!localCourse && remDeleted) continue;
@@ -1280,7 +1287,12 @@ function createCourseReconciliationService({
       const remRev = Number(rp.syncRevision ?? rp.revision ?? rp.lastRevision ?? rp.last_revision ?? 1);
       const remUpdated = rp.sourceUpdatedAt ?? rp.source_updated_at ?? rp.updatedAt;
       const remDeleted = Boolean(rp.deleted || rp.deletedAt || rp.deleted_at || rp.status === "tombstoned");
-      const statusMismatch = Boolean(localProf && rp.status && String(rp.status).toLowerCase() !== String(localProf.status || "").toLowerCase());
+      const statusMismatch = Boolean(
+        localProf
+        && !remDeleted
+        && rp.status
+        && String(rp.status).toLowerCase() !== String(localProf.status || "").toLowerCase(),
+      );
       const revBehind = isRemoteNewerRevision(localProf, remRev, remUpdated);
       const tombMismatch = localProf ? remDeleted !== Boolean(localProf.deleted_at) : !remDeleted;
       const resolvedRcId = rcid || (localProf?.remote_course_id ? String(localProf.remote_course_id) : "");
@@ -1822,11 +1834,19 @@ function createCourseReconciliationService({
       const remRev = Number(item.revision ?? item.syncRevision ?? item.lastRevision ?? item.last_revision ?? 1);
       const remUpdated = item.sourceUpdatedAt ?? item.source_updated_at ?? item.updatedAt;
       const remDeleted = toIso(item.deletedAt ?? item.deleted_at);
+      const remStatus = item.status || "in_progress";
       const revBehind = isRemoteNewerRevision(localRow, remRev, remUpdated);
       const tombMismatch = localRow ? Boolean(remDeleted) !== Boolean(localRow.deleted_at) : Boolean(remDeleted);
-      if (!localRow || revBehind || tombMismatch) {
+      const statusMismatch = Boolean(
+        localRow && String(localRow.status || "").toLowerCase() !== String(remStatus).toLowerCase(),
+      );
+      const scoreMismatch = Boolean(
+        localRow && item.score != null && (localRow.score == null || Number(localRow.score) !== Number(item.score)),
+      );
+      if (!localRow || revBehind || tombMismatch || statusMismatch || scoreMismatch) {
         if (!localRow && remDeleted) continue;
         summaryCounts.progress_assessment_drift += 1;
+        const effectiveRev = localRow ? Math.max(remRev, Number(localRow.last_revision || 0) + 1) : remRev;
         toRepair.assessments.push({
           userId: uid,
           profileProjectionId: Number(prof.id),
@@ -1835,7 +1855,7 @@ function createCourseReconciliationService({
           itemType,
           remoteItemId: itemId,
           remoteAttemptOrSubId: item.remoteAttemptOrSubId ?? item.remote_attempt_or_sub_id ?? null,
-          status: item.status || "in_progress",
+          status: remStatus,
           attemptCount: Number(item.attemptCount ?? item.attempt_count ?? 0),
           maxAttempts: item.maxAttempts ?? item.max_attempts ?? null,
           score: item.score ?? null,
@@ -1844,7 +1864,7 @@ function createCourseReconciliationService({
           gradedAt: item.gradedAt ?? item.graded_at ?? null,
           deletedAt: remDeleted,
           metadata: item.metadata || {},
-          syncRevision: remRev,
+          syncRevision: effectiveRev,
           sourceUpdatedAt: remUpdated || now().toISOString(),
         });
         actions.push({

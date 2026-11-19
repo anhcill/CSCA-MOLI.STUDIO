@@ -382,7 +382,7 @@ function createMolyCourseLearningActionsService({
     if (!cleanQuizId) throw new CourseApiError(400, "INVALID_PARAMETER", "quizId is required.");
 
     const ctx = await resolveEntitledUnitActionContext({ profileId, unitId, user, req, res });
-    return runDelegated(ctx, { user, req, delegatedSessionToken, correlationId: corr }, (sessionToken) =>
+    const result = await runDelegated(ctx, { user, req, delegatedSessionToken, correlationId: corr }, (sessionToken) =>
       client.fetchDelegatedQuiz({
         sessionToken,
         profileId: ctx.remoteProfileId,
@@ -390,6 +390,56 @@ function createMolyCourseLearningActionsService({
         quizId: cleanQuizId,
         correlationId: corr,
       }));
+
+    const localUserId = Number(user?.id);
+    const attempt = result?.activeAttempt || result?.latestAttempt || null;
+    const latestRes = result?.latestResult && typeof result.latestResult === "object" ? result.latestResult : null;
+    if (
+      Number.isSafeInteger(localUserId)
+      && localUserId > 0
+      && attempt
+      && (attempt.id != null || attempt.attemptId != null)
+    ) {
+      const attemptStatus = attempt.status || "in_progress";
+      const submittedIso = attemptStatus === "submitted"
+        ? (attempt.submittedAt || latestRes?.submittedAt || new Date().toISOString())
+        : null;
+      await withTx(async (txClient) => {
+        const rev = await resolveNextRevision(
+          txClient,
+          "course_assessment_projections",
+          "user_id = $1 AND profile_projection_id = $2 AND item_type = 'quiz' AND remote_item_id = $3",
+          [localUserId, Number(ctx.profileRow.id), cleanQuizId],
+          attempt.revision ?? latestRes?.revision ?? result?.syncRevision ?? result?.revision,
+        );
+        await upsertAssessmentProjectionTx(txClient, {
+          userId: localUserId,
+          profileProjectionId: Number(ctx.profileRow.id),
+          unitType: ctx.unitRow.unit_type,
+          remoteUnitId: ctx.remoteUnitId,
+          itemType: "quiz",
+          remoteItemId: cleanQuizId,
+          remoteAttemptOrSubId: String(attempt.id ?? attempt.attemptId),
+          status: attemptStatus,
+          attemptCount: Number(result?.attemptsCount ?? attempt.attemptNumber ?? 1),
+          maxAttempts: result?.maxAttempts ?? result?.quiz?.attemptLimit ?? null,
+          score: attempt.score ?? latestRes?.score ?? null,
+          maxScore: attempt.maxScore ?? latestRes?.maxScore ?? null,
+          canViewSolution: Boolean(result?.canViewSolution ?? latestRes?.canViewSolution ?? false),
+          gradedAt: submittedIso,
+          metadata: {
+            startedAt: attempt.startedAt || null,
+            ...(submittedIso ? { submittedAt: submittedIso } : {}),
+            ...(latestRes?.passed != null ? { passed: latestRes.passed } : {}),
+            totalQuestions: Array.isArray(result?.quiz?.items) ? result.quiz.items.length : undefined,
+          },
+          syncRevision: rev,
+          sourceUpdatedAt: submittedIso || attempt.startedAt || new Date().toISOString(),
+        });
+      });
+    }
+
+    return result;
   }
 
   async function startExternalQuizAttempt({
@@ -424,7 +474,12 @@ function createMolyCourseLearningActionsService({
     );
 
     const attempt = result?.attempt && typeof result.attempt === "object" ? result.attempt : result;
+    const timedOutRes = result?.result && typeof result.result === "object" ? result.result : null;
     const attemptId = attempt?.attemptId ?? attempt?.id ?? result?.attemptId ?? null;
+    const resolvedStatus = attempt?.status || result?.status || "in_progress";
+    const resolvedGradedAt = (resolvedStatus === "submitted" || result?.timedOut)
+      ? (attempt?.submittedAt || timedOutRes?.submittedAt || new Date().toISOString())
+      : null;
     await withTx(async (txClient) => {
       const rev = await resolveNextRevision(
         txClient,
@@ -441,16 +496,20 @@ function createMolyCourseLearningActionsService({
         itemType: "quiz",
         remoteItemId: cleanQuizId,
         remoteAttemptOrSubId: attemptId != null ? String(attemptId) : null,
-        status: attempt?.status || result?.status || "in_progress",
+        status: resolvedStatus,
         attemptCount: result?.attemptCount ?? attempt?.attemptNumber ?? 1,
-        maxAttempts: result?.maxAttempts ?? null,
-        canViewSolution: Boolean(result?.canViewSolution ?? attempt?.canViewSolution),
+        maxAttempts: result?.maxAttempts ?? timedOutRes?.maxAttempts ?? null,
+        score: attempt?.score ?? timedOutRes?.score ?? result?.score ?? null,
+        maxScore: attempt?.maxScore ?? timedOutRes?.maxScore ?? result?.maxScore ?? null,
+        canViewSolution: Boolean(result?.canViewSolution ?? timedOutRes?.canViewSolution ?? attempt?.canViewSolution),
+        gradedAt: resolvedGradedAt,
         metadata: {
           startedAt: attempt?.startedAt || result?.startedAt || new Date().toISOString(),
+          ...(resolvedGradedAt ? { submittedAt: resolvedGradedAt } : {}),
           totalQuestions: result?.totalQuestions ?? (Array.isArray(result?.questions) ? result.questions.length : undefined),
         },
         syncRevision: rev,
-        sourceUpdatedAt: attempt?.updatedAt || result?.updatedAt || new Date().toISOString(),
+        sourceUpdatedAt: resolvedGradedAt || attempt?.updatedAt || result?.updatedAt || new Date().toISOString(),
       });
     });
 
