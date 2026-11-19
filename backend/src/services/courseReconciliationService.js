@@ -740,6 +740,31 @@ function createCourseReconciliationService({
     const knownLocalMirroredGrantIds = new Set(
       localExtEntitlements.map((row) => row.external_grant_id).filter(Boolean),
     );
+    const hasCourseEnrollmentsTable = (await db.query("SELECT to_regclass('course_enrollments') AS rel")).rows[0]?.rel;
+    if (hasCourseEnrollmentsTable) {
+      const activeAdminEnrollments = (await db.query(
+        `SELECT id, user_id, course_id
+         FROM course_enrollments
+         WHERE source = 'admin'
+           AND status IN ('active', 'completed')
+           AND (expires_at IS NULL OR expires_at > NOW())
+           AND ($1::int IS NULL OR user_id = $1)
+           AND ($2::int[] IS NULL OR user_id = ANY($2::int[]))`,
+        [singleUserFilter, userFilterArray],
+      )).rows;
+      if (activeAdminEnrollments.length) {
+        const activeAdminKeys = new Set(
+          activeAdminEnrollments.map((r) => `${Number(r.id)}:${Number(r.course_id)}`),
+        );
+        for (const ob of localOutboxRows) {
+          if (ob.event_type !== "entitlement.granted" || typeof ob.external_grant_id !== "string") continue;
+          const m = /^moly:grant:admin_enr_(\d+)(?:_\d+)?:course_(\d+)$/.exec(ob.external_grant_id);
+          if (m && activeAdminKeys.has(`${Number(m[1])}:${Number(m[2])}`)) {
+            knownLocalGrantIds.add(ob.external_grant_id);
+          }
+        }
+      }
+    }
     const seenMissingCourseIds = new Set();
 
     if (caps.has_video_pkg_courses && caps.has_video_packages) {

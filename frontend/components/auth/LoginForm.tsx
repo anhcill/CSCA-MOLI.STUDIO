@@ -231,10 +231,12 @@ export default function LoginForm() {
       ? new URLSearchParams(window.location.search).get('redirect') || ''
       : '';
     if (
-      rawRedirect.startsWith('/sso/authorize')
+      rawRedirect.startsWith('/')
       && !rawRedirect.startsWith('//')
       && !rawRedirect.includes('\\')
       && !/[\u0000-\u0020\u007f]/.test(rawRedirect)
+      && !rawRedirect.startsWith('/login')
+      && !rawRedirect.startsWith('/register')
     ) {
       router.push(rawRedirect);
       return;

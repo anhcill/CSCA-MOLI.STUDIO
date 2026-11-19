@@ -128,7 +128,9 @@ export function CourseAccessCard({ course }: { course: CourseDetailDto }) {
 
     if (!course.access.canEnroll) {
       if (course.access.reasonCode === 'AUTH_REQUIRED') {
-        const redirect = `/khoa-hoc/${course.slug}`;
+        const redirect = displayPrice > 0 && course.access.canPurchase !== false
+          ? purchaseHref
+          : `/khoa-hoc/${course.slug}`;
         return router.push(`/login?redirect=${encodeURIComponent(redirect)}`);
       }
       if (displayPrice > 0 && course.access.canPurchase !== false) {
