@@ -69,7 +69,7 @@ function progressPercent(row) {
   return Math.min(100, Math.round((Number(row.completed_lessons_count || 0) / total) * 100));
 }
 
-function createCourseEnrollmentAdminService({ database = db } = {}) {
+function createCourseEnrollmentAdminService({ database = db, courseOutbox = null } = {}) {
   async function ensureCourse(courseId, client = database) {
     const course = (await client.query("SELECT id, title, slug, status, access_type, subject_code FROM courses WHERE id = $1", [courseId])).rows[0];
     if (!course) fail(404, "ADMIN_COURSE_NOT_FOUND", "Không tìm thấy khóa học.");
@@ -130,7 +130,7 @@ function createCourseEnrollmentAdminService({ database = db } = {}) {
              THEN course_enrollments.expires_at
            ELSE EXCLUDED.expires_at END,
          updated_at = NOW()
-       RETURNING id, user_id, expires_at, status`,
+       RETURNING id, user_id, starts_at, expires_at, status`,
       [userIds, courseId, expiresAt],
     );
     return rows;
@@ -163,7 +163,7 @@ function createCourseEnrollmentAdminService({ database = db } = {}) {
     }
     const expiresAt = resolveExpiry(input);
     return transaction(async (client) => {
-      await ensureCourse(courseId, client);
+      const course = await ensureCourse(courseId, client);
       const { rows: users } = await client.query(
         `SELECT id, email, full_name FROM users
           WHERE is_active = TRUE AND (id = ANY($1::int[]) OR LOWER(email) = ANY($2::text[]))`,
@@ -172,6 +172,33 @@ function createCourseEnrollmentAdminService({ database = db } = {}) {
       const foundEmails = new Set(users.map((user) => String(user.email || "").toLowerCase()));
       const notFoundEmails = emails.filter((email) => !foundEmails.has(email));
       const saved = await upsertAdminEnrollments(client, courseId, users.map((user) => Number(user.id)), expiresAt);
+      if (courseOutbox && saved.length) {
+        const mappingLookup = await courseOutbox.resolveCourseMappingsForPurchase(client, {
+          courseIds: [courseId],
+        });
+        if (mappingLookup.syncEnabled && mappingLookup.mappings.length) {
+          const savedByUser = new Map(saved.map((row) => [Number(row.user_id), row]));
+          for (const user of users) {
+            const savedRow = savedByUser.get(Number(user.id));
+            if (!savedRow) continue;
+            await courseOutbox.enqueueProvisionAndGrantTx(client, {
+              user,
+              transactionId: null,
+              transactionCode: null,
+              entitlementId: null,
+              customGrantScope: `admin_enr_${savedRow.id}_${Date.now()}`,
+              videoPackageId: null,
+              productType: "course_admin",
+              durationMode: savedRow.expires_at ? "days" : "lifetime",
+              durationDays: null,
+              validFrom: savedRow.starts_at || new Date(),
+              validUntil: savedRow.expires_at || null,
+              snapshot: { name: course.title },
+              mappedCourses: mappingLookup.mappings,
+            });
+          }
+        }
+      }
       const expiryByUser = new Map(saved.map((row) => [Number(row.user_id), row.expires_at]));
       return {
         grantedCount: saved.length,
@@ -187,13 +214,27 @@ function createCourseEnrollmentAdminService({ database = db } = {}) {
   async function revokeCourseEnrollment(courseIdValue, enrollmentIdValue) {
     const courseId = positiveId(courseIdValue, "courseId");
     const enrollmentId = positiveId(enrollmentIdValue, "enrollmentId");
-    const { rows } = await database.query(
-      `UPDATE course_enrollments SET status = 'revoked', updated_at = NOW()
-        WHERE id = $1 AND course_id = $2 RETURNING id`,
-      [enrollmentId, courseId],
-    );
-    if (!rows[0]) fail(404, "ENROLLMENT_NOT_FOUND", "Không tìm thấy quyền học này.");
-    return { id: Number(rows[0].id), status: "revoked" };
+    return transaction(async (client) => {
+      const { rows } = await client.query(
+        `UPDATE course_enrollments SET status = 'revoked', updated_at = NOW()
+          WHERE id = $1 AND course_id = $2 RETURNING id, user_id, course_id, starts_at, expires_at`,
+        [enrollmentId, courseId],
+      );
+      if (!rows[0]) fail(404, "ENROLLMENT_NOT_FOUND", "Không tìm thấy quyền học này.");
+      if (courseOutbox) {
+        await courseOutbox.enqueueEntitlementRevokeTx(client, {
+          userId: Number(rows[0].user_id),
+          transactionId: null,
+          entitlementId: null,
+          customGrantScope: `admin_enr_${rows[0].id}`,
+          courseIds: [Number(rows[0].course_id)],
+          reason: "admin_enrollment_revoked",
+          validFrom: rows[0].starts_at,
+          validUntil: rows[0].expires_at,
+        });
+      }
+      return { id: Number(rows[0].id), status: "revoked" };
+    });
   }
 
   async function getUserCourseAccess(userIdValue) {
@@ -236,13 +277,27 @@ function createCourseEnrollmentAdminService({ database = db } = {}) {
   async function revokeUserCourseAccess(userIdValue, enrollmentIdValue) {
     const userId = positiveId(userIdValue, "userId");
     const enrollmentId = positiveId(enrollmentIdValue, "enrollmentId");
-    const { rows } = await database.query(
-      `UPDATE course_enrollments SET status = 'revoked', updated_at = NOW()
-        WHERE id = $1 AND user_id = $2 RETURNING id`,
-      [enrollmentId, userId],
-    );
-    if (!rows[0]) fail(404, "ENROLLMENT_NOT_FOUND", "Không tìm thấy quyền học này.");
-    return { id: Number(rows[0].id), status: "revoked" };
+    return transaction(async (client) => {
+      const { rows } = await client.query(
+        `UPDATE course_enrollments SET status = 'revoked', updated_at = NOW()
+          WHERE id = $1 AND user_id = $2 RETURNING id, user_id, course_id, starts_at, expires_at`,
+        [enrollmentId, userId],
+      );
+      if (!rows[0]) fail(404, "ENROLLMENT_NOT_FOUND", "Không tìm thấy quyền học này.");
+      if (courseOutbox) {
+        await courseOutbox.enqueueEntitlementRevokeTx(client, {
+          userId: Number(rows[0].user_id),
+          transactionId: null,
+          entitlementId: null,
+          customGrantScope: `admin_enr_${rows[0].id}`,
+          courseIds: [Number(rows[0].course_id)],
+          reason: "admin_enrollment_revoked",
+          validFrom: rows[0].starts_at,
+          validUntil: rows[0].expires_at,
+        });
+      }
+      return { id: Number(rows[0].id), status: "revoked" };
+    });
   }
 
   return {

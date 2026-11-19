@@ -29,3 +29,12 @@ test('unexpected provider ID cannot become a hosted checkout URL',async()=>{
   const gateway=createVideoPayosGateway(env,()=>({paymentRequests:{get:async()=>({id:'../../malicious?url=bad',orderCode:42})}}));
   assert.equal((await gateway.get(42)).checkoutUrl,null);
 });
+
+test('comma-separated FRONTEND_URL resolves primary origin cleanly for returnUrl and cancelUrl',async()=>{
+  let captured;
+  const multiEnv={...env,FRONTEND_URL:'https://molystudio.online,http://localhost:57431'};
+  const gateway=createVideoPayosGateway(multiEnv,()=>({paymentRequests:{create:async input=>{captured=input;return input;}}}));
+  await gateway.create({id:99,amount:888000,transaction_code:'VIDEO_multi',expires_at:'2026-11-19T08:00:00Z',snapshot:{name:'Khóa học record TTXH'}});
+  assert.equal(captured.returnUrl,'https://molystudio.online/thanh-toan-khoa-hoc?orderId=VIDEO_multi');
+  assert.equal(captured.cancelUrl,'https://molystudio.online/thanh-toan-khoa-hoc?orderId=VIDEO_multi&cancel=true');
+});

@@ -839,10 +839,10 @@ function normalizeSubjectCode({ subjectCode = null, category = null, title = "",
   if (/\b(chemistry|hoa hoc|chemical|chem)\b/.test(text) || text.includes("csca-hoa")) {
     return "CHEMISTRY";
   }
-  if (/\b(chinese_sci|tu nhien|khtn|science chinese|trung van tu nhien)\b/.test(text)) {
+  if (/\b(chinese_sci|tu nhien|khtn|science chinese|trung van tu nhien|tieng trung tu nhien|tttn)\b/.test(text)) {
     return "CHINESE_SCI";
   }
-  if (/\b(chinese_soc|xa hoi|khxh|social|van hoc|trung van xa hoi|hskk?)\b/.test(text)
+  if (/\b(chinese_soc|xa hoi|khxh|social|van hoc|trung van xa hoi|tieng trung xa hoi|ttxh|hskk?)\b/.test(text)
     || String(category || "").toUpperCase() === "HSK"
     || String(category || "").toUpperCase() === "HSKK") {
     return "CHINESE_SOC";

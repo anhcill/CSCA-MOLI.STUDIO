@@ -404,6 +404,28 @@ function createCourseOwnershipProjectionService({
       }
     }
 
+    const hasCourseEnrollments = (await runner.query("SELECT to_regclass('course_enrollments') AS rel")).rows[0]?.rel;
+    if (hasCourseEnrollments) {
+      const adminEnrollRows = (await runner.query(
+        `SELECT course_id, status, starts_at, expires_at
+         FROM course_enrollments
+         WHERE user_id = $1
+           AND course_id = ANY($2::bigint[])
+           AND source = 'admin'`,
+        [userId, uniqueCourseIds],
+      )).rows;
+      for (const r of adminEnrollRows) {
+        const cid = Number(r.course_id);
+        const startsOk = !r.starts_at || new Date(r.starts_at).getTime() <= evalNow.getTime();
+        const notExpired = !r.expires_at || new Date(r.expires_at).getTime() > evalNow.getTime();
+        if (["active", "completed"].includes(r.status) && startsOk && notExpired) {
+          localCourseSet.add(cid);
+        } else if (r.status === "expired" || (["active", "completed"].includes(r.status) && !notExpired)) {
+          expiredCourseSet.add(cid);
+        }
+      }
+    }
+
     const mappingOfferings = caps.has_mappings ? await loadMappedOfferings(runner, uniqueCourseIds) : [];
     const offeringToCourseId = new Map(mappingOfferings.map((m) => [m.offering_id, Number(m.local_course_id)]));
 

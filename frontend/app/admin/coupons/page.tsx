@@ -467,6 +467,18 @@ export default function AdminCouponsPage() {
       description="Quản lý mã coupon giảm giá cho gói VIP"
     >
       <div className="space-y-5">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-teal-200 bg-teal-50/80 px-4 py-3 text-xs font-semibold text-teal-950">
+          <span>
+            💡 Mã tạo tại trang này mặc định áp dụng cho gói VIP luyện đề. Để tạo mã cho <strong>Khóa học Video / Combo</strong> (hoặc bật phạm vi Video cho mã dùng chung), hãy cấu hình tại trang Quản lý Gói Video.
+          </span>
+          <button
+            type="button"
+            onClick={() => router.push('/admin/video-commerce')}
+            className="shrink-0 rounded-xl bg-teal-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-teal-800"
+          >
+            Mở Quản lý Voucher Video →
+          </button>
+        </div>
 
         {/* ── Stats ─────────────────────────────────────────────── */}
         {stats && (

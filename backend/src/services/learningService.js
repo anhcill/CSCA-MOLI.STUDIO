@@ -142,7 +142,11 @@ async function listMyEnrollments(user) {
   for (const row of externalRows) {
     const courseId = Number(row.id);
     const ownershipInfo = extOwnershipMap.get(courseId);
-    if (!ownershipInfo || ownershipInfo.owned !== true || !ownershipInfo.canLaunchCourse) {
+    const isPendingLocalGrant =
+      ownershipInfo?.status === "pending_sync"
+      && Array.isArray(ownershipInfo?.localOwnedCourseIds)
+      && ownershipInfo.localOwnedCourseIds.includes(courseId);
+    if (!ownershipInfo || ((!ownershipInfo.owned || !ownershipInfo.canLaunchCourse) && !isPendingLocalGrant)) {
       continue;
     }
     const rawProgress = extProgressMap.get(courseId) || null;

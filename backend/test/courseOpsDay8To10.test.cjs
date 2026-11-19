@@ -450,6 +450,7 @@ async function withIsolatedModules(db, { runtimeOverrides = {}, testUser = null 
     require.resolve("../src/repositories/courseRepository"),
     require.resolve("../src/services/videoLearningAccess"),
     require.resolve("../src/services/courseService"),
+    require.resolve("../src/services/learningService"),
     require.resolve("../src/routes/payments"),
   ];
 
@@ -493,8 +494,9 @@ async function withIsolatedModules(db, { runtimeOverrides = {}, testUser = null 
     const learningRepository = require("../src/repositories/learningRepository");
     const videoLearningAccess = require("../src/services/videoLearningAccess");
     const courseService = require("../src/services/courseService");
+    const learningService = require("../src/services/learningService");
     const paymentsRouter = require("../src/routes/payments");
-    return await work({ learningRepository, videoLearningAccess, courseService, paymentsRouter });
+    return await work({ learningRepository, videoLearningAccess, courseService, learningService, paymentsRouter });
   } finally {
     for (const [p, entry] of saved.entries()) {
       delete require.cache[p];
@@ -1528,4 +1530,151 @@ test("Day 8-10 (Wire Parity): reconcileContentDomain & reconcileProgressDomain u
 
   const noteRow = (await ctx.db.query("SELECT content FROM course_note_projections WHERE remote_note_id = 'note-w-1'")).rows[0];
   assert.equal(noteRow.content, "Wire note");
+});
+
+test("Commerce & manual grant regression: brand-new Moly buyer and manual grants sync to CSCA-Course and surface on /hoc (pending_sync & owned)", async (t) => {
+  const ctx = await setupDay8To10Env(t, { applyFullVideoAdmin: true });
+  const prevSalesFlag = process.env.CSCA_VIDEO_COMMERCE_ENABLED;
+  process.env.CSCA_VIDEO_COMMERCE_ENABLED = "true";
+  t.after(() => {
+    if (prevSalesFlag === undefined) delete process.env.CSCA_VIDEO_COMMERCE_ENABLED;
+    else process.env.CSCA_VIDEO_COMMERCE_ENABLED = prevSalesFlag;
+  });
+
+  const buyer = (await ctx.db.query(
+    "INSERT INTO users (email, username, full_name, is_active, is_verified) VALUES ('newbuyer@moly.test', 'newbuyer', 'New Moly Buyer', true, true) RETURNING *",
+  )).rows[0];
+  const directUser = (await ctx.db.query(
+    "INSERT INTO users (email, username, full_name, is_active, is_verified) VALUES ('directgrant@moly.test', 'directgrant', 'Direct Grant User', true, true) RETURNING *",
+  )).rows[0];
+  const adminActor = (await ctx.db.query(
+    "INSERT INTO users (email, username, full_name, role, is_active, is_verified) VALUES ('adm-reg@moly.test', 'admreg', 'Admin Reg', 'admin', true, true) RETURNING *",
+  )).rows[0];
+
+  const cTtxh = (await ctx.db.query(
+    `INSERT INTO courses (slug, title, subject_code, level, access_type, price_vnd, status, content_origin, remote_source_system, remote_course_id)
+     VALUES ('khoa-hoc-record-ttxh', 'Khóa học record TTXH', 'CHINESE_SOC', 'basic', 'package', 888000, 'published', 'csca_course', 'csca-course', '4') RETURNING *`,
+  )).rows[0];
+  const mapRow = (await ctx.db.query(
+    `INSERT INTO external_course_mappings (source_system, external_course_id, local_course_id, status, origin_mode, remote_course_id, remote_profile_id)
+     VALUES ('csca-course', 'fe99d3a784614ac693328b97d49945e0', $1, 'active', 'profile_projection', '4', '2') RETURNING *`,
+    [cTtxh.id],
+  )).rows[0];
+  const profRow = (await ctx.db.query(
+    `INSERT INTO course_profile_projections (
+       source_system, remote_course_id, remote_profile_id, external_offering_id, local_course_id,
+       course_mapping_id, mode, status, checkout_ready, last_revision, source_updated_at
+     ) VALUES ('csca-course', '4', '2', 'fe99d3a784614ac693328b97d49945e0', $1, $2, 'MIRROR', 'active', TRUE, 1, NOW()) RETURNING *`,
+    [cTtxh.id, mapRow.id],
+  )).rows[0];
+  await ctx.db.query(
+    `INSERT INTO course_unit_projections (
+       profile_projection_id, local_course_id, unit_type, remote_unit_id,
+       title, sort_order, is_published, last_revision, source_updated_at
+     ) VALUES ($1, $2, 'class_session', '101', 'Buổi 1 TTXH', 1, TRUE, 1, NOW())`,
+    [profRow.id, cTtxh.id],
+  );
+
+  const { createVideoCommerceRepository } = require("../src/repositories/videoCommerceRepository");
+  const { createVideoAdminService } = require("../src/services/videoAdminService");
+  const { createCourseEnrollmentAdminService } = require("../src/services/courseEnrollmentAdminService");
+  const repository = createVideoCommerceRepository(ctx.db);
+  const fakePayments = { productSnapshot: async () => ({ originalAmount: 888000 }) };
+  const videoAdmin = createVideoAdminService({
+    db: ctx.db,
+    repository,
+    payments: fakePayments,
+    recalculateVip: async () => {},
+    sendRightsEmail: async () => ({ sent: true }),
+    salesEnabled: () => true,
+    courseOutbox: ctx.outbox,
+    courseOwnership: ctx.ownership,
+  });
+
+  const pkg = await videoAdmin.saveProduct(
+    "video",
+    null,
+    {
+      name: "Khóa học record TTXH",
+      description: "Gói TTXH",
+      status: "active",
+      priceVnd: 888000,
+      durationMode: "lifetime",
+      durationDays: null,
+      allowedSubjects: ["CHINESE_SOC"],
+      requiresSubjectChoice: false,
+      courseIds: [cTtxh.id],
+      renewalMode: "new_period",
+    },
+    adminActor.id,
+  );
+
+  // 1) Manual grant via videoAdminService.grant enqueues user.provisioned + entitlement.granted
+  const granted = await videoAdmin.grant(
+    {
+      type: "video",
+      productId: pkg.id,
+      userId: buyer.id,
+      videoExpiresAt: null,
+      reason: "Cấp quyền học viên đăng ký qua chuyển khoản",
+      requestKey: "reg_manual_grant_ttxh_001",
+    },
+    adminActor.id,
+  );
+  assert.ok(granted.id > 0);
+
+  const outboxRows = (await ctx.db.query(
+    "SELECT event_type, status, external_course_id, external_grant_id FROM integration_outbox WHERE user_id = $1 ORDER BY id ASC",
+    [buyer.id],
+  )).rows;
+  assert.equal(outboxRows.length, 2);
+  assert.equal(outboxRows[0].event_type, "user.provisioned");
+  assert.equal(outboxRows[1].event_type, "entitlement.granted");
+  assert.equal(outboxRows[1].external_course_id, "fe99d3a784614ac693328b97d49945e0");
+  assert.equal(outboxRows[1].external_grant_id, `moly:grant:ent_${granted.id}:course_${cTtxh.id}`);
+
+  // 2) Immediately after payment/grant (while outbox is still pending_sync), /hoc surfaces the course!
+  await withIsolatedModules(ctx.db, { runtimeOverrides: { ownership: ctx.ownership, outbox: ctx.outbox } }, async ({ learningService }) => {
+    const pendingItems = await learningService.listMyEnrollments({ id: buyer.id, role: "student" });
+    assert.equal(pendingItems.length, 1);
+    assert.equal(Number(pendingItems[0].course.id), Number(cTtxh.id));
+    assert.equal(pendingItems[0].course.ownershipStatus, "pending_sync");
+
+    // Once outbox events are marked processed by CSCA-Course, /hoc shows owned & canLaunchCourse!
+    await ctx.db.query(
+      "UPDATE integration_outbox SET status = 'sent', remote_status = 'processed', remote_processed_at = NOW() WHERE user_id = $1",
+      [buyer.id],
+    );
+    const syncedItems = await learningService.listMyEnrollments({ id: buyer.id, role: "student" });
+    assert.equal(syncedItems.length, 1);
+    assert.equal(syncedItems[0].course.ownershipStatus, "owned");
+    assert.equal(syncedItems[0].course.canLaunchCourse, true);
+    assert.match(syncedItems[0].course.firstUnitHref, /^\/hoc\/khoa-hoc-record-ttxh\/bai-hoc\/u-\d+\?profileId=2$/);
+  });
+
+  // 3) Direct course enrollment grant & revoke via courseEnrollmentAdminService also enqueues provision/grant & revoke
+  const enrollmentAdmin = createCourseEnrollmentAdminService({ database: ctx.db, courseOutbox: ctx.outbox });
+  const directRes = await enrollmentAdmin.grantCourseEnrollments(cTtxh.id, {
+    userIds: [directUser.id],
+    durationDays: 90,
+  });
+  assert.equal(directRes.grantedCount, 1);
+
+  const directOutbox = (await ctx.db.query(
+    "SELECT event_type, external_course_id FROM integration_outbox WHERE user_id = $1 ORDER BY id ASC",
+    [directUser.id],
+  )).rows;
+  assert.equal(directOutbox.length, 2);
+  assert.equal(directOutbox[0].event_type, "user.provisioned");
+  assert.equal(directOutbox[1].event_type, "entitlement.granted");
+  assert.equal(directOutbox[1].external_course_id, "fe99d3a784614ac693328b97d49945e0");
+
+  const enrRow = (await ctx.db.query("SELECT id FROM course_enrollments WHERE user_id = $1 AND course_id = $2", [directUser.id, cTtxh.id])).rows[0];
+  await enrollmentAdmin.revokeCourseEnrollment(cTtxh.id, enrRow.id);
+  const directRevoke = (await ctx.db.query(
+    "SELECT event_type, external_course_id FROM integration_outbox WHERE user_id = $1 AND event_type = 'entitlement.revoked'",
+    [directUser.id],
+  )).rows;
+  assert.equal(directRevoke.length, 1);
+  assert.equal(directRevoke[0].external_course_id, "fe99d3a784614ac693328b97d49945e0");
 });

@@ -19,7 +19,7 @@ const outbox = createCourseOutboxSyncService({ db, client });
 const ownership = createCourseOwnershipProjectionService({ db, client, outbox });
 const catalogSync = createMolyCourseCatalogSyncService({ db, client });
 const reconciliation = createCourseReconciliationService({ db, client, outbox, catalogSync });
-const workspace = createMolyCourseWorkspaceService({ db, client, ownership });
+const workspace = createMolyCourseWorkspaceService({ db, client, ownership, outbox });
 const workerLog = createIntegrationLogger({ component: "course-worker" });
 
 let workerTimer = null;
@@ -27,6 +27,11 @@ let workerRunning = false;
 let lastReconcileAtMs = 0;
 let lastCatalogPullAtMs = 0;
 let lastPaymentMaintenanceAtMs = 0;
+let rightsEmailMaintenanceFn = null;
+
+function registerRightsEmailMaintenance(fn) {
+  rightsEmailMaintenanceFn = typeof fn === "function" ? fn : null;
+}
 
 function startOutboxWorker({
   intervalMs = Number.parseInt(String(process.env.COURSE_INTEGRATION_WORKER_INTERVAL_MS || "5000"), 10) || 5000,
@@ -98,6 +103,14 @@ function startOutboxWorker({
             message: err?.message || "Video payment maintenance deferred.",
           });
         });
+        if (typeof rightsEmailMaintenanceFn === "function") {
+          await rightsEmailMaintenanceFn().catch((err) => {
+            workerLog.warn("video_rights_email_maintenance_deferred", {
+              code: err?.code || "RIGHTS_EMAIL_MAINTENANCE_ERROR",
+              message: err?.message || "Video rights email maintenance deferred.",
+            });
+          });
+        }
       }
     } catch (error) {
       workerLog.error("outbox_worker_tick_failed", {
@@ -142,6 +155,7 @@ module.exports = {
   readRolloutPosture,
   getKillSwitchesSnapshot,
   getWorkerStatus,
+  registerRightsEmailMaintenance,
   startOutboxWorker,
   stopOutboxWorker,
 };

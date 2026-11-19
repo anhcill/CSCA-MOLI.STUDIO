@@ -257,10 +257,32 @@ function createVideoAdminService({db,repository,payments,recalculateVip,sendRigh
       const snapshot={name:product.name,type,video:{packageId:Number(video.id),name:video.name,subjects,courseIds:courses.map(c=>Number(c.id))},vip:vipSnapshot};
       const granted=(await client.query(`INSERT INTO user_video_entitlements(user_id,video_package_id,combo_package_id,grant_key,source,
         allowed_subjects,starts_at,expires_at,duration_mode,granted_by,reason,vip_entitlement_id,snapshot)
-        VALUES ($1,$2,$3,$4,'manual',$5,NOW(),$6,$7,$8,$9,$10,$11::jsonb) RETURNING id`,
+        VALUES ($1,$2,$3,$4,'manual',$5,NOW(),$6,$7,$8,$9,$10,$11::jsonb) RETURNING id,starts_at`,
       [uid,video.id,type==='combo'?id:null,`manual:${input.requestKey}`,subjects,videoEnd,videoEnd?'days':'lifetime',actor,why,vipId,JSON.stringify(snapshot)])).rows[0];
       await client.query('INSERT INTO video_entitlement_courses(entitlement_id,course_id) SELECT $1,UNNEST($2::bigint[])',[granted.id,snapshot.video.courseIds]);
       await client.query('INSERT INTO video_admin_requests(request_key,request_hash,entitlement_id) VALUES ($1,$2,$3)',[input.requestKey,fingerprint,granted.id]);
+      if(courseOutbox) {
+        const mappingLookup=await courseOutbox.resolveCourseMappingsForPurchase(client,{
+          courseIds:snapshot.video.courseIds,
+          videoPackageId:Number(video.id),
+        });
+        if(mappingLookup.syncEnabled) {
+          await courseOutbox.enqueueProvisionAndGrantTx(client,{
+            user,
+            transactionId:null,
+            transactionCode:null,
+            entitlementId:Number(granted.id),
+            videoPackageId:Number(video.id),
+            productType:type,
+            durationMode:videoEnd?'days':'lifetime',
+            durationDays:video.duration_days||null,
+            validFrom:granted.starts_at||new Date(),
+            validUntil:videoEnd,
+            snapshot,
+            mappedCourses:mappingLookup.mappings,
+          });
+        }
+      }
       await audit(client,actor,'manual_grant','entitlement',granted.id,{userId:uid,reason:why,snapshot});
       await client.query('INSERT INTO video_rights_outbox(event_key,user_id,payload) VALUES ($1,$2,$3::jsonb)',
         [`grant:${granted.id}`,uid,JSON.stringify({action:'granted',packageName:product.name,videoExpiresAt:videoEnd,vipExpiresAt:type==='combo'?input.vipExpiresAt:null,combo:type==='combo'})]);

@@ -74,6 +74,15 @@ export function MyLearningClient() {
     };
   }, [requestVersion]);
 
+  const hasPendingSync = items.some((item) => item.course.ownershipStatus === 'pending_sync');
+  useEffect(() => {
+    if (!hasPendingSync || courseSyncExplicitlyDisabled) return;
+    const timer = window.setTimeout(() => {
+      setRequestVersion((v) => v + 1);
+    }, 3500);
+    return () => window.clearTimeout(timer);
+  }, [hasPendingSync, items]);
+
   if (loading) {
     return (
       <div aria-label="Đang tải khóa học" className="grid gap-6 lg:grid-cols-2">

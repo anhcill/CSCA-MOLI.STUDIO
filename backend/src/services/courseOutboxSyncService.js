@@ -295,6 +295,7 @@ function createCourseOutboxSyncService({
       transactionId,
       transactionCode = null,
       entitlementId,
+      customGrantScope = null,
       videoPackageId,
       productType = "video",
       durationMode = "days",
@@ -315,8 +316,9 @@ function createCourseOutboxSyncService({
 
     const userId = Number(user.id);
     const txId = transactionId != null ? Number(transactionId) : null;
-    const entId = Number(entitlementId);
-    const corr = correlationId || (txId ? `corr_moly_tx_${txId}` : `corr_moly_ent_${entId}`);
+    const entId = entitlementId != null && Number.isFinite(Number(entitlementId)) ? Number(entitlementId) : null;
+    const resolvedGrantScope = customGrantScope || (txId ? `tx_${txId}` : `ent_${entId}`);
+    const corr = correlationId || (txId ? `corr_moly_tx_${txId}` : (entId != null ? `corr_moly_ent_${entId}` : `corr_moly_${resolvedGrantScope}`));
     const validFromIso = toIso(validFrom || now());
     const validUntilIso = toIso(validUntil);
 
@@ -332,7 +334,7 @@ function createCourseOutboxSyncService({
 
     const grantOutboxes = [];
     for (const mapped of mappedCourses) {
-      const grantScope = txId ? `tx_${txId}` : `ent_${entId}`;
+      const grantScope = resolvedGrantScope;
       const externalGrantId = `moly:grant:${grantScope}:course_${mapped.localCourseId}`;
       const eventId = `moly:evt:grant:${grantScope}:course_${mapped.localCourseId}`;
       const idempotencyKey = `moly:entitlement.granted:${externalGrantId}:v1`;
@@ -354,7 +356,7 @@ function createCourseOutboxSyncService({
           transaction_id: txId,
           order_ref: transactionCode,
           entitlement_id: entId,
-          video_package_id: Number(videoPackageId),
+          video_package_id: videoPackageId != null ? Number(videoPackageId) : null,
           local_course_id: mapped.localCourseId,
           course_mapping_id: mapped.mappingId,
           product_type: productType,
@@ -421,6 +423,7 @@ function createCourseOutboxSyncService({
       userId,
       transactionId = null,
       entitlementId = null,
+      customGrantScope = null,
       courseIds = [],
       videoPackageId = null,
       reason = "payment_refunded",
@@ -438,7 +441,8 @@ function createCourseOutboxSyncService({
 
     const uid = Number(userId);
     const txId = transactionId != null ? Number(transactionId) : null;
-    const entId = entitlementId != null ? Number(entitlementId) : null;
+    const entId = entitlementId != null && Number.isFinite(Number(entitlementId)) ? Number(entitlementId) : null;
+    const scopePrefix = customGrantScope ? String(customGrantScope).trim() : null;
 
     // Prefer exact grant records previously enqueued for this transaction/entitlement.
     const priorGrants = (await txClient.query(
@@ -450,9 +454,10 @@ function createCourseOutboxSyncService({
          AND (
            ($4::bigint IS NOT NULL AND entitlement_id = $4)
            OR ($4::bigint IS NULL AND $3::int IS NOT NULL AND transaction_id = $3)
+           OR ($5::text IS NOT NULL AND user_id = $6 AND external_grant_id LIKE 'moly:grant:' || $5 || '%')
          )
        ORDER BY id ASC`,
-      [SOURCE_SYSTEM, TARGET_SYSTEM, txId, entId],
+      [SOURCE_SYSTEM, TARGET_SYSTEM, txId, entId, scopePrefix, uid],
     )).rows;
 
     let targets = priorGrants.map((grantRow) => ({
@@ -469,7 +474,7 @@ function createCourseOutboxSyncService({
         videoPackageId,
         requireMappings: false,
       });
-      const grantScope = txId ? `tx_${txId}` : `ent_${entId}`;
+      const grantScope = scopePrefix || (txId ? `tx_${txId}` : `ent_${entId}`);
       targets = mappingLookup.mappings.map((m) => ({
         externalGrantId: `moly:grant:${grantScope}:course_${m.localCourseId}`,
         externalCourseId: m.externalCourseId,
@@ -483,8 +488,8 @@ function createCourseOutboxSyncService({
       return { enqueuedCount: 0, revokeOutboxes: [] };
     }
 
-    const corr = correlationId || (txId ? `corr_moly_refund_tx_${txId}` : `corr_moly_revoke_ent_${entId}`);
-    const revokeScope = txId ? `refund_tx_${txId}` : `revoke_ent_${entId}`;
+    const corr = correlationId || (txId ? `corr_moly_refund_tx_${txId}` : (entId != null ? `corr_moly_revoke_ent_${entId}` : `corr_moly_revoke_${scopePrefix}`));
+    const revokeScope = txId ? `refund_tx_${txId}` : (entId != null ? `revoke_ent_${entId}` : `revoke_${scopePrefix}_${now().getTime()}`);
     const revokedOutboxes = [];
 
     for (const target of targets) {

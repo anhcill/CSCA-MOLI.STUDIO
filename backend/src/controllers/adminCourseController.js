@@ -2,8 +2,9 @@ const service = require("../services/adminCourseService");
 const assignmentService = require("../services/courseAssignmentService");
 const { sendCourseError, sendData } = require("../utils/courseResponses");
 const { createCourseEnrollmentAdminService } = require("../services/courseEnrollmentAdminService");
+const courseIntegrationRuntime = require("../services/courseIntegrationRuntime");
 
-const enrollmentService = () => createCourseEnrollmentAdminService();
+const enrollmentService = () => createCourseEnrollmentAdminService({ courseOutbox: courseIntegrationRuntime.outbox });
 
 function action(handler, options = {}) {
   return async (req, res) => {

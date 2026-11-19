@@ -53,6 +53,7 @@ function createMolyCourseWorkspaceService({
   db,
   client = null,
   ownership = null,
+  outbox = null,
 } = {}) {
   const delegatedSessionCache = new Map();
 
@@ -355,8 +356,21 @@ function createMolyCourseWorkspaceService({
     }
 
     if (ownership && typeof ownership.evaluateCoursesForUser === "function") {
-      const map = await ownership.evaluateCoursesForUser(uid, [Number(localCourseId)]);
-      const info = map.get(Number(localCourseId)) || null;
+      let map = await ownership.evaluateCoursesForUser(uid, [Number(localCourseId)]);
+      let info = map.get(Number(localCourseId)) || null;
+      if (
+        info?.status === "pending_sync"
+        && outbox
+        && typeof outbox.processAvailableOutboxJobs === "function"
+      ) {
+        await outbox.processAvailableOutboxJobs({
+          limit: 10,
+          reconcileBefore: true,
+          reconcileAfter: true,
+        }).catch(() => {});
+        map = await ownership.evaluateCoursesForUser(uid, [Number(localCourseId)]);
+        info = map.get(Number(localCourseId)) || info;
+      }
       const entitled = Boolean(info?.owned && info?.canLaunchCourse);
       return {
         authenticated: true,

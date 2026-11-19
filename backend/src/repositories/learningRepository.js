@@ -197,7 +197,12 @@ async function listExternalOnlyCourses(userId) {
   const caps = (await db.query(
     `SELECT
        to_regclass('external_entitlements') IS NOT NULL AS has_ext_entitlements,
-       to_regclass('external_course_mappings') IS NOT NULL AS has_mappings`,
+       to_regclass('external_course_mappings') IS NOT NULL AS has_mappings,
+       to_regclass('user_video_entitlements') IS NOT NULL AS has_video_entitlements,
+       to_regclass('video_entitlement_courses') IS NOT NULL AS has_video_entitlement_courses,
+       to_regclass('course_enrollments') IS NOT NULL AS has_course_enrollments,
+       to_regclass('integration_conflicts') IS NOT NULL AS has_conflicts,
+       to_regclass('external_identities') IS NOT NULL AS has_identities`,
   )).rows[0];
   if (!caps?.has_ext_entitlements || !caps?.has_mappings) {
     return [];
@@ -234,8 +239,38 @@ async function listExternalOnlyCourses(userId) {
            )
        )`;
 
-  const result = await db.query(
-    `SELECT DISTINCT ON (c.id)
+  const conflictGuardExt = caps.has_conflicts
+    ? `AND NOT EXISTS (
+         SELECT 1
+         FROM integration_conflicts ic
+         WHERE ic.status = 'open'
+           AND (
+             ic.candidate_user_id = $1
+             OR (ee.external_user_id IS NOT NULL AND ic.external_user_id = ee.external_user_id)
+           )
+       )`
+    : "";
+  const conflictGuardLocal = caps.has_conflicts
+    ? `AND NOT EXISTS (
+         SELECT 1
+         FROM integration_conflicts ic
+         WHERE ic.status = 'open'
+           AND ic.candidate_user_id = $1
+       )`
+    : "";
+  const identityGuardExt = caps.has_identities
+    ? `AND NOT EXISTS (
+         SELECT 1
+         FROM external_identities ei
+         WHERE ei.user_id = $1
+           AND ei.source_system = ee.source_system
+           AND ei.status <> 'active'
+       )`
+    : "";
+
+  const branches = [
+    `SELECT
+       ee.local_course_id,
        ee.id AS external_entitlement_id,
        ee.source_system AS external_source_system,
        ee.external_grant_id,
@@ -244,6 +279,80 @@ async function listExternalOnlyCourses(userId) {
        ee.valid_until,
        ee.source_updated_at,
        ee.created_at AS external_created_at,
+       1 AS source_priority
+     FROM external_entitlements ee
+     WHERE ee.user_id = $1
+       AND ee.status = 'active'
+       AND COALESCE(ee.effective_owned, TRUE) = TRUE
+       AND (ee.valid_from IS NULL OR ee.valid_from <= NOW())
+       AND (ee.valid_until IS NULL OR ee.valid_until > NOW())
+       ${conflictGuardExt}
+       ${identityGuardExt}`,
+  ];
+
+  if (caps.has_video_entitlements && caps.has_video_entitlement_courses) {
+    branches.push(
+      `SELECT
+         vec.course_id AS local_course_id,
+         uve.id AS external_entitlement_id,
+         'moly'::varchar AS external_source_system,
+         uve.grant_key AS external_grant_id,
+         NULL::varchar AS external_course_id,
+         uve.starts_at AS valid_from,
+         uve.expires_at AS valid_until,
+         uve.created_at AS source_updated_at,
+         uve.created_at AS external_created_at,
+         2 AS source_priority
+       FROM user_video_entitlements uve
+       JOIN video_entitlement_courses vec ON vec.entitlement_id = uve.id
+       JOIN courses c_uve ON c_uve.id = vec.course_id
+       WHERE uve.user_id = $1
+         AND uve.status = 'active'
+         AND (uve.starts_at IS NULL OR uve.starts_at <= NOW())
+         AND (uve.expires_at IS NULL OR uve.expires_at > NOW())
+         AND c_uve.subject_code = ANY(uve.allowed_subjects)
+         ${hasOrigin ? "AND c_uve.content_origin = 'csca_course'" : ""}
+         ${conflictGuardLocal}`,
+    );
+  }
+
+  if (caps.has_course_enrollments && hasOrigin) {
+    branches.push(
+      `SELECT
+         ce.course_id AS local_course_id,
+         ce.id AS external_entitlement_id,
+         'moly'::varchar AS external_source_system,
+         ('moly:admin_enrollment:' || ce.id::text)::varchar AS external_grant_id,
+         NULL::varchar AS external_course_id,
+         ce.starts_at AS valid_from,
+         ce.expires_at AS valid_until,
+         ce.updated_at AS source_updated_at,
+         ce.created_at AS external_created_at,
+         3 AS source_priority
+       FROM course_enrollments ce
+       JOIN courses c_ce ON c_ce.id = ce.course_id
+       WHERE ce.user_id = $1
+         AND ce.source = 'admin'
+         AND ce.status IN ('active', 'completed')
+         AND (ce.expires_at IS NULL OR ce.expires_at > NOW())
+         AND c_ce.content_origin = 'csca_course'
+         ${conflictGuardLocal}`,
+    );
+  }
+
+  const result = await db.query(
+    `WITH candidate_grants AS (
+       ${branches.join("\n       UNION ALL\n       ")}
+     )
+     SELECT DISTINCT ON (c.id)
+       cg.external_entitlement_id,
+       cg.external_source_system,
+       cg.external_grant_id,
+       COALESCE(cg.external_course_id, mapped_ecm.external_course_id) AS external_course_id,
+       cg.valid_from,
+       cg.valid_until,
+       cg.source_updated_at,
+       cg.external_created_at,
        c.id AS catalog_course_id,
        c.id,
        c.status AS course_status,
@@ -269,39 +378,21 @@ async function listExternalOnlyCourses(userId) {
        c.total_duration_seconds,
        c.published_at,
        c.content_updated_at
-     FROM external_entitlements ee
+     FROM candidate_grants cg
      JOIN courses c
-       ON c.id = ee.local_course_id
+       ON c.id = cg.local_course_id
       AND c.status = 'published'
-     WHERE ee.user_id = $1
-       AND ee.status = 'active'
-       AND COALESCE(ee.effective_owned, TRUE) = TRUE
-       AND (ee.valid_from IS NULL OR ee.valid_from <= NOW())
-       AND (ee.valid_until IS NULL OR ee.valid_until > NOW())
-       AND EXISTS (
-         SELECT 1
-         FROM external_course_mappings ecm
-         WHERE ecm.local_course_id = c.id
-           AND ${mappingPredicate}
-       )
-       AND NOT EXISTS (
-         SELECT 1
-         FROM integration_conflicts ic
-         WHERE ic.status = 'open'
-           AND (
-             ic.candidate_user_id = $1
-             OR (ee.external_user_id IS NOT NULL AND ic.external_user_id = ee.external_user_id)
-           )
-       )
-       AND NOT EXISTS (
-         SELECT 1
-         FROM external_identities ei
-         WHERE ei.user_id = $1
-           AND ei.source_system = ee.source_system
-           AND ei.status <> 'active'
-       )
+     JOIN LATERAL (
+       SELECT ecm.external_course_id
+       FROM external_course_mappings ecm
+       WHERE ecm.local_course_id = c.id
+         AND ${mappingPredicate}
+       ORDER BY ecm.id ASC
+       LIMIT 1
+     ) mapped_ecm ON TRUE
+     WHERE TRUE
        ${originEnrollGuard}
-     ORDER BY c.id, ee.source_updated_at DESC NULLS LAST, ee.id DESC`,
+     ORDER BY c.id, cg.source_priority ASC, cg.source_updated_at DESC NULLS LAST, cg.external_entitlement_id DESC`,
     [userId],
   );
   return result.rows;

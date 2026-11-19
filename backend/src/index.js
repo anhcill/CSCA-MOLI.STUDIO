@@ -405,6 +405,9 @@ if (coursesEnabled) {
       courseOutbox: courseIntegrationRuntime.outbox,
       courseOwnership: courseIntegrationRuntime.ownership,
     });
+    if (typeof courseIntegrationRuntime.registerRightsEmailMaintenance === "function") {
+      courseIntegrationRuntime.registerRightsEmailMaintenance(() => videoAdmin.retryRightsEmails());
+    }
     app.use("/api/video-commerce", adminWriteLimiter, createVideoShopRoutes({ service: videoAdmin,
       coupons: createVideoCouponAdminService({ db, admin: videoAdmin }), authenticate, authorizePermission, optionalAuth }));
     app.use("/api/video-commerce/payments", adminWriteLimiter, createVideoPaymentRoutes({

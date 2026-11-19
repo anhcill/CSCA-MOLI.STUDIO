@@ -12,6 +12,7 @@ const db = require('../config/database');
 const coinService = require('../services/coinService');
 const { isVideoPayment } = require('../utils/videoPaymentIdentity');
 const { bankNameFromBin } = require('../utils/vietqrBanks');
+const { getPrimaryFrontendUrl } = require('../utils/frontendUrl');
 const courseIntegrationRuntime = require('../services/courseIntegrationRuntime');
 const {
   canAccessSubject,
@@ -108,8 +109,8 @@ const MOMO = {
   partnerCode: process.env.MOMO_PARTNER_CODE || 'MOMOTEST',
   accessKey:  process.env.MOMO_ACCESS_KEY  || 'F8BBD362',
   secretKey:  process.env.MOMO_SECRET_KEY   || '',
-  redirectUrl: process.env.MOMO_REDIRECT_URL  || `${process.env.FRONTEND_URL || 'http://localhost:3000'}/checkout/success`,
-  ipnUrl:     process.env.MOMO_IPN_URL      || `${process.env.FRONTEND_URL || 'http://localhost:3000'}/api/payments/momo-webhook`,
+  redirectUrl: process.env.MOMO_REDIRECT_URL  || `${getPrimaryFrontendUrl()}/checkout/success`,
+  ipnUrl:     process.env.MOMO_IPN_URL      || `${getPrimaryFrontendUrl()}/api/payments/momo-webhook`,
 };
 
 // ── VNPAY CONFIG ─────────────────────────────────────────────────────────────
@@ -117,7 +118,7 @@ const VNPAY = {
   url:       process.env.VNPAY_URL       || 'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html',
   tmnCode:   process.env.VNPAY_TMN_CODE  || 'TESTVNPAY',
   hashSecret:process.env.VNPAY_HASH_SECRET || '',
-  returnUrl:  process.env.VNPAY_RETURN_URL || `${process.env.FRONTEND_URL || 'http://localhost:3000'}/checkout/success`,
+  returnUrl:  process.env.VNPAY_RETURN_URL || `${getPrimaryFrontendUrl()}/checkout/success`,
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -137,7 +138,7 @@ function getPayOSConfig() {
   const checksumKey = String(process.env.PAYOS_CHECKSUM_KEY || '').trim();
   if (!clientId || !apiKey || !checksumKey) return null;
 
-  const frontendUrl = String(process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/+$/, '');
+  const frontendUrl = getPrimaryFrontendUrl();
   const railwayDomain = String(process.env.RAILWAY_PUBLIC_DOMAIN || '').replace(/^https?:\/\//, '').replace(/\/+$/, '');
   const backendUrl = String(
     process.env.BACKEND_URL ||

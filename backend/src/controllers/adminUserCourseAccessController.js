@@ -1,9 +1,10 @@
 "use strict";
 
 const { createCourseEnrollmentAdminService } = require("../services/courseEnrollmentAdminService");
+const courseIntegrationRuntime = require("../services/courseIntegrationRuntime");
 const { sendCourseError, sendData } = require("../utils/courseResponses");
 
-const service = () => createCourseEnrollmentAdminService();
+const service = () => createCourseEnrollmentAdminService({ courseOutbox: courseIntegrationRuntime.outbox });
 const action = (handler) => async (req, res) => {
   try {
     return sendData(res, await handler(req));

@@ -1,5 +1,6 @@
 const { PayOS } = require('@payos/node');
 const { CourseApiError } = require('../utils/courseResponses');
+const { getPrimaryFrontendUrl } = require('../utils/frontendUrl');
 
 function createVideoPayosGateway(env = process.env, clientFactory = config => new PayOS(config)) {
   function client() {
@@ -12,7 +13,7 @@ function createVideoPayosGateway(env = process.env, clientFactory = config => ne
   return {
     assertConfigured() { client(); },
     async create(order) {
-      const origin = new URL(env.FRONTEND_URL || 'http://localhost:3000').origin;
+      const origin = new URL(getPrimaryFrontendUrl(env.FRONTEND_URL)).origin;
       const returnUrl = new URL('/thanh-toan-khoa-hoc', origin);
       returnUrl.searchParams.set('orderId', order.transaction_code);
       const cancelUrl = new URL(returnUrl); cancelUrl.searchParams.set('cancel', 'true');
