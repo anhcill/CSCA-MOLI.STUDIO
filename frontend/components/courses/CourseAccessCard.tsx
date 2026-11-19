@@ -16,6 +16,7 @@ import coursesApi from '@/lib/api/courses';
 import type { CourseDetailDto } from '@/lib/types/courses';
 import { MOLY_ZALO_URL } from '@/lib/constants/moly';
 import { CourseOwnershipBadge } from '@/components/courses/CourseOwnershipBadge';
+import { resolveCourseCoverImage } from '@/lib/coursePresentation';
 
 const levelLabels = {
   basic: 'Cơ bản',
@@ -151,14 +152,16 @@ export function CourseAccessCard({ course }: { course: CourseDetailDto }) {
     }
   };
 
+  const coverUrl = resolveCourseCoverImage(course.thumbnailUrl, course.subjectCode);
+
   return (
     <aside className="overflow-hidden rounded-[1.75rem] border border-slate-200/80 bg-white shadow-[0_20px_60px_rgba(15,23,42,0.12)] dark:border-slate-800 dark:bg-[#0b1427] dark:shadow-[0_20px_60px_rgba(0,0,0,0.3)] lg:sticky lg:top-6">
       <div className="p-4 pb-0">
         <div className="relative aspect-video overflow-hidden rounded-[1.25rem] bg-gradient-to-br from-sky-500 to-indigo-700">
-          {course.thumbnailUrl ? <img src={course.thumbnailUrl} alt={`Ảnh bìa ${course.title}`} className="h-full w-full object-cover" /> : null}
-          <div className="absolute inset-0 bg-slate-950/20" />
-          <span className="absolute left-1/2 top-1/2 flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-sky-500 text-2xl text-white shadow-xl"><FiPlayCircle /></span>
-          <span className="absolute bottom-3 right-3 rounded-lg bg-slate-950/80 px-3 py-1.5 text-xs font-black text-white">{course.access.canLearn ? 'Vào học ngay' : firstFreePreviewLesson ? 'Có bài học thử' : 'Xem chương trình'}</span>
+          <img src={coverUrl} alt={`Ảnh bìa ${course.title}`} className="h-full w-full object-cover" />
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-950/65 via-slate-950/20 to-slate-950/10" />
+          <span className="absolute left-1/2 top-1/2 flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-sky-500/95 text-2xl text-white shadow-xl ring-4 ring-white/20 backdrop-blur-sm"><FiPlayCircle /></span>
+          <span className="absolute bottom-3 right-3 rounded-lg bg-slate-950/80 px-3 py-1.5 text-xs font-black text-white backdrop-blur-sm">{course.access.canLearn ? 'Vào học ngay' : firstFreePreviewLesson ? 'Có bài học thử' : 'Xem chương trình'}</span>
         </div>
       </div>
       <div className="mt-4 border-y border-slate-200 bg-slate-50/80 px-6 py-5 dark:border-slate-800 dark:bg-slate-900/50">

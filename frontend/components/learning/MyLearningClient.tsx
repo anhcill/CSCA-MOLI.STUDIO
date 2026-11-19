@@ -14,6 +14,7 @@ import {
 import learningApi from '@/lib/api/learning';
 import type { MyLearningItemDto } from '@/lib/types/courses';
 import { CourseOwnershipBadge } from '@/components/courses/CourseOwnershipBadge';
+import { resolveCourseCoverImage } from '@/lib/coursePresentation';
 
 const courseSyncExplicitlyDisabled = process.env.NEXT_PUBLIC_COURSE_SYNC_ENABLED === 'false';
 
@@ -143,9 +144,10 @@ export function MyLearningClient() {
               ? `/hoc/${course.slug}/bai-hoc/${lessonId}${activeProfileId ? `?profileId=${encodeURIComponent(activeProfileId)}` : ''}`
               : unitHref)
             || `/khoa-hoc/${course.slug}`;
-          const coverStyle = course.thumbnailUrl
-            ? { backgroundImage: `linear-gradient(90deg, rgba(15,23,42,.9), rgba(30,41,59,.45)), url("${course.thumbnailUrl}")` }
-            : undefined;
+          const coverUrl = resolveCourseCoverImage(course.thumbnailUrl, course.subjectCode);
+          const coverStyle = {
+            backgroundImage: `linear-gradient(90deg, rgba(15,23,42,.88), rgba(30,41,59,.45)), url("${coverUrl}")`,
+          };
 
           return (
             <article key={enrollment.id} className="group overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-[0_16px_50px_-28px_rgba(15,23,42,.45)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_22px_60px_-28px_rgba(79,70,229,.45)] dark:border-slate-800 dark:bg-slate-900">

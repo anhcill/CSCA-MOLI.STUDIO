@@ -8,7 +8,7 @@ import {
 } from 'react-icons/fi';
 import type { CourseCatalogItemDto, CscaSubjectCode } from '@/lib/types/courses';
 import { CourseOwnershipBadge } from '@/components/courses/CourseOwnershipBadge';
-import { publicCourseProfileLabel } from '@/lib/coursePresentation';
+import { publicCourseProfileLabel, resolveCourseCoverImage } from '@/lib/coursePresentation';
 
 const levelLabels = { basic: 'Cơ bản', intermediate: 'Trung cấp', advanced: 'Nâng cao' };
 const subjectMeta: Record<CscaSubjectCode, { label: string; cover: string }> = {
@@ -113,7 +113,7 @@ function ProgressBar({ course }: { course: CourseCatalogItemDto }) {
 
 export function CourseCard({ course, variant = 'compact' }: { course: CourseCatalogItemDto; variant?: 'wide' | 'featured' | 'compact' }) {
   const subject = subjectMeta[course.subjectCode];
-  const cover = course.thumbnailUrl || subject.cover;
+  const cover = resolveCourseCoverImage(course.thumbnailUrl, course.subjectCode);
   const detailHref = `/khoa-hoc/${course.slug}`;
   const continueHref = learningHref(course);
 
