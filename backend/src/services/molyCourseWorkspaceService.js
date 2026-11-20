@@ -498,6 +498,8 @@ function createMolyCourseWorkspaceService({
 
   async function ensureDeviceContext({ req = null, res = null, user = null } = {}) {
     if (!req || !user || !user.id) return null;
+    const isAdminUser = ["admin", "creator"].includes(String(user.role || "").toLowerCase());
+    if (isAdminUser) return null;
     if (user.device_limit_locked_at) {
       throw new CourseApiError(
         403,
@@ -1170,7 +1172,8 @@ function createMolyCourseWorkspaceService({
       res,
     });
     const clampedTtl = Math.max(15, Math.min(60, Math.floor(Number(ttlSeconds) || 60)));
-    const deviceSlotProof = tryBuildDeviceProofHeader({ deviceCtx, externalUserId });
+    const isAdminUser = ["admin", "creator"].includes(String(user?.role || "").toLowerCase());
+    const deviceSlotProof = isAdminUser ? null : tryBuildDeviceProofHeader({ deviceCtx, externalUserId });
     const clientIp = deviceCtx?.ipAddress || extractClientIp(req);
     const userAgent = deviceCtx?.userAgent || extractUserAgent(req);
 

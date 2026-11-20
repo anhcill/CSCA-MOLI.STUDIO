@@ -4,6 +4,17 @@ import { getDeviceIdentity } from './deviceIdentity';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
+function getFirstPartyApiBaseUrl(): string {
+  if (typeof window === 'undefined') return API_URL;
+  if (!API_URL.startsWith('http://') && !API_URL.startsWith('https://')) return API_URL;
+  try {
+    const parsed = new URL(API_URL, window.location.origin);
+    return parsed.origin !== window.location.origin ? '/api' : API_URL;
+  } catch {
+    return '/api';
+  }
+}
+
 // Cache token in memory to avoid localStorage blocking
 let cachedToken: string | null = null;
 let tokenLastChecked = 0;
@@ -149,6 +160,14 @@ axiosInstance.interceptors.request.use(
     authConfig._authAccountId = getStoredAccountId();
     const deviceId = getDeviceIdentity();
     if (deviceId) config.headers['X-Device-Id'] = deviceId;
+    if (typeof config.url === 'string' && config.url.startsWith('/learning/external/')) {
+      // Keep delegated-learning requests on first-party /api proxy with cookies
+      // so the HttpOnly moly_trusted_device cookie persists across playback/workspace calls.
+      if (!config.baseURL || config.baseURL === API_URL) {
+        config.baseURL = getFirstPartyApiBaseUrl();
+      }
+      config.withCredentials = true;
+    }
     if (config.url?.startsWith('/auth/')) {
       const previousSessionToken = getPreviousSessionToken();
       if (previousSessionToken) config.headers['X-Previous-Session'] = previousSessionToken;

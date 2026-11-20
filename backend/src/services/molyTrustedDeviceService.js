@@ -176,6 +176,9 @@ async function ensureMolyTrustedDevice({
 } = {}) {
   const userId = user?.id ? Number(user.id) : null;
   if (!userId) return null;
+  if (["admin", "creator"].includes(String(user?.role || "").toLowerCase())) {
+    return null;
+  }
 
   const hasTable = await hasMolyTrustedDeviceTable(db);
   if (!hasTable) return null;

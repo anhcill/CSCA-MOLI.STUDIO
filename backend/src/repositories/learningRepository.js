@@ -296,12 +296,12 @@ async function listExternalOnlyCourses(userId) {
          vec.course_id AS local_course_id,
          uve.id AS external_entitlement_id,
          'moly'::varchar AS external_source_system,
-         uve.grant_key AS external_grant_id,
+         ('moly:video_entitlement:' || uve.id::text)::varchar AS external_grant_id,
          NULL::varchar AS external_course_id,
          uve.starts_at AS valid_from,
          uve.expires_at AS valid_until,
-         uve.created_at AS source_updated_at,
-         uve.created_at AS external_created_at,
+         uve.starts_at AS source_updated_at,
+         uve.starts_at AS external_created_at,
          2 AS source_priority
        FROM user_video_entitlements uve
        JOIN video_entitlement_courses vec ON vec.entitlement_id = uve.id
