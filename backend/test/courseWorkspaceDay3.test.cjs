@@ -562,7 +562,7 @@ test("Day 3 curriculum backfill + admin route projects MIRROR & INDEPENDENT unit
               sectionTitle: "Buổi Live Chuyên đề",
               sectionSortOrder: 1,
               sessionNumber: 1,
-              title: "Buổi 1: Ôn tập Live Cơ học",
+              title: "Chương 9: Ôn tập Live Cơ học",
               summary: "Record từ lớp Zoom",
               sortOrder: 1,
               durationSeconds: 1800,
@@ -641,6 +641,10 @@ test("Day 3 curriculum backfill + admin route projects MIRROR & INDEPENDENT unit
   assert.equal(unitsRes.rows.length, 3);
   assert.equal(unitsRes.rows.filter((u) => u.mode === "INDEPENDENT").length, 2);
   assert.equal(unitsRes.rows.filter((u) => u.mode === "MIRROR" && u.unit_type === "class_session").length, 1);
+  assert.equal(
+    unitsRes.rows.find((u) => u.mode === "MIRROR" && u.unit_type === "class_session").title,
+    "Chương 9: Ôn tập Live Cơ học",
+  );
 
   const filesRes = await envCtx.db.query(`SELECT * FROM course_file_projections ORDER BY id ASC`);
   assert.equal(filesRes.rows.length, 2);
@@ -698,7 +702,7 @@ test("Day 3 webhook ingestion handles curriculum.upserted, unit_content.upserted
               sectionId: "sec:1",
               sectionTitle: "Chương 1",
               sectionSortOrder: 1,
-              title: "Bài Hóa 1 rev10",
+              title: "Chương 1: Tập hợp; Chương 2: Bất đẳng thức",
               sortOrder: 1,
               durationSeconds: 600,
               isPublished: true,
@@ -740,6 +744,12 @@ test("Day 3 webhook ingestion handles curriculum.upserted, unit_content.upserted
   assert.equal(res1.status, 202);
   assert.equal(res1.body.data.results[0].unitsApplied, 2);
 
+  const independentTitle = (await envCtx.db.query(
+    `SELECT title, metadata FROM course_unit_projections WHERE remote_unit_id = '701'`,
+  )).rows[0];
+  assert.equal(independentTitle.title, "Tập hợp; Bất đẳng thức");
+  assert.equal(independentTitle.metadata.sourceTitle, "Chương 1: Tập hợp; Chương 2: Bất đẳng thức");
+
   // 2) unit_content.upserted bumps unit 701 to rev 12 and changes title + counts
   const ev2 = {
     schemaVersion: "2.0",
@@ -764,7 +774,7 @@ test("Day 3 webhook ingestion handles curriculum.upserted, unit_content.upserted
             sectionId: "sec:1",
             sectionTitle: "Chương 1",
             sectionSortOrder: 1,
-            title: "Bài Hóa 1 Updated rev12",
+            title: "Chương 3: Hàm số (tiếp)",
             sortOrder: 1,
             durationSeconds: 750,
             isPublished: true,
@@ -788,7 +798,7 @@ test("Day 3 webhook ingestion handles curriculum.upserted, unit_content.upserted
   assert.equal(res2.body.data.results[0].unitsApplied, 1);
 
   const unit701AfterUp = (await envCtx.db.query(`SELECT title, last_revision, video_part_count, vocab_count FROM course_unit_projections WHERE remote_unit_id = '701'`)).rows[0];
-  assert.equal(unit701AfterUp.title, "Bài Hóa 1 Updated rev12");
+  assert.equal(unit701AfterUp.title, "Hàm số (tiếp)");
   assert.equal(Number(unit701AfterUp.last_revision), 12);
   assert.equal(Number(unit701AfterUp.video_part_count), 3);
 
@@ -833,7 +843,7 @@ test("Day 3 webhook ingestion handles curriculum.upserted, unit_content.upserted
   assert.equal(resStale.body.data.results[0].inboxStatus, "stale");
 
   const unit701Still12 = (await envCtx.db.query(`SELECT title, last_revision FROM course_unit_projections WHERE remote_unit_id = '701'`)).rows[0];
-  assert.equal(unit701Still12.title, "Bài Hóa 1 Updated rev12");
+  assert.equal(unit701Still12.title, "Hàm số (tiếp)");
   assert.equal(Number(unit701Still12.last_revision), 12);
 
   // 4) curriculum.tombstoned marks unit 702 + children soft-deleted

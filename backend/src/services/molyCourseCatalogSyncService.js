@@ -64,6 +64,22 @@ function normalizeSourcePrice(value) {
   return amount;
 }
 
+function normalizeIndependentUnitTitle(value, fallback) {
+  const sourceTitle = String(value || fallback || "").trim();
+  if (!sourceTitle) return "";
+
+  // Independent recording courses present lessons by topic. Internal may prefix
+  // every topic with "Chương N:"; strip those repeated labels while preserving
+  // the topic separators (for example "Tập hợp; Bất đẳng thức").
+  const normalized = sourceTitle
+    .replace(/\bChương\s+(?:\d+|[IVXLCDM]+)\s*:\s*/giu, "")
+    .replace(/\s*([;,])\s*/gu, "$1 ")
+    .replace(/\s{2,}/gu, " ")
+    .trim();
+
+  return normalized || sourceTitle;
+}
+
 /**
  * Monotonically upserts a learner's unit progress projection row (and optional
  * sequentially-unlocked next unit) inside a caller transaction, checking
@@ -1901,6 +1917,7 @@ function createMolyCourseCatalogSyncService({
   async function upsertUnitAndFilesTx(runner, {
     profileProjectionId,
     localCourseId,
+    profileMode = null,
     unit,
     fallbackRevision = 1,
     defaultUpdatedAt = null,
@@ -1917,12 +1934,17 @@ function createMolyCourseCatalogSyncService({
     const deletedAt = deleted ? (toIso(unit?.deletedAt) || sourceUpdatedAt) : null;
     const isPublished = !deleted && Boolean(unit?.isPublished);
     const isPublicPreview = isPublished && Boolean(unit?.isPublicPreview);
+    const sourceTitle = String(unit?.title || `Bài học #${remoteUnitId}`).trim();
+    const publicTitle = String(profileMode || "").toUpperCase() === "INDEPENDENT"
+      ? normalizeIndependentUnitTitle(sourceTitle, `Bài học #${remoteUnitId}`)
+      : sourceTitle;
 
     const counts = unit?.counts && typeof unit.counts === "object" ? unit.counts : {};
     const theory = unit?.theory && typeof unit.theory === "object" ? unit.theory : {};
     const unitFiles = Array.isArray(unit?.files) ? unit.files : [];
     const safeMetadata = {
       unitKey: unit?.unitKey || `${unitType}:${remoteUnitId}`,
+      sourceTitle: publicTitle !== sourceTitle ? sourceTitle : null,
       sessionNumber: unit?.sessionNumber != null ? Number(unit.sessionNumber) : null,
       videoPartCount: Number(unit?.videoPartCount ?? counts.videos ?? 0),
       videoParts: Array.isArray(unit?.videoParts)
@@ -2037,7 +2059,7 @@ function createMolyCourseCatalogSyncService({
           Number.parseInt(unit?.sectionSortOrder ?? 0, 10) || 0,
           unitType,
           remoteUnitId.slice(0, 128),
-          String(unit?.title || `Bài học #${remoteUnitId}`).slice(0, 255),
+          publicTitle.slice(0, 255),
           unit?.summary != null ? String(unit.summary) : null,
           Number.parseInt(unit?.sortOrder ?? 0, 10) || 0,
           Math.max(0, Number.parseInt(unit?.durationSeconds ?? 0, 10) || 0),
@@ -2394,6 +2416,7 @@ function createMolyCourseCatalogSyncService({
         const unitRes = await upsertUnitAndFilesTx(runner, {
           profileProjectionId: profProj.id,
           localCourseId: profProj.local_course_id,
+          profileMode: profProj.mode,
           unit: {
             ...u,
             deleted: Boolean(u.deleted || eventDeleted === true),
@@ -2493,6 +2516,7 @@ function createMolyCourseCatalogSyncService({
       const res = await upsertUnitAndFilesTx(runner, {
         profileProjectionId: profProj.id,
         localCourseId: profProj.local_course_id,
+        profileMode: profProj.mode,
         unit,
         fallbackRevision: Number(unit.revision || envelopeRevision || 1),
         defaultUpdatedAt: sourceUpdatedAt,
