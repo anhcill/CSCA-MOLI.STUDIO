@@ -558,15 +558,15 @@ async function listExternalProgressSummaries(userId, courseIds = []) {
   for (const row of res.rows) {
     const totalLessons = Number(row.total_units || 0);
     const completedLessons = Number(row.completed_units || 0);
-    const pct = row.partial_completion_pct != null
-      ? Number(row.partial_completion_pct)
-      : (totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 10000) / 100 : 0);
+    const pct = totalLessons > 0
+      ? Math.round((completedLessons / totalLessons) * 100)
+      : 0;
     byCourse.set(Number(row.local_course_id), {
       activeProfileId: String(row.remote_profile_id),
       firstUnitProjectionId: row.first_unit_projection_id ? Number(row.first_unit_projection_id) : null,
       completedLessons,
       totalLessons,
-      completionPct: Math.min(100, Math.max(0, Math.round(pct * 100) / 100)),
+      completionPct: Math.min(100, Math.max(0, pct)),
       watchedSeconds: Number(row.watched_seconds || 0),
       lastLessonId: row.last_unit_projection_id ? `u-${row.last_unit_projection_id}` : null,
       lastLessonTitle: row.last_unit_title || null,

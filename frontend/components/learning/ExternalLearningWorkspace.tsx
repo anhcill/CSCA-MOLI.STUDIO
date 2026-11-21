@@ -836,7 +836,11 @@ export function ExternalLearningWorkspace({
     ?? navContext.activeUnitSummary?.unitProjectionId
     ?? (Number(externalUnitId.replace(/^u-/, '')) || 0);
   const activeSidebarId = navContext.activeUnitSummary?.id || externalUnitId;
-  const progressPct = liveCourseProgress?.overallPercent ?? workspace.progress?.overallPercent ?? 0;
+  const progressCompletedUnits = liveCourseProgress?.completedUnits ?? workspace.progress?.completedUnits ?? 0;
+  const progressTotalUnits = liveCourseProgress?.totalUnits ?? workspace.progress?.totalUnits ?? workspace.units.length;
+  const progressPct = progressTotalUnits > 0
+    ? Math.round((progressCompletedUnits / progressTotalUnits) * 100)
+    : (liveCourseProgress?.overallPercent ?? workspace.progress?.overallPercent ?? 0);
   const deviceLimit = workspace.profile.capabilities?.deviceLimit ?? workspace.profile.deviceLimit;
 
   const previewEmbedUrl = workspace.isPublicPreviewAccess
@@ -855,6 +859,8 @@ export function ExternalLearningWorkspace({
         courseSlug={courseSlug}
         courseTitle={workspace.course.title}
         progressPct={progressPct}
+        completedUnits={progressCompletedUnits}
+        totalUnits={progressTotalUnits}
         badgeLabel={modeLabel}
         onNotesClick={() => {
           setRequestedTab('notes');

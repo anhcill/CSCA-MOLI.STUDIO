@@ -565,14 +565,17 @@ export function ExternalUnitContentTabs({
                       <div className="mt-3 rounded-lg bg-[#f8f1e9] p-3 text-xs dark:bg-[#0b172b]">
                         <p className="mb-1.5 font-black uppercase tracking-wider text-[#6f665f] dark:text-slate-400">Chú giải biến số</p>
                         <ul className="space-y-1">
-                          {formula.variablesExplanation.map((v, vIdx) => (
-                            <li key={`${v.symbol || v.name}-${vIdx}`} className="flex flex-wrap gap-2">
-                              <span className="font-mono font-black text-[#ad2033] dark:text-[#f08d9c]">{v.symbol || '•'}</span>
-                              {v.name ? <span className="font-bold text-[#1f2c43] dark:text-slate-200">{v.name}</span> : null}
-                              {v.unit ? <span className="text-[#247d7e] dark:text-[#6ac6bd]">({v.unit})</span> : null}
-                              {v.description ? <span>: {v.description}</span> : null}
-                            </li>
-                          ))}
+                          {formula.variablesExplanation.map((v, vIdx) => {
+                            const meaningText = v.description || (v as { meaning?: string }).meaning;
+                            return (
+                              <li key={`${v.symbol || v.name}-${vIdx}`} className="flex flex-wrap gap-2">
+                                <span className="font-mono font-black text-[#ad2033] dark:text-[#f08d9c]">{v.symbol || '•'}</span>
+                                {v.name ? <span className="font-bold text-[#1f2c43] dark:text-slate-200">{v.name}</span> : null}
+                                {v.unit ? <span className="text-[#247d7e] dark:text-[#6ac6bd]">({v.unit})</span> : null}
+                                {meaningText ? <span className="text-[#3d4657] dark:text-slate-300">: {meaningText}</span> : null}
+                              </li>
+                            );
+                          })}
                         </ul>
                       </div>
                     ) : null}

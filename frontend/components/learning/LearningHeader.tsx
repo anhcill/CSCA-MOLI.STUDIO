@@ -6,17 +6,22 @@ export function LearningHeader({
   courseSlug,
   courseTitle,
   progressPct,
+  completedUnits,
+  totalUnits,
   onNotesClick,
   badgeLabel,
 }: {
   courseSlug: string;
   courseTitle: string;
   progressPct: number;
+  completedUnits?: number | null;
+  totalUnits?: number | null;
   onNotesClick: () => void;
   badgeLabel?: string | null;
 }) {
   const progress = Math.min(100, Math.max(0, progressPct));
   const roundedProgress = Math.round(progress);
+  const hasCounts = typeof completedUnits === 'number' && typeof totalUnits === 'number' && totalUnits > 0;
 
   return (
     <header className="sticky top-0 z-30 border-b border-white/10 bg-[#061126] text-white shadow-lg shadow-slate-950/10">
@@ -41,7 +46,9 @@ export function LearningHeader({
           <div className="hidden w-64 lg:block">
             <div className="flex items-center justify-between text-xs font-bold">
               <span className="inline-flex items-center gap-2 text-slate-200"><FiCloud className="text-[#41b9b2]" /> Tiến độ khóa học</span>
-              <span className="text-[#f2d1a8]">{roundedProgress}%</span>
+              <span className="text-[#f2d1a8]">
+                {hasCounts ? `${completedUnits}/${totalUnits} (${roundedProgress}%)` : `${roundedProgress}%`}
+              </span>
             </div>
             <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/20">
               <div className="h-full rounded-full bg-gradient-to-r from-[#23858a] to-[#58b8a9]" style={{ width: `${progress}%` }} />
