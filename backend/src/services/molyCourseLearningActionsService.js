@@ -9,6 +9,8 @@ const {
   upsertQaThreadProjectionTx,
 } = require("./molyCourseCatalogSyncService");
 
+const COURSE_ACCESS_HELP_MESSAGE = "Bạn chưa mua khóa học này nhaa 💛 Liên hệ admin 0812352005 để được hỗ trợ mở khóa nhé.";
+
 function decodeDispositionFilename(headerVal) {
   if (!headerVal || typeof headerVal !== "string") return null;
   const starMatch = /filename\*\s*=\s*UTF-8''([^;]+)/i.exec(headerVal);
@@ -114,7 +116,7 @@ function createMolyCourseLearningActionsService({
       throw new CourseApiError(
         403,
         access.blockCode || "ENTITLEMENT_REQUIRED",
-        "Bạn không có quyền truy cập nội dung học này.",
+        COURSE_ACCESS_HELP_MESSAGE,
       );
     }
     const deviceCtx = await ensureDeviceContext({ req, res, user });
@@ -313,7 +315,7 @@ function createMolyCourseLearningActionsService({
       throw new CourseApiError(
         403,
         access.blockCode || "ENTITLEMENT_REQUIRED",
-        "Bạn không có quyền truy cập tài liệu này.",
+        COURSE_ACCESS_HELP_MESSAGE,
       );
     }
 

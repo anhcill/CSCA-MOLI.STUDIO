@@ -4,6 +4,8 @@ const { ensureMolyTrustedDevice, MolyDeviceError } = require("./molyTrustedDevic
 const { upsertLearningProgressProjectionTx } = require("./molyCourseCatalogSyncService");
 const { createMolyCourseLearningActionsService } = require("./molyCourseLearningActionsService");
 
+const COURSE_ACCESS_HELP_MESSAGE = "Bạn chưa mua khóa học này nhaa 💛 Liên hệ admin 0812352005 để được hỗ trợ mở khóa nhé.";
+
 const ALLOWED_CLIENT_DELEGATED_SCOPES = Object.freeze([
   "workspace:read",
   "video:play",
@@ -769,7 +771,7 @@ function createMolyCourseWorkspaceService({
       throw new CourseApiError(
         403,
         access.blockCode || "ENTITLEMENT_REQUIRED",
-        "Tài khoản hiện không có quyền truy cập nội dung này.",
+        COURSE_ACCESS_HELP_MESSAGE,
       );
     }
 
@@ -1089,7 +1091,7 @@ function createMolyCourseWorkspaceService({
     throw new CourseApiError(
       403,
       access.blockCode || "ENTITLEMENT_REQUIRED",
-      "Bạn không có quyền truy cập bài học này.",
+      COURSE_ACCESS_HELP_MESSAGE,
     );
   }
 
@@ -1129,7 +1131,7 @@ function createMolyCourseWorkspaceService({
       throw new CourseApiError(
         403,
         access.blockCode || "ENTITLEMENT_REQUIRED",
-        "Bạn không có quyền truy cập nội dung học này.",
+        COURSE_ACCESS_HELP_MESSAGE,
       );
     }
     const deviceCtx = await ensureDeviceContext({ req, res, user });

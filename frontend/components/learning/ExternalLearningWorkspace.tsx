@@ -11,6 +11,7 @@ import {
   FiColumns,
   FiLayers,
   FiLock,
+  FiMessageCircle,
   FiMaximize2,
   FiPlayCircle,
   FiRefreshCw,
@@ -32,6 +33,7 @@ import { LearningFooter } from './LearningFooter';
 import { LearningHeader } from './LearningHeader';
 import { LearningRoomLoading } from './LearningRoomLoading';
 import { LearningSidebar } from './LearningSidebar';
+import { MOLY_ZALO_DISPLAY, MOLY_ZALO_URL } from '@/lib/constants/moly';
 
 const ALLOWED_BUNNY_ORIGINS = new Set([
   'https://iframe.mediadelivery.net',
@@ -160,7 +162,10 @@ function parseErrorMessage(err: unknown): { code: string | null; message: string
       return { code, message: 'Hồ sơ hoặc bài học không thuộc phạm vi khóa học này.' };
     }
     if (code === 'COURSE_ACCESS_REVOKED' || code === 'COURSE_ENTITLEMENT_REQUIRED' || code === 'ENTITLEMENT_REQUIRED' || ax.response?.status === 403) {
-      return { code, message: msg || 'Quyền truy cập khóa học đã hết hạn, bị thu hồi hoặc cần hoàn thành bài trước đó.' };
+      return {
+        code: code || 'ENTITLEMENT_REQUIRED',
+        message: `Bạn chưa mua khóa học này nhaa 💛 Nhắn Zalo admin ${MOLY_ZALO_DISPLAY} để được hỗ trợ mở khóa nhé.`,
+      };
     }
     if (msg) return { code, message: msg };
   }
@@ -770,6 +775,30 @@ export function ExternalLearningWorkspace({
             </Link>
           </section>
         </main>
+      );
+    }
+    const isEntitlementError = errorCode === 'COURSE_ACCESS_REVOKED'
+      || errorCode === 'COURSE_ENTITLEMENT_REQUIRED'
+      || errorCode === 'ENTITLEMENT_REQUIRED';
+    if (isEntitlementError) {
+      return (
+        <div className="flex min-h-screen items-center justify-center bg-[#f5efe8] p-6 dark:bg-[#050d1d]">
+          <div role="alert" className="w-full max-w-lg rounded-[2rem] border border-amber-200 bg-gradient-to-br from-amber-50 to-rose-50 p-8 text-center shadow-xl shadow-amber-950/5 dark:border-amber-800/60 dark:from-[#172033] dark:to-[#1c1422]">
+            <div className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-white text-3xl shadow-sm dark:bg-white/10">💛</div>
+            <h1 className="mt-5 text-2xl font-black text-slate-900 dark:text-white">Bạn chưa mua khóa học này nhaa</h1>
+            <p className="mx-auto mt-2 max-w-sm text-sm font-medium leading-6 text-slate-600 dark:text-slate-300">
+              Nhắn Zalo admin <strong>{MOLY_ZALO_DISPLAY}</strong> để tụi mình hỗ trợ mở khóa cho bạn nhé ✨
+            </p>
+            <div className="mt-6 flex flex-wrap justify-center gap-3">
+              <a href={MOLY_ZALO_URL} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl bg-[#d92535] px-5 py-3 font-black text-white shadow-lg shadow-red-900/15 transition hover:bg-[#b91f2e]">
+                <FiMessageCircle /> Nhắn admin qua Zalo
+              </a>
+              <Link href={`/khoa-hoc/${courseSlug}`} className="rounded-xl border border-amber-300 bg-white/70 px-5 py-3 font-black text-slate-700 transition hover:bg-white dark:border-slate-600 dark:bg-white/5 dark:text-slate-200">
+                Xem thông tin khóa học
+              </Link>
+            </div>
+          </div>
+        </div>
       );
     }
     return (

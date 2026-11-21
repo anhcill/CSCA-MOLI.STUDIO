@@ -190,15 +190,15 @@ export function CourseCard({ course, variant = 'compact' }: { course: CourseCata
         <span className="absolute bottom-4 right-4 grid h-11 w-11 place-items-center rounded-full bg-white text-[#a51f32] shadow-lg"><FiPlay className="ml-0.5" fill="currentColor" /></span>
       </Link>
 
-      <div className="flex flex-1 flex-col p-5">
+      <div className="flex flex-1 flex-col p-4">
         <span className={`text-[11px] font-black uppercase tracking-[.1em] ${featured ? 'text-emerald-300' : 'text-[#257d7e]'}`}>{subject.label}</span>
-        <h3 className={`mt-2 line-clamp-2 font-sans text-xl font-black leading-snug ${featured ? 'text-white' : 'text-[#17243d] dark:text-[#f4e8d6]'}`}>{course.title}</h3>
+        <h3 className={`mt-1.5 line-clamp-2 font-sans text-lg font-black leading-snug ${featured ? 'text-white' : 'text-[#17243d] dark:text-[#f4e8d6]'}`}>{course.title}</h3>
         {course.instructor?.displayName ? (
           <p className={`mt-1 text-xs font-semibold ${featured ? 'text-slate-300' : 'text-[#6f665f] dark:text-slate-400'}`}>Giảng viên: {course.instructor.displayName}</p>
         ) : null}
         <p className={`mt-2 text-sm font-bold ${featured ? 'text-amber-300' : 'text-[#c77715]'}`}>★ {course.ratingAvg.toFixed(1)} <span className={`font-medium ${featured ? 'text-slate-400' : 'text-[#8b8077] dark:text-slate-400'}`}>({course.ratingCount})</span></p>
-        <p className={`mt-3 line-clamp-2 min-h-10 text-sm leading-5 ${featured ? 'text-slate-300' : 'text-[#6f665f] dark:text-slate-300'}`}>{course.shortDescription}</p>
-        <div className={`mt-5 ${featured ? '[&_span]:text-slate-300 [&>div]:border-white/15' : ''}`}><CourseMetrics course={course} /></div>
+        <p className={`mt-2 line-clamp-1 text-sm leading-5 ${featured ? 'text-slate-300' : 'text-[#6f665f] dark:text-slate-300'}`}>{course.shortDescription}</p>
+        <div className={`mt-4 ${featured ? '[&_span]:text-slate-300 [&>div]:border-white/15' : ''}`}><CourseMetrics course={course} /></div>
         <ProgressBar course={course} />
         {course.contentOrigin === 'csca_course' && (course.owned || course.ownershipStatus === 'owned') && course.firstUnitHref ? (
           <div className="mt-4">

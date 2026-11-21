@@ -13,14 +13,10 @@ export function CourseGrid({ courses }: { courses: CourseCatalogItemDto[] }) {
     );
   }
 
-  if (courses.length === 1) {
-    return <CourseCard course={courses[0]} variant="wide" />;
-  }
-
   return (
-    <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
-      {courses.map((course, index) => (
-        <CourseCard key={course.id} course={course} variant={index === 0 ? 'featured' : 'compact'} />
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      {courses.map((course) => (
+        <CourseCard key={course.id} course={course} variant="compact" />
       ))}
     </div>
   );
@@ -28,16 +24,18 @@ export function CourseGrid({ courses }: { courses: CourseCatalogItemDto[] }) {
 
 export function CourseGridSkeleton() {
   return (
-    <div className="overflow-hidden rounded-2xl border border-[#dfd2c7] bg-[#fffaf5] dark:border-[#2d3a50] dark:bg-[#0b172b]">
-      <div className="grid min-h-72 animate-pulse lg:grid-cols-[42%_1fr]">
-        <div className="bg-[#e9dfd5] dark:bg-[#14243a]" />
-        <div className="space-y-5 p-7">
-          <div className="h-5 w-28 rounded-full bg-[#e9dfd5] dark:bg-[#1b2c43]" />
-          <div className="h-9 max-w-xl rounded-lg bg-[#e9dfd5] dark:bg-[#1b2c43]" />
-          <div className="h-14 max-w-2xl rounded-lg bg-[#f0e8e0] dark:bg-[#14243a]" />
-          <div className="h-20 max-w-2xl rounded-xl bg-[#f0e8e0] dark:bg-[#14243a]" />
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      {[0, 1, 2].map((item) => (
+        <div key={item} className="animate-pulse overflow-hidden rounded-2xl border border-[#dfd2c7] bg-[#fffaf5] dark:border-[#2d3a50] dark:bg-[#0b172b]">
+          <div className="aspect-[16/9] bg-[#e9dfd5] dark:bg-[#14243a]" />
+          <div className="space-y-3 p-4">
+            <div className="h-4 w-24 rounded-full bg-[#e9dfd5] dark:bg-[#1b2c43]" />
+            <div className="h-7 rounded-lg bg-[#e9dfd5] dark:bg-[#1b2c43]" />
+            <div className="h-10 rounded-lg bg-[#f0e8e0] dark:bg-[#14243a]" />
+            <div className="h-10 rounded-xl bg-[#f0e8e0] dark:bg-[#14243a]" />
+          </div>
         </div>
-      </div>
+      ))}
     </div>
   );
 }

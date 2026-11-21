@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import learningApi, { parseExternalApiError } from '@/lib/api/learning';
+import { MOLY_ZALO_DISPLAY } from '@/lib/constants/moly';
 import { useAuthStore } from '@/lib/store/authStore';
 import type {
   ExternalFileDownloadProgress,
@@ -140,7 +141,7 @@ export function ExternalFileViewerModal({
         if (parsed.code === 'DEVICE_BINDING_REVOKED' || parsed.code === 'UNTRUSTED_DEVICE_PROOF') {
           setError('Phiên thiết bị đã hết hạn hoặc bị thu hồi. Vui lòng đăng nhập lại để tiếp tục.');
         } else if (parsed.code === 'COURSE_ACCESS_REVOKED' || parsed.code === 'ENTITLEMENT_REQUIRED' || parsed.status === 403) {
-          setError(parsed.message || 'Bạn không có quyền xem tài liệu này hoặc quyền truy cập đã hết hạn.');
+          setError(`Bạn chưa mua khóa học này nhaa 💛 Nhắn Zalo admin ${MOLY_ZALO_DISPLAY} để được hỗ trợ mở khóa nhé.`);
         } else {
           setError(parsed.message);
         }

@@ -99,7 +99,7 @@ export default function Footer() {
                 </a>
               </li>
               <li>
-                <a href="tel:+840812352005" className="flex items-start gap-2.5 text-sm text-gray-500 hover:text-white transition-colors">
+                <a href="tel:+84812352005" className="flex items-start gap-2.5 text-sm text-gray-500 hover:text-white transition-colors">
                   <FiPhone size={15} className="text-purple-500 shrink-0 mt-0.5" />
                   0812 352 005
                 </a>

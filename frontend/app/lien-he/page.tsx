@@ -36,7 +36,7 @@ const CONTACT_CHANNELS = [
     icon: FiPhone,
     label: 'Điện thoại',
     value: '0812 352 005',
-    href: 'tel:+840812352005',
+    href: 'tel:+84812352005',
     color: 'text-emerald-500 bg-emerald-50 border-emerald-100',
     hover: 'hover:bg-emerald-50',
   },
