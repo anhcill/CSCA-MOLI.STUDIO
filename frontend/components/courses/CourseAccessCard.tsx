@@ -53,6 +53,7 @@ function formatVnd(amount: number) {
 
 function accessHeading(course: CourseDetailDto, names: string[]) {
   if (course.access.canLearn) return 'Bạn đã có quyền học';
+  if (course.contentOrigin === 'csca_course') return 'Nội dung khóa học đồng bộ';
   const unpricedBlocked = course.checkoutReady === false && !course.owned;
   if (unpricedBlocked) return 'Đang cập nhật học phí';
   if (course.accessType === 'free') return 'Khóa học miễn phí';
@@ -63,6 +64,7 @@ function accessHeading(course: CourseDetailDto, names: string[]) {
 
 function actionLabel(course: CourseDetailDto) {
   if (course.access.canLearn) return course.progress ? 'Tiếp tục học' : 'Bắt đầu học';
+  if (course.contentOrigin === 'csca_course') return 'Xem khóa học';
   const blockCode = course.access.blockCode ?? course.blockCode ?? null;
   if ((course.checkoutReady === false && !course.owned) || blockCode === 'PRICE_NOT_CONFIGURED') {
     return 'Chưa mở bán';
@@ -124,6 +126,10 @@ export function CourseAccessCard({ course }: { course: CourseDetailDto }) {
 
   const handleAction = async () => {
     if (course.access.canLearn) return openFirstLesson(course.progress?.lastLessonId);
+    if (isCscaCourse) {
+      document.getElementById('course-curriculum')?.scrollIntoView({ behavior: 'smooth' });
+      return;
+    }
     if (isUnpricedBlocked) return;
 
     if (!course.access.canEnroll) {
@@ -170,7 +176,7 @@ export function CourseAccessCard({ course }: { course: CourseDetailDto }) {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-[11px] font-black uppercase tracking-[0.16em] text-sky-700 dark:text-sky-300">Quyền truy cập khóa học</p>
           {ownershipStatus ? (
-            <CourseOwnershipBadge status={ownershipStatus} label={ownershipLabel} />
+            <CourseOwnershipBadge status={ownershipStatus} label={isCscaCourse && ownershipStatus === 'not_owned' ? 'Khóa học đồng bộ' : ownershipLabel} />
           ) : null}
         </div>
         <p className="mt-2 text-xl font-black text-slate-950 dark:text-white">{accessHeading(course, names)}</p>
@@ -256,7 +262,7 @@ export function CourseAccessCard({ course }: { course: CourseDetailDto }) {
           <button
             type="button"
             onClick={handleAction}
-            disabled={busy || ownershipStatus === 'pending_sync' || ownershipStatus === 'grant_blocked' || isUnpricedBlocked}
+            disabled={busy || (ownershipStatus === 'pending_sync' && !isCscaCourse) || (ownershipStatus === 'grant_blocked' && !isCscaCourse) || (isUnpricedBlocked && !isCscaCourse)}
             className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-sky-700 px-5 py-4 font-black text-white shadow-[0_10px_25px_rgba(3,105,161,0.22)] transition hover:-translate-y-0.5 hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-sky-600 dark:hover:bg-sky-700"
           >
             {course.access.canLearn || course.access.canEnroll ? <FiPlayCircle className="text-xl" /> : <FiPackage className="text-xl" />}

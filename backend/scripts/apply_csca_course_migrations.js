@@ -9,6 +9,7 @@ const MIGRATIONS = [
   "055_csca_course_package_access.sql",
   "057_course_assignments.sql",
   "058_course_lesson_questions.sql",
+  "083_course_reviews.sql",
 ];
 
 const EXPECTED_TABLES = [

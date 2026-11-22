@@ -49,6 +49,22 @@ function learningHref(course: CourseCatalogItemDto) {
   return lessonId ? `/hoc/${course.slug}/bai-hoc/${lessonId}` : `/khoa-hoc/${course.slug}`;
 }
 
+function courseActionLabel(course: CourseCatalogItemDto) {
+  if (course.owned || course.ownershipStatus === 'owned' || course.progress) return 'Xem khóa học';
+  if (course.contentOrigin === 'csca_course') return 'Xem khóa học';
+  if (course.checkoutReady === false) return 'Chưa mở bán';
+  if (course.ownershipStatus === 'expired') return 'Mua lại khóa học';
+  return course.accessType === 'free' ? 'Xem khóa học' : 'Mua khóa học';
+}
+
+function CourseRating({ course, featured = false }: { course: CourseCatalogItemDto; featured?: boolean }) {
+  return <p className={`mt-2 text-sm font-bold ${featured ? 'text-amber-300' : 'text-[#c77715]'}`} aria-label={course.ratingCount ? `${course.ratingAvg.toFixed(1)} trên 5 sao, ${course.ratingCount} đánh giá` : 'Chưa có đánh giá'}>
+    <span className="tracking-wide">{Array.from({ length: 5 }, (_, i) => i < Math.round(course.ratingAvg) ? '★' : '☆').join('')}</span>{' '}
+    <span>{course.ratingCount ? course.ratingAvg.toFixed(1) : 'Chưa có đánh giá'}</span>{' '}
+    <span className={`font-medium ${featured ? 'text-slate-400' : 'text-[#8b8077] dark:text-slate-400'}`}>({course.ratingCount})</span>
+  </p>;
+}
+
 function offeringBadgeLabel(course: CourseCatalogItemDto): string | null {
   const profiles = course.profiles ?? [];
   if (!profiles.length) return null;
@@ -68,7 +84,7 @@ function StatusBadges({ course }: { course: CourseCatalogItemDto }) {
   return (
     <div className="flex flex-wrap gap-2">
       {course.ownershipStatus ? (
-        <CourseOwnershipBadge status={course.ownershipStatus} label={course.ownershipLabel} className="shadow" />
+        <CourseOwnershipBadge status={course.ownershipStatus} label={course.contentOrigin === 'csca_course' && course.ownershipStatus === 'not_owned' ? 'Khóa học đồng bộ' : course.ownershipLabel} className="shadow" />
       ) : (
         <span className={`rounded-full px-3 py-1 text-[11px] font-black text-white shadow ${course.progress ? 'bg-[#ad2335]' : 'bg-[#173654]'}`}>
           {unpricedBlocked ? 'Chưa mở bán' : accessLabel(course)}
@@ -138,7 +154,7 @@ export function CourseCard({ course, variant = 'compact' }: { course: CourseCata
               {course.instructor?.displayName ? (
                 <p className="mt-1.5 text-sm font-semibold text-[#5a5048] dark:text-slate-300">Giảng viên: {course.instructor.displayName}</p>
               ) : null}
-              <p className="mt-2 text-sm font-bold text-[#c77715]">★ {course.ratingAvg.toFixed(1)} <span className="font-medium text-[#7e746d] dark:text-slate-400">({course.ratingCount} đánh giá)</span></p>
+              <CourseRating course={course} />
               <p className="mt-4 line-clamp-3 text-sm leading-6 text-[#665d56] dark:text-slate-300">{course.shortDescription || 'Lộ trình học có hệ thống, giải thích dễ hiểu và bám sát mục tiêu kỳ thi CSCA.'}</p>
               <div className="mt-5"><CourseMetrics course={course} bordered /></div>
               <ProgressBar course={course} />
@@ -150,13 +166,13 @@ export function CourseCard({ course, variant = 'compact' }: { course: CourseCata
                 <Link href={course.firstUnitHref} className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#af1f33] px-4 py-3 text-sm font-black text-white shadow transition hover:bg-[#92172a]">
                   {course.progress ? 'Tiếp tục học trên Moly' : 'Vào học trên Moly'} <FiArrowRight />
                 </Link>
-              ) : course.checkoutReady === false && !course.owned && !course.progress ? (
+              ) : course.checkoutReady === false && !course.owned && !course.progress && course.contentOrigin !== 'csca_course' ? (
                 <Link href={detailHref} className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#6b7280] px-4 py-3 text-sm font-black text-white shadow">
                   Chưa mở bán <FiArrowRight />
                 </Link>
               ) : (
                 <Link href={continueHref} className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#af1f33] px-4 py-3 text-sm font-black text-white shadow transition hover:bg-[#92172a]">
-                  {course.progress
+                  {course.contentOrigin === 'csca_course' ? 'Xem khóa học' : course.progress
                     ? 'Tiếp tục học'
                     : course.ownershipStatus === 'expired'
                       ? 'Mua lại khóa học'
@@ -196,7 +212,7 @@ export function CourseCard({ course, variant = 'compact' }: { course: CourseCata
         {course.instructor?.displayName ? (
           <p className={`mt-1 text-xs font-semibold ${featured ? 'text-slate-300' : 'text-[#6f665f] dark:text-slate-400'}`}>Giảng viên: {course.instructor.displayName}</p>
         ) : null}
-        <p className={`mt-2 text-sm font-bold ${featured ? 'text-amber-300' : 'text-[#c77715]'}`}>★ {course.ratingAvg.toFixed(1)} <span className={`font-medium ${featured ? 'text-slate-400' : 'text-[#8b8077] dark:text-slate-400'}`}>({course.ratingCount})</span></p>
+        <CourseRating course={course} featured={featured} />
         <p className={`mt-2 line-clamp-1 text-sm leading-5 ${featured ? 'text-slate-300' : 'text-[#6f665f] dark:text-slate-300'}`}>{course.shortDescription}</p>
         <div className={`mt-4 ${featured ? '[&_span]:text-slate-300 [&>div]:border-white/15' : ''}`}><CourseMetrics course={course} /></div>
         <ProgressBar course={course} />
@@ -208,19 +224,7 @@ export function CourseCard({ course, variant = 'compact' }: { course: CourseCata
           </div>
         ) : (
           <Link href={course.progress ? continueHref : detailHref} className={`mt-5 inline-flex items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-black transition ${featured ? 'bg-[#ad1f33] text-white hover:bg-[#941629]' : 'border border-[#d8c9bd] text-[#243149] hover:border-[#a97752] dark:border-[#3a475c] dark:text-slate-200'}`}>
-              {course.progress
-                ? 'Tiếp tục học'
-                : course.ownershipStatus === 'expired'
-                  ? 'Mua lại khóa học'
-                  : course.ownershipStatus === 'verification_required'
-                    ? 'Cần xác minh tài khoản'
-                    : course.ownershipStatus === 'pending_sync'
-                      ? 'Đang đồng bộ quyền'
-                      : course.checkoutReady === false && !course.owned
-                        ? 'Chưa mở bán'
-                        : course.ownershipStatus === 'not_owned' && course.accessType !== 'free'
-                          ? 'Mua khóa học'
-                          : 'Xem chi tiết'} <FiArrowRight />
+            {courseActionLabel(course)} <FiArrowRight />
           </Link>
         )}
       </div>

@@ -226,6 +226,22 @@ export interface CourseDetailDto extends CourseCatalogItemDto {
   firstUnitHref?: string | null;
 }
 
+export interface CourseReviewDto {
+  authorName: string;
+  rating: number;
+  comment: string;
+  updatedAt: string;
+  isMine: boolean;
+}
+
+export interface CourseReviewsDto {
+  ratingAvg: number;
+  ratingCount: number;
+  canReview: boolean;
+  myReview: { rating: number; comment: string } | null;
+  items: CourseReviewDto[];
+}
+
 export interface EnrollmentDto {
   id: number;
   courseId: number;

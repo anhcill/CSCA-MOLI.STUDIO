@@ -13,6 +13,7 @@ import type {
   CourseCatalogItemDto,
   CourseCatalogQuery,
   CourseDetailDto,
+  CourseReviewsDto,
   CourseFileDto,
   CourseTeacherDto,
   CurriculumLessonDto,
@@ -306,6 +307,18 @@ export const coursesApi = {
       options?.profileId ? { params: { profileId: options.profileId } } : undefined,
     );
     return courseDetail(unwrapData(response.data));
+  },
+
+  async getReviews(slug: string): Promise<CourseReviewsDto> {
+    const response = await axios.get<ApiSuccessEnvelope<CourseReviewsDto>>(`/courses/${encodeURIComponent(slug)}/reviews`);
+    return unwrapData(response.data);
+  },
+
+  async saveReview(slug: string, rating: number, comment: string): Promise<{ ratingAvg: number; ratingCount: number }> {
+    const response = await axios.put<ApiSuccessEnvelope<{ ratingAvg: number; ratingCount: number }>>(
+      `/courses/${encodeURIComponent(slug)}/reviews/me`, { rating, comment },
+    );
+    return unwrapData(response.data);
   },
 
   async enroll(courseId: number): Promise<EnrollmentDto> {
