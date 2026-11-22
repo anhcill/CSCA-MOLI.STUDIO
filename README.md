@@ -10,7 +10,7 @@ Nền tảng luyện thi CSCA cho học sinh Việt Nam: luyện đề mô phỏ
 - `docs/`: tài liệu, ghi chú, tài sản phụ.
 - `tools/`: script debug, script hỗ trợ, bản vá tạm đã lưu lại.
 
-Chi tiết cấu trúc repo xem tại [docs/PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md).
+Chi tiết cấu trúc repo xem tại [docs/PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md). Mục lục tài liệu ở [docs/README.md](docs/README.md).
 
 ## Tính Năng Chính
 

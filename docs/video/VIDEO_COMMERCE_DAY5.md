@@ -39,7 +39,7 @@ Cả ba runner trình duyệt đạt trên bản production local (`next start`,
 
 `check_video_commerce_baseline.js --day4` kiểm tra 18 file baseline gốc, 12 file không đổi và 6 thay đổi đúng allowlist. Năm trang VIP/checkout/success/admin VIP/admin coupon cũ giữ nguyên mã nguồn. Không cập nhật baseline để che thay đổi; đây là so sánh source, không phải nghiệm thu hình ảnh legacy với dữ liệu thật.
 
-Đã bàn giao hướng dẫn tại `docs/VIDEO_COMMERCE_RELEASE_CHECKLIST.md`: cấu hình cần chuẩn bị, thứ tự migration, các bước admin, xử lý đơn/upload lỗi, ma trận nghiệm thu thật và cách dừng bán/khôi phục.
+Đã bàn giao hướng dẫn tại `docs/video/VIDEO_COMMERCE_RELEASE_CHECKLIST.md`: cấu hình cần chuẩn bị, thứ tự migration, các bước admin, xử lý đơn/upload lỗi, ma trận nghiệm thu thật và cách dừng bán/khôi phục.
 
 ## Điều kiện còn thiếu trước mở bán
 

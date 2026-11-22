@@ -15,15 +15,19 @@ Root của repo chỉ nên giữ các file vận hành chung và các thư mục
 │   └── public/              # Static assets
 ├── database/                # Schema, seed, migrations
 ├── docs/                    # Tài liệu dự án
-│   ├── archive/             # Nội dung cũ cần giữ lại để tra cứu
+│   ├── course/              # Tích hợp và vận hành khóa học
+│   ├── video/               # Video commerce, HLS, Bunny
+│   ├── archive/             # Kế hoạch/nhận xét lịch sử
 │   ├── assets/              # PDF/tài liệu nặng
-│   └── notes/               # Ghi chú kế hoạch/vận hành
+│   └── notes/               # Ghi chú khác
 ├── tools/                   # Script hỗ trợ, debug, script tạm
+├── *.cmd                    # Launcher video Windows và công cụ đăng ký URL protocol
 ├── Dockerfile               # Build backend container
 ├── docker-compose.yml       # Local Postgres/pgAdmin
 ├── railway.toml             # Railway deploy config
 ├── build.sh                 # Build command helper
 ├── start.sh                 # Start command helper
+├── CHANGELOG.md
 └── README.md
 ```
 
@@ -33,4 +37,4 @@ Root của repo chỉ nên giữ các file vận hành chung và các thư mục
 - Script chạy một lần để ở `backend/scripts/one-off/` hoặc `tools/`, không để tràn ra root.
 - Migration database chính thức để ở `database/migrations/`.
 - Tài liệu phụ, PDF, ghi chú kế hoạch để ở `docs/`, không để ở root.
-- Root chỉ giữ file cần cho deploy, Docker, README và cấu hình chung.
+- Root giữ file cần cho deploy, Docker, README, CHANGELOG, cấu hình chung và hai launcher video Windows.

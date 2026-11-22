@@ -68,12 +68,12 @@ node .\tools\video\Publish-CscaHls.mjs --directory .\out --course-id 12 --lesson
 
 `Publish-CscaHls.mjs` uploads the validated directory directly to the dedicated
 private R2 bucket and can call Railway's protected finalize endpoint. See
-`docs/HLS_PUBLISH_DAY5.md` for credentials, command examples, and verification
+`docs/video/HLS_PUBLISH_DAY5.md` for credentials, command examples, and verification
 behavior.
 
 If an upload is interrupted, run the same command again with `--resume`.
 The publisher stores a SHA-256 checksum as object metadata and skips only an
 object whose remote size and checksum both match the local file. Uploads use
 three barriers: all segments first, rendition playlists second, and
-`master.m3u8` last. See `docs/HLS_OPERATIONS_DAY6.md` for recovery and staged
+`master.m3u8` last. See `docs/video/HLS_OPERATIONS_DAY6.md` for recovery and staged
 R2/Railway verification.

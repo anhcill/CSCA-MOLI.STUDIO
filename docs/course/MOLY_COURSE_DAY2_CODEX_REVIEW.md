@@ -79,7 +79,7 @@ Moly implementation remains at Day 1; Day 2 implementation is in Course.
 ## Gemini - Day 3 handoff
 
 1. Implement the Moly sender/outbox and payment-to-entitlement flow against the actual
-   Course API routes in docs/MOLY_COURSE_INTEGRATION_CONTRACT.md.
+   Course API routes in docs/course/MOLY_COURSE_INTEGRATION_CONTRACT.md.
 2. Treat HTTP 202 as durable receipt, not successful entitlement application.
    Poll signed /api/integrations/v1/moly/events/status; handle processed, stale,
    failed, dead_letter and conflict resolution without repeated charges.

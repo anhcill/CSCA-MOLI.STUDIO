@@ -13,5 +13,5 @@ mang token; R2 key và token không được trả về trong lỗi hay log.
 5. Tắt public `r2.dev`; route production chỉ trỏ tới Worker.
 
 Không deploy Worker trước khi hoàn thành checklist trong
-`docs/VIDEO_GATEWAY_DAY2.md`. Không bật observability ghi URL/query string vì JWT
+`docs/video/VIDEO_GATEWAY_DAY2.md`. Không bật observability ghi URL/query string vì JWT
 được truyền trong query của playlist/segment.

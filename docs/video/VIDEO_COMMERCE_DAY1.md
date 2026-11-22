@@ -180,11 +180,11 @@ Giới hạn đã thống nhất: chưa có tài khoản/Library, không thực 
 
 ## 6. Wireframe và bảo vệ UI cũ
 
-Mở `docs/video-commerce-day1-wireframe.html` để xem 3 màn hình tương tác: chọn gói video/combo, checkout và admin tạo draft. Chuyển tab/loại gói, chọn gói, chuyển cấu hình thời hạn và lưu bản nháp đều là mô phỏng trên trang, không gửi dữ liệu tới server.
+Mở `docs/video/video-commerce-day1-wireframe.html` để xem 3 màn hình tương tác: chọn gói video/combo, checkout và admin tạo draft. Chuyển tab/loại gói, chọn gói, chuyển cấu hình thời hạn và lưu bản nháp đều là mô phỏng trên trang, không gửi dữ liệu tới server.
 
 Các mẫu tên/danh mục trong wireframe không phải cấu hình bán chính thức. Trong trang bán thật, draft chưa cấu hình sẽ không hiện cho người mua; trạng thái chưa cấu hình trong wireframe dùng để minh họa yêu cầu của đợt này.
 
-`docs/video-commerce-day1-baseline.json` ghi SHA-256 chuẩn hóa LF của 18 file legacy tại commit baseline. Đã so sánh và chưa file nào trong danh sách bị thay đổi. Đây là baseline mã nguồn, không phải ảnh chụp UI production hoặc dữ liệu khách hàng thật.
+`docs/video/video-commerce-day1-baseline.json` ghi SHA-256 chuẩn hóa LF của 18 file legacy tại commit baseline. Đã so sánh và chưa file nào trong danh sách bị thay đổi. Đây là baseline mã nguồn, không phải ảnh chụp UI production hoặc dữ liệu khách hàng thật.
 
 Điểm thay ở server hiện tại chỉ là đăng ký module draft bên trong cờ mặc định tắt. Frontend chỉ thêm file type, không đổi trang hoặc component cũ.
 

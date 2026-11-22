@@ -1,7 +1,7 @@
 # Feature Parity Checklist — CSCA-Course <-> Moly Studio (Full Sync Day 1)
 
 > **Status**: Day 1 Inventory Baseline (verifying actual codebase state on both repositories before Day 2–8 implementation).
-> **Policy Note**: `CourseTutorShowcase` and `CourseFilters` were intentionally removed from Moly `/khoa-hoc` (see `docs/MOLY_COURSE_INHERITANCE_AUDIT.md`) and must **not** be restored during catalog/UI parity work.
+> **Policy Note**: `CourseTutorShowcase` and `CourseFilters` were intentionally removed from Moly `/khoa-hoc` (see `docs/course/MOLY_COURSE_INHERITANCE_AUDIT.md`) and must **not** be restored during catalog/UI parity work.
 
 ---
 
@@ -67,7 +67,7 @@ Status legend:
 
 ## 3. UI & Engineering Guardrails Carried Across Days 1–10
 
-1. **No Deleted Moly Catalogue Features**: Do **not** re-introduce `CourseTutorShowcase` or `CourseFilters` on `/khoa-hoc` (refer to `docs/MOLY_COURSE_INHERITANCE_AUDIT.md`).
+1. **No Deleted Moly Catalogue Features**: Do **not** re-introduce `CourseTutorShowcase` or `CourseFilters` on `/khoa-hoc` (refer to `docs/course/MOLY_COURSE_INHERITANCE_AUDIT.md`).
 2. **Same-Browser = 1 Device Slot**: Cross-app device binding must use server-minted HttpOnly cookies and server-verified binding records — never trust browser-supplied `x-device-id` / `localStorage` identifiers.
 3. **Never Bypass Authoritative Checks**: Delegated session minting, playback tokens, file downloads, and quiz starts must re-verify authoritative entitlement, profile scope, sequential lock, and `video_course_access_revocations` live at request time.
 4. **Preserve `moly_native` Courses & Direct Course Enrollments**: Native Moly courses (`052`–`058`) and Course `InternalManagement` / `Live` grants continue operating cleanly with zero forced migration.

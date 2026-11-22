@@ -18,9 +18,9 @@ C:\Users\ducan\Documents\Codex\2026-07-24\anhcill-csca-interview-git-https-githu
 
 Trong moi app: backend/, frontend/, database/, docs/.
 Doc truoc:
-- docs/MOLY_COURSE_INHERITANCE_AUDIT.md
-- docs/MOLY_COURSE_DAY5_CODEX_FIXES.md
-- docs/MOLY_COURSE_DAY5_CODEX_REVIEW.md
+- docs/course/MOLY_COURSE_INHERITANCE_AUDIT.md
+- docs/course/MOLY_COURSE_DAY5_CODEX_FIXES.md
+- docs/course/MOLY_COURSE_DAY5_CODEX_REVIEW.md
 - Contract integration hien co va AGENTS.md o thu muc lien quan.
 
 Moc tham chieu luc lap plan:

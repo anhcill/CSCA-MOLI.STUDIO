@@ -1,7 +1,7 @@
 # Kế hoạch 5 ngày: gói video, combo và Bunny Stream
 
 Ngày lập: 12/10/2026.
-Trạng thái ngày 14/10/2026: đã triển khai code ngày 1-4 và thực hiện hồi quy/diễn tập/build cục bộ ngày 5; xem `docs/VIDEO_COMMERCE_DAY1.md` đến `docs/VIDEO_COMMERCE_DAY5.md`. Hướng dẫn admin và nghiệm thu tại `docs/VIDEO_COMMERCE_RELEASE_CHECKLIST.md`. Kiểm thử dùng database trong bộ nhớ, provider và API/iframe/TUS giả lập. Chưa có Bunny Library, chưa nghiệm thu thanh toán/upload/phát thật hoặc thiết bị thật, chưa áp dụng dữ liệu production hay mở bán. Phần staging/phát hành ngày 5 còn chờ đủ cấu hình và nghiệm thu thực tế.
+Trạng thái ngày 14/10/2026: đã triển khai code ngày 1-4 và thực hiện hồi quy/diễn tập/build cục bộ ngày 5; xem `docs/video/VIDEO_COMMERCE_DAY1.md` đến `docs/video/VIDEO_COMMERCE_DAY5.md`. Hướng dẫn admin và nghiệm thu tại `docs/video/VIDEO_COMMERCE_RELEASE_CHECKLIST.md`. Kiểm thử dùng database trong bộ nhớ, provider và API/iframe/TUS giả lập. Chưa có Bunny Library, chưa nghiệm thu thanh toán/upload/phát thật hoặc thiết bị thật, chưa áp dụng dữ liệu production hay mở bán. Phần staging/phát hành ngày 5 còn chờ đủ cấu hình và nghiệm thu thực tế.
 Phạm vi: bổ sung thương mại khóa học video vào CSCA-MOLI.STUDIO.
 
 ## 1. Yêu cầu đã thống nhất
@@ -33,7 +33,7 @@ Kế hoạch tính theo 5 ngày làm việc, khoảng 40-48 giờ tập trung. �
 | Xu | Backend có giảm giá bằng xu và giữ chỗ xu cho đơn chờ | Phải dùng chung ví và tránh tiêu cùng số xu ở hai luồng thanh toán |
 | Video | R2/HLS, upload, finalize, phiên phát, tiến độ | Thêm provider Bunny theo từng asset; không chuyển hàng loạt video cũ |
 
-Nguồn rà chính: `backend/src/models/Transaction.js`, `backend/src/models/User.js`, `backend/src/controllers/adminVipController.js`, `backend/src/controllers/adminCouponController.js`, `backend/src/controllers/couponController.js`, `backend/src/repositories/courseRepository.js`, `backend/src/services/courseService.js` và báo cáo `docs/COURSE_VIDEO_REVIEW_2026-10-12.md`.
+Nguồn rà chính: `backend/src/models/Transaction.js`, `backend/src/models/User.js`, `backend/src/controllers/adminVipController.js`, `backend/src/controllers/adminCouponController.js`, `backend/src/controllers/couponController.js`, `backend/src/repositories/courseRepository.js`, `backend/src/services/courseService.js` và báo cáo `docs/course/COURSE_VIDEO_REVIEW_2026-10-12.md`.
 
 Lưu ý: lượt lập kế hoạch chỉ đọc mã nguồn. Chưa truy vấn dữ liệu production, chưa kiểm tra cấu hình tài khoản Bunny hoặc chạy giao dịch thật. Kết quả kiểm thử trong báo cáo cũ không phải kết quả kiểm thử của tính năng mới.
 

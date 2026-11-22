@@ -4,7 +4,7 @@ const crypto = require('crypto');
 const { execFileSync } = require('child_process');
 
 const root = path.resolve(__dirname, '../..');
-const output = path.join(root, 'docs/video-commerce-day1-baseline.json');
+const output = path.join(root, 'docs/video/video-commerce-day1-baseline.json');
 const files = [
   'frontend/app/vip/page.tsx', 'frontend/app/checkout/page.tsx', 'frontend/app/checkout/success/page.tsx',
   'frontend/app/admin/vip/page.tsx', 'frontend/app/admin/coupons/page.tsx', 'frontend/app/khoa-hoc/page.tsx',
