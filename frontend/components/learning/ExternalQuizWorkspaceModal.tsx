@@ -329,7 +329,7 @@ export function ExternalQuizWorkspaceModal({
     return (
       <label
         key={`${qId}-${val}-${oIdx}`}
-        className={`flex cursor-pointer items-start gap-3.5 rounded-2xl border p-3.5 transition ${
+        className={`flex cursor-pointer items-start gap-3 rounded-2xl border p-3 transition sm:gap-3.5 sm:p-3.5 ${
           isSelected
             ? 'border-[#247d7e] bg-[#eff9f7] ring-2 ring-[#247d7e]/20 dark:border-[#49b6ac] dark:bg-[#132c3d]'
             : 'border-[#e5d9ce] bg-[#fffdf9] hover:border-[#247d7e]/45 hover:bg-[#fffaf4] dark:border-[#2c3a52] dark:bg-[#0b172b] dark:hover:border-[#49b6ac]/40'
@@ -351,7 +351,7 @@ export function ExternalQuizWorkspaceModal({
         >
           {val}
         </span>
-        <div className="min-w-0 flex-1 pt-0.5 text-sm text-[#1e2b44] dark:text-slate-100">
+        <div className="min-w-0 flex-1 overflow-x-auto pt-0.5 text-sm text-[#1e2b44] dark:text-slate-100">
           <RichMathText value={localizedOptionText(opt, showChinese)} />
           {optImg ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -381,35 +381,35 @@ export function ExternalQuizWorkspaceModal({
       <div
         key={qId}
         id={`ext-quiz-question-${qId}`}
-        className="space-y-4 rounded-2xl border border-[#e3d4c5] bg-white p-5 shadow-sm dark:border-[#2c3a52] dark:bg-[#0f1d33]"
+        className="space-y-3.5 rounded-2xl border border-[#e3d4c5] bg-white p-4 shadow-sm dark:border-[#2c3a52] dark:bg-[#0f1d33] sm:space-y-4 sm:p-5"
       >
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center rounded-lg bg-[#ad2033]/10 px-2.5 py-1 text-xs font-black text-[#ad2033] dark:bg-[#ad2033]/25 dark:text-[#ff8f9d]">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5 sm:gap-2">
+            <span className="inline-flex shrink-0 items-center whitespace-nowrap rounded-lg bg-[#ad2033]/10 px-2.5 py-1 text-xs font-black text-[#ad2033] dark:bg-[#ad2033]/25 dark:text-[#ff8f9d]">
               {subLabel || `Câu ${num ?? q.position ?? ''}`}
             </span>
             {isMulti ? (
-              <span className="rounded-md bg-indigo-50 px-2 py-0.5 text-[11px] font-bold text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300">
+              <span className="whitespace-nowrap rounded-md bg-indigo-50 px-2 py-0.5 text-[11px] font-bold text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300">
                 Chọn nhiều đáp án
               </span>
             ) : isEssay ? (
-              <span className="rounded-md bg-violet-50 px-2 py-0.5 text-[11px] font-bold text-violet-700 dark:bg-violet-950/50 dark:text-violet-300">
+              <span className="whitespace-nowrap rounded-md bg-violet-50 px-2 py-0.5 text-[11px] font-bold text-violet-700 dark:bg-violet-950/50 dark:text-violet-300">
                 Tự luận / Dịch thuật
               </span>
             ) : null}
             {q.points != null ? (
-              <span className="text-xs font-bold text-[#6f665f] dark:text-slate-400">
+              <span className="whitespace-nowrap text-xs font-bold text-[#6f665f] dark:text-slate-400">
                 {q.points} điểm
               </span>
             ) : null}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
             {isQuestionAnswered(q, answers[qId]) && !isEssay ? (
               <button
                 type="button"
                 onClick={() => onSelectAnswer(qId, isMulti ? [] : '')}
-                className="text-xs font-bold text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                className="whitespace-nowrap text-xs font-bold text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
               >
                 Bỏ chọn
               </button>
@@ -418,7 +418,7 @@ export function ExternalQuizWorkspaceModal({
               type="button"
               onClick={() => toggleFlag(qId)}
               aria-pressed={isFlagged}
-              className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-bold transition ${
+              className={`inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-lg border px-2.5 py-1 text-xs font-bold transition ${
                 isFlagged
                   ? 'border-amber-400 bg-amber-50 text-amber-800 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
                   : 'border-[#e3d4c5] bg-white text-[#6f665f] hover:bg-slate-50 dark:border-[#34435a] dark:bg-[#0b172b] dark:text-slate-300'
@@ -429,7 +429,7 @@ export function ExternalQuizWorkspaceModal({
           </div>
         </div>
 
-        <div className="text-base font-medium leading-7 text-[#18243b] dark:text-slate-100">
+        <div className="overflow-x-auto text-[15px] font-medium leading-7 text-[#18243b] dark:text-slate-100 sm:text-base">
           <RichMathText value={localizedQuestionText(q, showChinese)} />
         </div>
 
@@ -870,99 +870,128 @@ export function ExternalQuizWorkspaceModal({
       className="fixed inset-0 z-[1150] flex h-dvh w-screen flex-col overflow-hidden bg-[#f5efe6] dark:bg-[#071225]"
     >
       {/* Top sticky Course-style header */}
-      <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-[#e3d4c5] bg-[#fffdf9] px-4 py-3 shadow-sm dark:border-[#26354b] dark:bg-[#0f1d33] sm:px-6">
-        <div className="flex min-w-0 flex-1 items-center gap-3">
-          <button
-            type="button"
-            onClick={onClose}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-[#d8c8b9] bg-white px-3 py-2 text-xs font-black text-[#29354b] transition hover:bg-slate-50 dark:border-[#34435a] dark:bg-[#0b172b] dark:text-slate-200"
-          >
-            <FiArrowLeft /> Thoát
-          </button>
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-md bg-[#ad2033]/10 px-2 py-0.5 text-[11px] font-black text-[#ad2033] dark:bg-[#ad2033]/25 dark:text-[#ff8f9d]">
-                {isPreview ? 'Xem đáp án nhanh' : isPlay ? 'Đang làm bài' : 'Kết quả bài làm'}
-              </span>
-              {activeAttempt?.attemptNumber && isPlay ? (
-                <span className="text-[11px] font-bold text-[#6f665f] dark:text-slate-400">
-                  Lần {activeAttempt.attemptNumber}
-                </span>
-              ) : null}
-              <span className="text-[11px] font-bold text-[#6f665f] dark:text-slate-400">
-                {flatQuestions.length} câu hỏi
-              </span>
-            </div>
-            <h2 className="truncate text-sm font-black text-[#18243b] dark:text-white sm:text-base">
-              {quiz.title}
-            </h2>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          {hasChinese ? (
+      <header className="shrink-0 border-b border-[#e3d4c5] bg-[#fffdf9] shadow-sm dark:border-[#26354b] dark:bg-[#0f1d33]">
+        <div className="flex flex-col gap-2 px-3 pb-2.5 pt-[max(0.625rem,env(safe-area-inset-top))] sm:px-6 sm:py-3 lg:flex-row lg:items-center lg:justify-between lg:gap-4">
+          {/* Row 1 (mobile) / Left (desktop): Back + Status & Title */}
+          <div className="flex w-full min-w-0 items-center gap-2.5 lg:w-auto lg:flex-1 lg:gap-3">
             <button
               type="button"
-              onClick={() => setShowChinese((v) => !v)}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-[#247d7e] bg-[#eff9f7] px-3 py-1.5 text-xs font-black text-[#247d7e] transition hover:bg-[#dff4f0] dark:border-[#49b6ac] dark:bg-[#132c3d] dark:text-[#6ac6bd]"
+              onClick={onClose}
+              className="inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-[#d8c8b9] bg-white px-2.5 text-xs font-black text-[#29354b] transition hover:bg-slate-50 dark:border-[#34435a] dark:bg-[#0b172b] dark:text-slate-200 sm:h-9 sm:px-3"
             >
-              <FiGlobe /> {showChinese ? 'Tiếng Việt' : '中文'}
+              <FiArrowLeft size={14} className="shrink-0" />
+              <span>Thoát</span>
             </button>
-          ) : null}
 
-          {isPlay ? (
-            <>
-              <span className="hidden items-center gap-1 rounded-xl bg-[#f7efe7] px-2.5 py-1.5 text-[11px] font-bold text-[#6f665f] sm:inline-flex dark:bg-[#0b172b] dark:text-slate-300">
-                <FiSave size={12} />
-                {autosaveStatus === 'saving'
-                  ? 'Đang lưu...'
-                  : autosaveStatus === 'saved'
-                    ? `Đã lưu ${lastSavedTime || ''}`
-                    : autosaveStatus === 'local'
-                      ? 'Lưu tạm trên máy'
-                      : 'Sẵn sàng lưu'}
-              </span>
-
-              {remainingSeconds !== null ? (
-                <span
-                  className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 font-mono text-xs font-black ${
-                    remainingSeconds < 300
-                      ? 'bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300'
-                      : 'bg-[#f7efe7] text-[#18243b] dark:bg-[#0b172b] dark:text-white'
-                  }`}
-                >
-                  <FiClock /> {formatTimerClock(remainingSeconds)}
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 overflow-hidden whitespace-nowrap sm:gap-2">
+                <span className="shrink-0 whitespace-nowrap rounded-md bg-[#ad2033]/10 px-2 py-0.5 text-[10px] font-black text-[#ad2033] dark:bg-[#ad2033]/25 dark:text-[#ff8f9d] sm:text-[11px]">
+                  {isPreview ? 'Xem đáp án nhanh' : isPlay ? 'Đang làm bài' : 'Kết quả bài làm'}
                 </span>
+                {activeAttempt?.attemptNumber && isPlay ? (
+                  <span className="shrink-0 whitespace-nowrap text-[11px] font-bold text-[#6f665f] dark:text-slate-400">
+                    Lần {activeAttempt.attemptNumber}
+                  </span>
+                ) : null}
+                <span className="shrink-0 whitespace-nowrap text-[11px] font-bold text-[#6f665f] dark:text-slate-400">
+                  · {flatQuestions.length} câu
+                </span>
+              </div>
+              <h2 className="mt-0.5 truncate text-xs font-black text-[#18243b] dark:text-white sm:text-base">
+                {quiz.title}
+              </h2>
+            </div>
+          </div>
+
+          {/* Row 2 (mobile) / Right (desktop): Language, Autosave, Timer, Palette, Submit */}
+          {(hasChinese || isPlay) ? (
+            <div className="flex w-full items-center justify-between gap-1.5 sm:gap-2 lg:w-auto lg:shrink-0 lg:justify-end">
+              <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
+                {hasChinese ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowChinese((v) => !v)}
+                    className="inline-flex h-8 shrink-0 items-center gap-1 whitespace-nowrap rounded-xl border border-[#247d7e] bg-[#eff9f7] px-2.5 text-[11px] font-black text-[#247d7e] transition hover:bg-[#dff4f0] dark:border-[#49b6ac] dark:bg-[#132c3d] dark:text-[#6ac6bd] sm:h-9 sm:gap-1.5 sm:px-3 sm:text-xs"
+                  >
+                    <FiGlobe size={13} className="shrink-0" />
+                    <span>{showChinese ? 'Tiếng Việt' : '中文'}</span>
+                  </button>
+                ) : null}
+
+                {isPlay ? (
+                  <>
+                    <span className="hidden h-9 shrink-0 items-center gap-1 whitespace-nowrap rounded-xl bg-[#f7efe7] px-2.5 text-[11px] font-bold text-[#6f665f] md:inline-flex dark:bg-[#0b172b] dark:text-slate-300">
+                      <FiSave size={12} className="shrink-0" />
+                      {autosaveStatus === 'saving'
+                        ? 'Đang lưu...'
+                        : autosaveStatus === 'saved'
+                          ? `Đã lưu ${lastSavedTime || ''}`
+                          : autosaveStatus === 'local'
+                            ? 'Lưu tạm'
+                            : 'Sẵn sàng lưu'}
+                    </span>
+
+                    {remainingSeconds !== null ? (
+                      <span
+                        className={`inline-flex h-8 shrink-0 items-center gap-1 whitespace-nowrap rounded-xl px-2.5 font-mono text-[11px] font-black tabular-nums sm:h-9 sm:gap-1.5 sm:px-3 sm:text-xs ${
+                          remainingSeconds < 300
+                            ? 'bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300'
+                            : 'bg-[#f7efe7] text-[#18243b] dark:bg-[#0b172b] dark:text-white'
+                        }`}
+                      >
+                        <FiClock size={13} className="shrink-0" />
+                        <span>{formatTimerClock(remainingSeconds)}</span>
+                      </span>
+                    ) : null}
+
+                    <button
+                      type="button"
+                      onClick={() => setMobileDrawerOpen(true)}
+                      className="inline-flex h-8 shrink-0 items-center gap-1 whitespace-nowrap rounded-xl border border-[#d8c8b9] bg-white px-2.5 text-[11px] font-black tabular-nums text-[#29354b] lg:hidden dark:border-[#34435a] dark:bg-[#0b172b] dark:text-slate-200 sm:h-9 sm:gap-1.5 sm:px-3 sm:text-xs"
+                      aria-label="Mở bảng câu hỏi"
+                    >
+                      <FiGrid size={13} className="shrink-0" />
+                      <span>{answeredCount}/{flatQuestions.length}</span>
+                    </button>
+                  </>
+                ) : null}
+              </div>
+
+              {isPlay ? (
+                <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+                  <button
+                    type="button"
+                    onClick={toggleFullscreen}
+                    aria-label="Toàn màn hình"
+                    className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[#d8c8b9] bg-white text-[#29354b] hover:bg-slate-50 sm:inline-flex dark:border-[#34435a] dark:bg-[#0b172b] dark:text-slate-200"
+                  >
+                    {isFullscreen ? <FiMinimize2 size={14} /> : <FiMaximize2 size={14} />}
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={submitting}
+                    onClick={() => setShowSubmitConfirm(true)}
+                    className="inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl bg-[#ad2033] px-3 text-[11px] font-black text-white shadow-sm transition hover:bg-[#911a2b] disabled:opacity-50 sm:h-9 sm:px-4 sm:text-xs"
+                  >
+                    <FiSend size={12} className="shrink-0" />
+                    <span>{submitting ? 'Đang nộp...' : 'Nộp bài'}</span>
+                  </button>
+                </div>
               ) : null}
-
-              <button
-                type="button"
-                onClick={() => setMobileDrawerOpen(true)}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-[#d8c8b9] bg-white px-3 py-1.5 text-xs font-black text-[#29354b] lg:hidden dark:border-[#34435a] dark:bg-[#0b172b] dark:text-slate-200"
-              >
-                <FiGrid /> {answeredCount}/{flatQuestions.length}
-              </button>
-
-              <button
-                type="button"
-                onClick={toggleFullscreen}
-                aria-label="Toàn màn hình"
-                className="hidden h-8 w-8 items-center justify-center rounded-xl border border-[#d8c8b9] bg-white text-[#29354b] hover:bg-slate-50 sm:inline-flex dark:border-[#34435a] dark:bg-[#0b172b] dark:text-slate-200"
-              >
-                {isFullscreen ? <FiMinimize2 size={14} /> : <FiMaximize2 size={14} />}
-              </button>
-
-              <button
-                type="button"
-                disabled={submitting}
-                onClick={() => setShowSubmitConfirm(true)}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-[#ad2033] px-4 py-2 text-xs font-black text-white shadow-sm transition hover:bg-[#911a2b] disabled:opacity-50"
-              >
-                <FiSend size={13} /> {submitting ? 'Đang nộp...' : 'Nộp bài'}
-              </button>
-            </>
+            </div>
           ) : null}
         </div>
+
+        {/* Subtle live completion bar */}
+        {isPlay && flatQuestions.length > 0 ? (
+          <div className="h-0.5 w-full bg-[#efe4d7] dark:bg-[#1e2d45]">
+            <div
+              className="h-full bg-[#247d7e] transition-all duration-300 dark:bg-[#49b6ac]"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+        ) : null}
       </header>
 
       {isPlay && showViolationBanner ? (
@@ -991,26 +1020,26 @@ export function ExternalQuizWorkspaceModal({
       {/* Main Scrollable Area */}
       {isPlay ? (
         <div className="flex min-h-0 flex-1 overflow-hidden">
-          <main className="flex-1 overflow-y-auto px-4 py-5 sm:px-6 lg:px-8">
-            <div className="mx-auto max-w-4xl space-y-5">
-              {/* Item / All View Toolbar */}
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#e3d4c5] bg-white px-4 py-3 shadow-sm dark:border-[#2c3a52] dark:bg-[#0f1d33]">
-                <div className="flex items-center gap-2 text-xs font-bold text-[#6f665f] dark:text-slate-300">
-                  <span>
-                    {viewMode === 'item'
-                      ? `Mục ${Math.min(currentItemIndex + 1, displayItems.length)} / ${displayItems.length}`
-                      : `Hiển thị toàn bộ (${displayItems.length} mục)`}
-                  </span>
-                  <span>·</span>
-                  <span>Đã trả lời {answeredCount}/{flatQuestions.length} câu</span>
-                </div>
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+            <main className="flex-1 overflow-y-auto px-3 py-3.5 sm:px-6 sm:py-5 lg:px-8">
+              <div className="mx-auto max-w-4xl space-y-4 sm:space-y-5">
+                {/* Item / All View Toolbar */}
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-[#e3d4c5] bg-white px-3 py-2.5 shadow-sm dark:border-[#2c3a52] dark:bg-[#0f1d33] sm:px-4 sm:py-3">
+                  <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] font-bold text-[#6f665f] dark:text-slate-300 sm:text-xs">
+                    <span className="whitespace-nowrap">
+                      {viewMode === 'item'
+                        ? `Mục ${Math.min(currentItemIndex + 1, displayItems.length)} / ${displayItems.length}`
+                        : `Toàn bộ (${displayItems.length} mục)`}
+                    </span>
+                    <span aria-hidden="true">·</span>
+                    <span className="whitespace-nowrap">Đã trả lời {answeredCount}/{flatQuestions.length} câu</span>
+                  </div>
 
-                <div className="flex items-center gap-2">
-                  <div className="inline-flex rounded-xl border border-[#e3d4c5] bg-[#f7efe7] p-0.5 text-[11px] font-bold dark:border-[#34435a] dark:bg-[#0b172b]">
+                  <div className="inline-flex shrink-0 rounded-xl border border-[#e3d4c5] bg-[#f7efe7] p-0.5 text-[11px] font-bold dark:border-[#34435a] dark:bg-[#0b172b]">
                     <button
                       type="button"
                       onClick={() => setViewMode('item')}
-                      className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 transition ${
+                      className={`inline-flex items-center gap-1 whitespace-nowrap rounded-lg px-2.5 py-1 transition ${
                         viewMode === 'item'
                           ? 'bg-white text-[#18243b] shadow-sm dark:bg-[#1e2d45] dark:text-white'
                           : 'text-[#6f665f] dark:text-slate-400'
@@ -1021,7 +1050,7 @@ export function ExternalQuizWorkspaceModal({
                     <button
                       type="button"
                       onClick={() => setViewMode('all')}
-                      className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 transition ${
+                      className={`inline-flex items-center gap-1 whitespace-nowrap rounded-lg px-2.5 py-1 transition ${
                         viewMode === 'all'
                           ? 'bg-white text-[#18243b] shadow-sm dark:bg-[#1e2d45] dark:text-white'
                           : 'text-[#6f665f] dark:text-slate-400'
@@ -1031,67 +1060,74 @@ export function ExternalQuizWorkspaceModal({
                     </button>
                   </div>
                 </div>
-              </div>
 
-              {starting ? (
-                <div className="flex items-center justify-center gap-2 py-16 text-sm font-bold text-[#6f665f] dark:text-slate-300">
-                  <FiRefreshCw className="animate-spin text-[#247d7e]" /> Đang nạp đề thi & bản nháp...
-                </div>
-              ) : viewMode === 'item' ? (
-                <>
-                  {displayItems[currentItemIndex]
-                    ? renderInteractiveItem(displayItems[currentItemIndex], currentItemIndex)
-                    : null}
-
-                  <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-                    <button
-                      type="button"
-                      disabled={currentItemIndex <= 0}
-                      onClick={() => setCurrentItemIndex((i) => Math.max(0, i - 1))}
-                      className="inline-flex items-center gap-1.5 rounded-xl border border-[#d8c8b9] bg-white px-4 py-2.5 text-xs font-black text-[#29354b] hover:bg-slate-50 disabled:opacity-40 dark:border-[#34435a] dark:bg-[#0f1d33] dark:text-slate-200"
-                    >
-                      <FiArrowLeft /> Mục trước
-                    </button>
-
-                    <div className="flex items-center gap-2">
-                      {currentItemIndex < displayItems.length - 1 ? (
-                        <button
-                          type="button"
-                          onClick={() => setCurrentItemIndex((i) => Math.min(displayItems.length - 1, i + 1))}
-                          className="inline-flex items-center gap-1.5 rounded-xl bg-[#247d7e] px-5 py-2.5 text-xs font-black text-white shadow-sm hover:bg-[#1b6465]"
-                        >
-                          Mục tiếp <FiArrowRight />
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          disabled={submitting}
-                          onClick={() => setShowSubmitConfirm(true)}
-                          className="inline-flex items-center gap-1.5 rounded-xl bg-[#ad2033] px-5 py-2.5 text-xs font-black text-white shadow-sm hover:bg-[#911a2b] disabled:opacity-50"
-                        >
-                          <FiSend /> Hoàn tất & Nộp bài
-                        </button>
-                      )}
+                {starting ? (
+                  <div className="flex items-center justify-center gap-2 py-16 text-sm font-bold text-[#6f665f] dark:text-slate-300">
+                    <FiRefreshCw className="animate-spin text-[#247d7e]" /> Đang nạp đề thi & bản nháp...
+                  </div>
+                ) : viewMode === 'item' ? (
+                  <>
+                    {displayItems[currentItemIndex]
+                      ? renderInteractiveItem(displayItems[currentItemIndex], currentItemIndex)
+                      : null}
+                  </>
+                ) : (
+                  <div className="space-y-5 pb-[max(1rem,env(safe-area-inset-bottom))] sm:space-y-6">
+                    {displayItems.map((item, idx) => renderInteractiveItem(item, idx))}
+                    <div className="flex justify-end pt-2">
+                      <button
+                        type="button"
+                        disabled={submitting}
+                        onClick={() => setShowSubmitConfirm(true)}
+                        className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#ad2033] px-6 py-3 text-sm font-black text-white shadow-sm hover:bg-[#911a2b] disabled:opacity-50 sm:w-auto"
+                      >
+                        <FiSend /> {submitting ? 'Đang nộp bài...' : 'Nộp bài kiểm tra'}
+                      </button>
                     </div>
                   </div>
-                </>
-              ) : (
-                <div className="space-y-6">
-                  {displayItems.map((item, idx) => renderInteractiveItem(item, idx))}
-                  <div className="flex justify-end pt-2">
+                )}
+              </div>
+            </main>
+
+            {/* Sticky Bottom Item Navigation */}
+            {!starting && viewMode === 'item' && displayItems.length > 0 ? (
+              <div className="shrink-0 border-t border-[#e3d4c5] bg-[#fffdf9]/95 px-3 pb-[max(0.625rem,env(safe-area-inset-bottom))] pt-2.5 backdrop-blur dark:border-[#26354b] dark:bg-[#0f1d33]/95 sm:px-6 sm:py-3">
+                <div className="mx-auto flex max-w-4xl items-center justify-between gap-2.5">
+                  <button
+                    type="button"
+                    disabled={currentItemIndex <= 0}
+                    onClick={() => setCurrentItemIndex((i) => Math.max(0, i - 1))}
+                    className="inline-flex min-h-[40px] shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-[#d8c8b9] bg-white px-3.5 text-xs font-black text-[#29354b] transition hover:bg-slate-50 disabled:opacity-40 dark:border-[#34435a] dark:bg-[#0b172b] dark:text-slate-200 sm:px-4"
+                  >
+                    <FiArrowLeft className="shrink-0" /> Mục trước
+                  </button>
+
+                  <span className="text-[11px] font-extrabold tabular-nums text-[#6f665f] dark:text-slate-400">
+                    {Math.min(currentItemIndex + 1, displayItems.length)} / {displayItems.length}
+                  </span>
+
+                  {currentItemIndex < displayItems.length - 1 ? (
+                    <button
+                      type="button"
+                      onClick={() => setCurrentItemIndex((i) => Math.min(displayItems.length - 1, i + 1))}
+                      className="inline-flex min-h-[40px] shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl bg-[#247d7e] px-4 text-xs font-black text-white shadow-sm transition hover:bg-[#1b6465] sm:px-5"
+                    >
+                      Mục tiếp <FiArrowRight className="shrink-0" />
+                    </button>
+                  ) : (
                     <button
                       type="button"
                       disabled={submitting}
                       onClick={() => setShowSubmitConfirm(true)}
-                      className="inline-flex items-center gap-2 rounded-xl bg-[#ad2033] px-6 py-3 text-sm font-black text-white shadow-sm hover:bg-[#911a2b] disabled:opacity-50"
+                      className="inline-flex min-h-[40px] shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl bg-[#ad2033] px-4 text-xs font-black text-white shadow-sm transition hover:bg-[#911a2b] disabled:opacity-50 sm:px-5"
                     >
-                      <FiSend /> {submitting ? 'Đang nộp bài...' : 'Nộp bài kiểm tra'}
+                      <FiSend className="shrink-0" /> Hoàn tất & Nộp bài
                     </button>
-                  </div>
+                  )}
                 </div>
-              )}
-            </div>
-          </main>
+              </div>
+            ) : null}
+          </div>
 
           {/* Desktop Question Palette Sidebar */}
           <aside className="hidden w-80 shrink-0 overflow-y-auto border-l border-[#e3d4c5] bg-[#fffdf9] p-5 dark:border-[#26354b] dark:bg-[#0f1d33] lg:block">
@@ -1290,11 +1326,16 @@ export function ExternalQuizWorkspaceModal({
             if (e.target === e.currentTarget) setMobileDrawerOpen(false);
           }}
         >
-          <div className="flex h-full w-80 max-w-[85vw] flex-col bg-[#fffdf9] p-5 shadow-2xl dark:bg-[#0f1d33]">
+          <div className="flex h-full w-80 max-w-[85vw] flex-col bg-[#fffdf9] px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-[max(1.25rem,env(safe-area-inset-top))] shadow-2xl dark:bg-[#0f1d33]">
             <div className="mb-4 flex items-center justify-between">
               <span className="text-sm font-black text-[#18243b] dark:text-white">Điều hướng câu hỏi</span>
-              <button type="button" onClick={() => setMobileDrawerOpen(false)} className="rounded-lg p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800">
-                <FiX />
+              <button
+                type="button"
+                onClick={() => setMobileDrawerOpen(false)}
+                aria-label="Đóng bảng câu hỏi"
+                className="rounded-lg p-1.5 text-[#18243b] hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                <FiX size={18} />
               </button>
             </div>
             <div className="flex-1 overflow-y-auto">{renderPaletteContent()}</div>

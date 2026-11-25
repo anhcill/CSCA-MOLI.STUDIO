@@ -504,7 +504,7 @@ export function ExternalQuizPlayerPanel({
               key={quiz.id}
               className="rounded-2xl border border-[#ddcfc2] bg-[#fffdf9] p-4 shadow-xs transition hover:border-[#247d7e]/50 dark:border-[#34435a] dark:bg-[#101e33] sm:p-5"
             >
-              <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-base font-black text-[#18243b] dark:text-white">
