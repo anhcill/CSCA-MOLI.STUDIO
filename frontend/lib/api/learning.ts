@@ -699,7 +699,7 @@ export const learningApi = {
         signal,
       },
     );
-    const workspace = unwrapData(response.data);
+    const workspace = unwrapData<ExternalCourseWorkspaceDto>(response.data);
     return {
       ...workspace,
       units: workspace.units.map((unit) => ({ ...unit, title: formatSyncedLessonTitle(unit.title) })),
