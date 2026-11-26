@@ -9,7 +9,7 @@ type Props = {
   nextLessonId: number | string | null;
   nextLessonTitle?: string | null;
   nextHref?: string | null;
-  currentLabel: string;
+  currentLabel?: string;
   currentTitle: string;
 };
 
@@ -40,8 +40,8 @@ export function LearningFooter({
       </div>
 
       <div className="min-w-0 max-w-full rounded-xl border border-[#dbc4a9] bg-[#fffdf8] px-5 py-3 text-center shadow-sm dark:border-[#5a4939] dark:bg-[#101e33] md:max-w-[280px] lg:max-w-[340px]">
-        <span className="block text-xs font-black uppercase tracking-wider text-[#a92235]">{currentLabel}</span>
-        <p className="mt-1 truncate font-black text-[#1e2b44] dark:text-[#f3e5d1]">{currentTitle}</p>
+        {currentLabel ? <span className="block text-xs font-black uppercase tracking-wider text-[#a92235]">{currentLabel}</span> : null}
+        <p className={`truncate font-black text-[#1e2b44] dark:text-[#f3e5d1]${currentLabel ? ' mt-1' : ''}`}>{currentTitle}</p>
       </div>
 
       <div className="min-w-0 md:text-right">

@@ -2,6 +2,12 @@ type CourseProfileMode = string | null | undefined;
 
 const INTERNAL_PROFILE_WORDING = /\b(?:live\s*mirror|mirror|live\s*&\s*tự học)\b|bản ghi lớp live|kế thừa/i;
 
+export function formatSyncedLessonTitle(title: string): string {
+  const original = title.trim();
+  const topic = original.replace(/^(?:\d+(?:\.\d+)+\s+)?Buổi(?:\s+học)?\s+\d+\s*(?:[:：\-–—]\s*|\.\s+|\.?$)/iu, '');
+  return topic || 'Bài học';
+}
+
 export const SUBJECT_DEFAULT_COVERS: Record<string, string> = {
   MATH: '/images/banner/campus-01.jpg',
   PHYSICS: '/images/banner/campus-07.jpg',

@@ -27,7 +27,7 @@ import type {
   ExternalWorkspaceProgressDto,
   ExternalWorkspaceUnitSummaryDto,
 } from '@/lib/types/courses';
-import { publicCourseModeLabel, publicCourseProfileLabel } from '@/lib/coursePresentation';
+import { formatSyncedLessonTitle, publicCourseModeLabel, publicCourseProfileLabel } from '@/lib/coursePresentation';
 import { ExternalUnitContentTabs, type ExternalTabId } from './ExternalUnitContentTabs';
 import { LearningFooter } from './LearningFooter';
 import { LearningHeader } from './LearningHeader';
@@ -336,7 +336,6 @@ export function ExternalLearningWorkspace({
       prev,
       next,
       firstUnlocked,
-      currentLabel: activeIdx >= 0 ? `Bài ${activeIdx + 1}/${units.length}` : 'Bài học',
     };
   }, [workspace?.units, externalUnitId]);
 
@@ -936,9 +935,6 @@ export function ExternalLearningWorkspace({
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-4 py-3 text-white sm:px-5">
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <p className="text-[10px] font-black uppercase tracking-[.18em] text-[#49b6ac]">
-                    {navContext.currentLabel}
-                  </p>
                   {isUnitMarkedCompleted ? (
                     <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
                       <FiCheck className="h-3 w-3" /> Đã hoàn thành
@@ -1009,7 +1005,7 @@ export function ExternalLearningWorkspace({
                   <p className="mt-2 max-w-lg text-sm leading-6 text-slate-300">{lockReason}</p>
                   {workspace.selectedUnitLock?.requiredPrevUnitTitle ? (
                     <p className="mt-1 text-xs font-bold text-[#6ac6bd]">
-                      Bài cần hoàn thành trước: {workspace.selectedUnitLock.requiredPrevUnitTitle}
+                      Bài cần hoàn thành trước: {formatSyncedLessonTitle(workspace.selectedUnitLock.requiredPrevUnitTitle)}
                     </p>
                   ) : null}
                   <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
@@ -1136,7 +1132,6 @@ export function ExternalLearningWorkspace({
             nextLessonId={navContext.next?.id ?? null}
             nextLessonTitle={navContext.next?.title ?? null}
             nextHref={navContext.next?.href ?? null}
-            currentLabel={navContext.currentLabel}
             currentTitle={activeUnit?.title || navContext.activeUnitSummary?.title || 'Bài học'}
           />
 
@@ -1175,6 +1170,7 @@ export function ExternalLearningWorkspace({
             sections={sections}
             activeLessonId={activeSidebarId}
             progressPct={progressPct}
+            showLessonNumbers={false}
           />
         ) : null}
       </div>

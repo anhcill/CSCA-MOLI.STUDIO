@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { FiCheckCircle, FiClock, FiFileText, FiLock, FiPlayCircle } from 'react-icons/fi';
 import type { CurriculumLessonDto } from '@/lib/types/courses';
+import { formatSyncedLessonTitle } from '@/lib/coursePresentation';
 
 const typeLabels = { video: 'Video', article: 'Bài đọc', document: 'Tài liệu', quiz: 'Bài kiểm tra' };
 
@@ -21,12 +22,14 @@ export function LessonRow({
   const inner = (
     <>
       <div className="flex min-w-0 flex-1 items-center gap-3">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white font-black text-slate-400 shadow-sm dark:bg-slate-800 dark:text-slate-400">
-          {lesson.progressStatus === 'completed' ? <FiCheckCircle className="text-emerald-500" /> : index}
-        </span>
+        {!isExternalUnit || lesson.progressStatus === 'completed' ? (
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white font-black text-slate-400 shadow-sm dark:bg-slate-800 dark:text-slate-400">
+            {lesson.progressStatus === 'completed' ? <FiCheckCircle className="text-emerald-500" /> : index}
+          </span>
+        ) : null}
         <div className="min-w-0 flex-1">
           <p className="truncate font-bold text-slate-800 group-hover:text-indigo-700 dark:text-slate-200 dark:group-hover:text-indigo-300">
-            {lesson.title}
+            {isExternalUnit ? formatSyncedLessonTitle(lesson.title) : lesson.title}
           </p>
           <p className="mt-1 flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-500 dark:text-slate-400">
             <span className="inline-flex items-center gap-1">

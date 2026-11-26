@@ -26,11 +26,13 @@ export function LearningSidebar({
   sections,
   activeLessonId,
   progressPct,
+  showLessonNumbers = true,
 }: {
   courseSlug: string;
   sections: CurriculumSectionDto[];
   activeLessonId: number | string;
   progressPct: number;
+  showLessonNumbers?: boolean;
 }) {
   const lessons = sections.flatMap((section) => section.lessons);
   const completedLessons = lessons.filter((lesson) => lesson.progressStatus === 'completed').length;
@@ -85,7 +87,8 @@ export function LearningSidebar({
                           {item.isLocked ? <FiLock /> : completed ? <FiCheckCircle /> : lessonIcon(item.lessonType)}
                         </span>
                         <span className="min-w-0 flex-1 leading-snug">
-                          <span className="mr-1 font-black">{sectionIndex + 1}.{lessonIndex + 1}</span>{item.title}
+                          {showLessonNumbers ? <span className="mr-1 font-black">{sectionIndex + 1}.{lessonIndex + 1}</span> : null}
+                          {item.title}
                         </span>
                         {item.durationSeconds > 0 ? <span className={`shrink-0 text-[11px] tabular-nums ${active ? 'text-white/70' : 'text-[#8f867e] dark:text-slate-500'}`}>{durationLabel(item.durationSeconds)}</span> : null}
                       </>

@@ -1,4 +1,5 @@
 import axios from '@/lib/utils/axios';
+import { formatSyncedLessonTitle } from '@/lib/coursePresentation';
 import type {
   ApiSuccessEnvelope,
   CourseProgressDto,
@@ -698,7 +699,14 @@ export const learningApi = {
         signal,
       },
     );
-    return unwrapData(response.data);
+    const workspace = unwrapData(response.data);
+    return {
+      ...workspace,
+      units: workspace.units.map((unit) => ({ ...unit, title: formatSyncedLessonTitle(unit.title) })),
+      activeUnit: workspace.activeUnit
+        ? { ...workspace.activeUnit, title: formatSyncedLessonTitle(workspace.activeUnit.title) }
+        : null,
+    };
   },
 
   async getExternalUnitDetail({
